@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Generated/downloaded data — regenerate with data/prep_atlas.py, don't commit
+data/raw/
+data/*.db
+data/snap_retailers_pilot_city.csv
