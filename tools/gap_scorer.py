@@ -7,9 +7,9 @@ flags from the USDA Food Access Research Atlas, and the distance to the
 nearest existing resource into a single, explainable need score.
 """
 
-from math import atan2, cos, radians, sin, sqrt
-
 from strands import tool
+
+from tools.geo import haversine_miles
 
 
 def _severity_weight(tract: dict) -> float:
@@ -22,15 +22,6 @@ def _severity_weight(tract: dict) -> float:
     return 0.2
 
 
-def _haversine_miles(lat1, lon1, lat2, lon2) -> float:
-    r = 3958.8  # earth radius in miles
-    p1, p2 = radians(lat1), radians(lat2)
-    dphi = radians(lat2 - lat1)
-    dlambda = radians(lon2 - lon1)
-    a = sin(dphi / 2) ** 2 + cos(p1) * cos(p2) * sin(dlambda / 2) ** 2
-    return 2 * r * atan2(sqrt(a), sqrt(1 - a))
-
-
 def _nearest_resource(tract: dict, resources: list):
     if not resources:
         return None
@@ -38,7 +29,7 @@ def _nearest_resource(tract: dict, resources: list):
     for res in resources:
         if res.get("lat") is None or res.get("lon") is None:
             continue
-        dist = _haversine_miles(
+        dist = haversine_miles(
             tract["centroid_lat"], tract["centroid_lon"], res["lat"], res["lon"]
         )
         if dist < best_dist:

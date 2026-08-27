@@ -11,8 +11,11 @@ question like *"where in Chicago would a new food resource have the
 highest impact?"* with a ranked, cited recommendation.
 
 This is the **Advisor** — the on-demand half of the project. A second,
-scheduled **Watchdog** agent (checks whether a past recommendation was ever
-acted on) is the planned next piece; see [Roadmap](#roadmap) below.
+scheduled **Watchdog** agent now closes the loop: it works through the
+tracts the Advisor flagged and reports whether a resource ever actually
+appeared nearby. They are two separate `strands.Agent` instances with
+disjoint tool lists, not one agent with a mode flag — see
+[Guardrails](#guardrails) for why that split matters.
 
 ## Architecture
 
@@ -23,22 +26,37 @@ flowchart LR
     ADV -->|2| ER[get_existing_resources]
     ADV -->|3| GS[score_gaps]
     ADV -->|4| EB[write_evidence_brief]
+    ADV -->|5| FLAG[flag_top_tract_for_recheck]
 
     AD -.reads.-> ATLAS[(USDA Food Access Research Atlas\nLRAM/SRAM, local SQLite)]
     ER -.queries.-> OSM[(OpenStreetMap\nOverpass API)]
     EB -.LLM call.-> BEDROCK[(Amazon Bedrock)]
+    FLAG -->|writes pending row| LOG[(flagged_tracts.db)]
 
     GS -->|ranked tracts| ADV
     EB -->|cited paragraph| ADV
     ADV --> ANSWER["Ranked recommendation\n+ citable brief"]
+
+    SCHED["Scheduled trigger\n(e.g. monthly)"] --> WD[Watchdog agent]
+    WD -->|1| RFT[read_flagged_tracts]
+    WD -->|2| ER2[get_existing_resources]
+    WD -->|3| CRA[check_resource_appeared]
+    WD -->|4| UFT[update_flagged_tract]
+
+    RFT -.reads pending.-> LOG
+    ER2 -.queries.-> OSM
+    UFT -->|writes status| LOG
+    WD --> REPORT["Recheck summary\n(resolved / still needed)"]
 ```
 
-Only `write_evidence_brief` calls a language model. `get_low_access_tracts`,
-`get_existing_resources`, and `score_gaps` are deterministic — reading a
-local database, calling a public API, and doing arithmetic, respectively.
-That split is deliberate: for a tool whose output might end up in a funding
-application, "here's the exact formula" is more defensible than "the model
-said so."
+Only `write_evidence_brief` calls a language model. Every other tool —
+`get_low_access_tracts`, `get_existing_resources`, `score_gaps`,
+`flag_top_tract_for_recheck`, `read_flagged_tracts`,
+`check_resource_appeared`, `update_flagged_tract` — is deterministic:
+reading a local database, calling a public API, doing arithmetic, or
+writing a validated row. That split is deliberate: for a tool whose output
+might end up in a funding application, "here's the exact formula" is more
+defensible than "the model said so."
 
 ## Setup
 
@@ -101,14 +119,32 @@ Food-Access Advisor ready — pilot city: Chicago, IL
 > where's the highest-need spot for a new food resource?
 ```
 
+Each answer also flags its top tract in `data/flagged_tracts.db` for the
+Watchdog to check later. Run the Watchdog's recheck pass (normally fired on
+a schedule, e.g. EventBridge — here run manually) with:
+
+```bash
+python watchdog_agent.py
+```
+
+```
+Food-Access Watchdog — pilot city: Chicago, IL
+Running a single unattended recheck pass over the flagged-tracts backlog...
+```
+
+It reports how many flagged tracts it checked, how many now have a nearby
+resource, and how many are still needed — and updates each row accordingly.
+
 ## Test it
 
 ```bash
 pytest
 ```
 
-The scorer (`tools/gap_scorer.py`) is pure Python with no AWS dependency —
-it's tested directly, no mocking or credentials required.
+`tools/gap_scorer.py`, `tools/recheck_status.py`, and `tools/flagged_tracts.py`
+are pure Python (plus SQLite for the log) with no AWS dependency — all
+tested directly against temp databases, no mocking, no credentials, no
+network required.
 
 ## Guardrails
 
@@ -124,6 +160,16 @@ it's tested directly, no mocking or credentials required.
   system prompt still tells the agent to *say* when a question is out of
   scope — that's a wording/UX instruction now, not the only thing enforcing
   the boundary.
+- **Advisor and Watchdog are separate agents with disjoint tool lists, not
+  one agent with a mode flag.** The Advisor has no tool that can write to a
+  flagged tract's status; the Watchdog has no tool that can answer a siting
+  question or make a new recommendation. `flag_top_tract_for_recheck` (the
+  Advisor's only write into the shared log) hardcodes
+  `recommendation_type="site"` and `source_agent="advisor"` — those are not
+  model-settable arguments, so the Advisor cannot mislabel a row as coming
+  from a different agent. `update_flagged_tract` (the Watchdog's only write)
+  takes a fixed, validated status enum and writes to exactly one table —
+  there's no table-name or raw-SQL argument for a model to misuse.
 - Every answer names the USDA Food Access Research Atlas and its
   publication vintage.
 - Every output is framed as decision support, not a decision — a human
@@ -139,15 +185,18 @@ it's tested directly, no mocking or credentials required.
   (e.g. OSRM) for the pilot city is the single biggest accuracy upgrade
   available, and the reason this project cites transit-time distance as a
   stretch goal rather than shipping it as a guess.
-- **Watchdog agent.** A separately-scheduled agent that re-checks
-  previously flagged tracts and reports whether a resource ever appeared —
-  turning this from a one-shot recommender into a system that closes the
-  loop on its own recommendation, which nothing in the prior art (food
-  rescue apps, the AI-FEED research prototype) currently does.
+- **Route Advisor (rural).** A sibling agent for rural food insecurity,
+  using the Atlas's 10-/20-mile rural thresholds instead of the urban
+  half-/one-mile ones, plus an extended OSM query
+  (`social_facility=food_bank`, `amenity=marketplace`) and a
+  capacity-aware scorer — see the design canvas for the full rural
+  systems-thinking pass. Will flag into the same `flagged_tracts` log
+  (`recommendation_type="route"`), which is exactly why that column exists.
 - **Trend forecasting.** A model trained across multiple Atlas vintages to
   flag tracts trending toward low-access before they're fully flagged.
   Academic precedent already exists for this technique, so it's the lowest
-  differentiation-per-effort of the three — cut first if time is short.
+  differentiation-per-effort of the remaining items — cut first if time is
+  short.
 
 ## License
 

@@ -13,12 +13,13 @@ acted on) is a separate, later piece — see the tracker notes on the elevated
 scope. This file is the MVP: get this working first.
 """
 
-from strands import Agent
+from strands import Agent, tool
 
 from config import PILOT_CITY
 from tools.access_data import get_low_access_tracts
 from tools.existing_resources import get_existing_resources
 from tools.evidence_brief import write_evidence_brief
+from tools.flagged_tracts import flag_tract_for_recheck
 from tools.gap_scorer import score_gaps
 
 SYSTEM_PROMPT = f"""You are the Food-Access Advisor for {PILOT_CITY['name']}. \
@@ -34,6 +35,9 @@ elsewhere) to see what's already nearby.
 tracts yourself — the scorer is the source of truth, you only explain it.
 4. Call write_evidence_brief on the single top-ranked tract and include its \
 output verbatim in your answer.
+5. Call flag_top_tract_for_recheck on that same top-ranked tract. This is \
+what lets the Watchdog agent check back later on whether a resource ever \
+actually appeared — do this every time, not just when asked.
 
 Always name the USDA Food Access Research Atlas as your data source. Always \
 frame your answer as decision support, not a decision — a human still \
@@ -41,6 +45,37 @@ chooses. If asked about a region outside {PILOT_CITY['name']}, say plainly \
 that you're only indexed for this pilot city right now, rather than \
 guessing at data you don't have.
 """
+
+
+@tool
+def flag_top_tract_for_recheck(top_tract: dict) -> dict:
+    """Log the top-ranked tract so the Watchdog can check on it later.
+
+    A thin, Advisor-specific wrapper around `flagged_tracts.flag_tract_for_recheck`
+    — `recommendation_type` ("site") and `source_agent` ("advisor") are fixed
+    here, not left as arguments the model could set, so this tool can only
+    ever write a "this was a site recommendation, from the Advisor" row.
+    That mirrors the boundary discipline used elsewhere in this project:
+    give the model exactly the one thing it should be able to do, not a
+    general-purpose write with parameters that happen to default correctly.
+
+    Args:
+        top_tract: The same top-ranked, scored dict passed to
+            `write_evidence_brief` — needs at least `tract_fips`,
+            `population`, `centroid_lat`, `centroid_lon`.
+
+    Returns:
+        The written flagged-tracts row.
+    """
+    return flag_tract_for_recheck(
+        tract_fips=top_tract["tract_fips"],
+        recommendation_type="site",
+        source_agent="advisor",
+        population=top_tract.get("population"),
+        centroid_lat=top_tract.get("centroid_lat"),
+        centroid_lon=top_tract.get("centroid_lon"),
+        note=f"Flagged from an Advisor recommendation (need_score={top_tract.get('need_score')}).",
+    )
 
 
 def build_advisor() -> Agent:
@@ -51,6 +86,7 @@ def build_advisor() -> Agent:
             get_existing_resources,
             score_gaps,
             write_evidence_brief,
+            flag_top_tract_for_recheck,
         ],
     )
 
