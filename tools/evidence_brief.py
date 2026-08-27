@@ -12,6 +12,8 @@ one job.
 
 from strands import Agent, tool
 
+from model import build_model
+
 BRIEF_SYSTEM_PROMPT = """You write short, factual briefing paragraphs for \
 community organizers and city planners about food access gaps. You are \
 given one already-ranked tract with its need score, population, and \
@@ -42,6 +44,9 @@ def write_evidence_brief(top_tract: dict) -> str:
         A single paragraph suitable for pasting into a grant application
         or a council-meeting handout, with the Atlas cited by name.
     """
-    brief_agent = Agent(system_prompt=BRIEF_SYSTEM_PROMPT)
+    # Same pinned model as the Advisor/Watchdog (see model.py) — this
+    # sub-agent would otherwise silently fall back to Strands' own shifting
+    # default, which is exactly the inconsistency pinning was meant to avoid.
+    brief_agent = Agent(model=build_model(), system_prompt=BRIEF_SYSTEM_PROMPT)
     response = brief_agent(f"Write the brief for this tract: {top_tract}")
     return str(response)

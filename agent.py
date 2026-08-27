@@ -13,14 +13,18 @@ acted on) is a separate, later piece — see the tracker notes on the elevated
 scope. This file is the MVP: get this working first.
 """
 
+from dotenv import load_dotenv
 from strands import Agent, tool
 
 from config import PILOT_CITY
+from model import build_model
 from tools.access_data import get_low_access_tracts
 from tools.existing_resources import get_existing_resources
 from tools.evidence_brief import write_evidence_brief
 from tools.flagged_tracts import flag_tract_for_recheck
 from tools.gap_scorer import score_gaps
+
+load_dotenv()
 
 SYSTEM_PROMPT = f"""You are the Food-Access Advisor for {PILOT_CITY['name']}. \
 Community organizers and city planners ask you where a new food resource \
@@ -80,6 +84,7 @@ def flag_top_tract_for_recheck(top_tract: dict) -> dict:
 
 def build_advisor() -> Agent:
     return Agent(
+        model=build_model(),
         system_prompt=SYSTEM_PROMPT,
         tools=[
             get_low_access_tracts,
