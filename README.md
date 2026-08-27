@@ -198,6 +198,21 @@ network required.
   differentiation-per-effort of the remaining items — cut first if time is
   short.
 
+## Design docs
+
+The systems-thinking design work behind this project (stocks/flows, the
+broken loop, leverage point, guardrail rationale) lives in
+[`docs/design-canvas.html`](docs/design-canvas.html) — a static export of
+the working design canvas. [`docs/project-tracker.html`](docs/project-tracker.html)
+is a point-in-time export of the build tracker; it's a snapshot, not a
+live document, since the tracker keeps evolving after each export.
+
+GitHub's file viewer shows these as source, not rendered pages — download
+them and open locally in a browser, or enable **GitHub Pages** (Settings →
+Pages → Deploy from a branch → `/docs`) to get them served as real pages
+at `https://explainable-ai.github.io/food-access-advisor/design-canvas.html`
+and `.../project-tracker.html`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

@@ -20,12 +20,25 @@ This tool's job is narrower now: OSM is the only point-level source left in
 this project, and it's a real, working, live one.
 """
 
+import logging
+import time
+
 import requests
 from strands import tool
 
 from config import PILOT_CITY
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+MAX_ATTEMPTS = 2
+RETRY_DELAY_SECONDS = 3
+
+logger = logging.getLogger(__name__)
+
+
+class OverpassQueryError(RuntimeError):
+    """Raised when the live Overpass query could not be completed after
+    retrying. Deliberately NOT caught here and turned into an empty list —
+    see the note on _query_overpass for why that used to be a real bug."""
 
 
 @tool
@@ -55,6 +68,20 @@ def get_existing_resources() -> list:
         not yet include transit time — wiring in a GTFS-based routing
         lookup is the next planned upgrade (see the tracker notes), and
         `distance_miles` should be read as an approximation until then.
+
+    Raises:
+        OverpassQueryError: if the live query fails after retrying. This
+            used to fail silently — a bare `print()` plus an empty-list
+            return — which meant a network blip or an Overpass outage was
+            indistinguishable from "genuinely zero resources near this
+            city," and both the Advisor's scorer and the Watchdog's recheck
+            would have confidently treated a service outage as confirmed
+            fact (every tract scored as maximally underserved; every
+            flagged tract reported as "still needed" during an outage).
+            Strands catches tool exceptions and surfaces them to the model
+            as a tool error rather than crashing the run, so raising here
+            is safe and lets the agent (or a human) know the data is
+            missing rather than quietly acting on a wrong assumption.
     """
     south, west, north, east = PILOT_CITY["bbox"]
     return _query_overpass(south, west, north, east)
@@ -73,13 +100,25 @@ def _query_overpass(south, west, north, east) -> list:
     );
     out center;
     """
-    try:
-        resp = requests.post(OVERPASS_URL, data={"data": query}, timeout=30)
-        resp.raise_for_status()
-        elements = resp.json().get("elements", [])
-    except requests.RequestException as exc:
-        print(f"[existing_resources] Overpass query failed, continuing without it: {exc}")
-        return []
+    last_exc = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            resp = requests.post(OVERPASS_URL, data={"data": query}, timeout=30)
+            resp.raise_for_status()
+            elements = resp.json().get("elements", [])
+            break
+        except requests.RequestException as exc:
+            last_exc = exc
+            logger.warning(
+                "Overpass query failed (attempt %d/%d): %s",
+                attempt, MAX_ATTEMPTS, exc, exc_info=attempt == MAX_ATTEMPTS,
+            )
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(RETRY_DELAY_SECONDS)
+    else:
+        raise OverpassQueryError(
+            f"Overpass query failed after {MAX_ATTEMPTS} attempt(s): {last_exc}"
+        ) from last_exc
 
     out = []
     for el in elements:

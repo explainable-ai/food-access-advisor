@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Food-Access Canvas</title>
+<!--
+  Static export of a Claude artifact, added to this repo for offline/
+  version-controlled context (design docs shouldn't only live behind a
+  claude.ai link that reviewers may not have access to).
+  Live version: https://claude.ai/code/artifact/2f98ad95-8fb3-43b6-a1fd-de090bf6f1e3
+  
+-->
+</head>
+<body>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --paper: #F5F7F6;
+    --paper-raised: #FFFFFF;
+    --ink: #17212B;
+    --ink-soft: #52606D;
+    --line: #C9D2DC;
+    --line-strong: #9FB0C0;
+    --blueprint: #1D5FA8;
+    --blueprint-soft: #E4EDF7;
+    --amber: #A85B12;
+    --amber-soft: #F5E6D3;
+    --teal: #2A7D68;
+    --teal-soft: #DEEFEA;
+    --violet: #6B3FA0;
+    --violet-soft: #EEE6F6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper: #0E2A4D;
+      --paper-raised: #123765;
+      --ink: #EAF2FA;
+      --ink-soft: #AEC6DE;
+      --line: rgba(234,242,250,0.24);
+      --line-strong: rgba(234,242,250,0.42);
+      --blueprint: #74BBF2;
+      --blueprint-soft: rgba(116,187,242,0.16);
+      --amber: #E3A45E;
+      --amber-soft: rgba(227,164,94,0.16);
+      --teal: #74D8BE;
+      --teal-soft: rgba(116,216,190,0.16);
+      --violet: #C7A6EA;
+      --violet-soft: rgba(199,166,234,0.16);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper: #0E2A4D;
+    --paper-raised: #123765;
+    --ink: #EAF2FA;
+    --ink-soft: #AEC6DE;
+    --line: rgba(234,242,250,0.24);
+    --line-strong: rgba(234,242,250,0.42);
+    --blueprint: #74BBF2;
+    --blueprint-soft: rgba(116,187,242,0.16);
+    --amber: #E3A45E;
+    --amber-soft: rgba(227,164,94,0.16);
+    --teal: #74D8BE;
+    --teal-soft: rgba(116,216,190,0.16);
+    --violet: #C7A6EA;
+    --violet-soft: rgba(199,166,234,0.16);
+  }
+
+  *{ box-sizing: border-box; }
+  html{ -webkit-text-size-adjust: 100%; }
+  body{
+    margin:0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    position: relative;
+  }
+  body::before{
+    content:"";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      repeating-linear-gradient(0deg, var(--line) 0 1px, transparent 1px 88px),
+      repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 88px);
+    opacity: 0.35;
+  }
+  main{ position: relative; z-index: 1; }
+
+  h1,h2,h3{ font-family: "Archivo", ui-sans-serif, system-ui, sans-serif; text-wrap: balance; letter-spacing: -0.01em; }
+  code, .mono{ font-family: "IBM Plex Mono", ui-monospace, "SF Mono", monospace; }
+
+  .sheet{
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  .titleblock{
+    border: 1.5px solid var(--line-strong);
+    background: var(--paper-raised);
+    padding: 28px 28px 0;
+    margin-bottom: 40px;
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--blueprint);
+    text-transform: uppercase;
+    margin: 0 0 14px;
+  }
+  .titleblock h1{
+    font-size: clamp(1.8rem, 4.5vw, 2.5rem);
+    font-weight: 800;
+    line-height: 1.08;
+    margin: 0 0 14px;
+  }
+  .titleblock .dek{
+    font-size: 1.02rem;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0 0 24px;
+  }
+  .metarow{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--line);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+  }
+  .metarow div{
+    padding: 12px 14px 14px;
+    border-right: 1px solid var(--line);
+  }
+  .metarow div:last-child{ border-right: none; }
+  .metarow .k{ color: var(--ink-soft); letter-spacing: 0.06em; text-transform: uppercase; display:block; margin-bottom: 4px; font-size: 10.5px;}
+  .metarow .v{ color: var(--ink); font-weight: 500; }
+  @media (max-width: 620px){
+    .metarow{ grid-template-columns: repeat(2, 1fr); }
+    .metarow div{ border-bottom: 1px solid var(--line); }
+  }
+
+  section{ margin: 0 0 44px; }
+  .sec-tag{
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .sec-tag .num{
+    font-family:"IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--blueprint);
+    border: 1px solid var(--blueprint);
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+  .sec-tag h2{
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .lede{ color: var(--ink-soft); font-size: 1.0rem; max-width: 66ch; }
+  p{ max-width: 70ch; }
+  section > p, section > .lede { margin-top: 0; }
+
+  .callout{
+    border-left: 3px solid var(--blueprint);
+    background: var(--blueprint-soft);
+    padding: 14px 18px;
+    margin: 22px 0;
+    font-size: 0.95rem;
+  }
+  .callout.amber{ border-color: var(--amber); background: var(--amber-soft); }
+  .callout.teal{ border-color: var(--teal); background: var(--teal-soft); }
+  .callout strong{ font-family:"IBM Plex Mono", monospace; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.05em; display:block; margin-bottom: 4px;}
+
+  .canvas{
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--line-strong);
+    border: 1.5px solid var(--line-strong);
+    margin: 24px 0;
+  }
+  .canvas .cell{
+    background: var(--paper-raised);
+    padding: 16px 18px 20px;
+  }
+  .canvas .cell .lbl{
+    font-family:"IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--blueprint);
+    display:block;
+    margin-bottom: 8px;
+  }
+  .canvas .cell .tag{
+    display:inline-block;
+    font-family:"IBM Plex Mono", monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--teal);
+    border: 1px solid var(--teal);
+    padding: 1px 6px;
+    margin-bottom: 8px;
+    margin-right: 6px;
+  }
+  .canvas .cell .tag.amber{ color: var(--amber); border-color: var(--amber); }
+  .canvas .cell .tag.violet{ color: var(--violet); border-color: var(--violet); }
+  .canvas .cell p{ font-size: 0.9rem; margin: 0; max-width: none; }
+  @media (max-width: 640px){ .canvas{ grid-template-columns: 1fr; } }
+
+  footer{ color: var(--ink-soft); font-size: 0.82rem; padding-top: 8px; border-top: 1px solid var(--line); }
+  footer a{ color: var(--blueprint); }
+</style>
+
+<main>
+  <div class="sheet">
+    <div class="titleblock">
+      <p class="eyebrow">Agent Systems Blueprint · §07 Canvas</p>
+      <h1>Food-Access Advisor + Watchdog</h1>
+      <p class="dek">The twelve-cell canvas from the blueprint, filled in from steps 1&ndash;9 &mdash; now run twice, once per region. This is the working reference the submission's text description, architecture diagram, and demo script all get pulled from.</p>
+      <div class="metarow">
+        <div><span class="k">Track</span><span class="v">Good Neighbor</span></div>
+        <div><span class="k">Pilot regions</span><span class="v">Chicago, IL (urban) + rural county (TBD)</span></div>
+        <div><span class="k">Leverage rungs</span><span class="v">6, 8 &amp; 9</span></div>
+        <div><span class="k">Status</span><span class="v">Site Advisor built; Watchdog + Route Advisor next</span></div>
+      </div>
+    </div>
+
+    <div class="callout teal">
+      <strong>Added 8/26 &mdash; the rural angle</strong>
+      Rural food insecurity turned out not to be "the same loop, wider miles." It runs on its own broken loop, its own leverage point, and a capacity risk urban never had &mdash; see the Existing loop, Leverage point, and Archetype risk cells below. The system is now three agents across two regions, not two agents in one city.
+    </div>
+
+    <section>
+      <div class="sec-tag"><span class="num">07</span><h2>The canvas</h2></div>
+      <p class="lede">One page, three agents, two regions. Cells are tagged by agent &mdash; <span class="tag" style="margin:0 2px;">Site Advisor</span><span class="tag violet" style="margin:0 2px;">Route Advisor</span><span class="tag amber" style="margin:0 2px;">Watchdog</span> &mdash; wherever they diverge; untagged text applies to all three.</p>
+
+      <div class="canvas">
+        <div class="cell">
+          <span class="lbl">Boundary</span>
+          <p>Three agents, split by job. <b>Site Advisor</b> and <b>Route Advisor</b> each read their own region's Atlas thresholds (urban 0.5/1mi vs. rural 10/20mi) and live OSM Overpass &mdash; both pinned in code by a config constant, never by argument. Neither writes anything; every tool is read-only plus one no-side-effect LLM call. <b>Watchdog</b> reads the same reference data plus one shared flagged-tracts log, and can write only to that one table. No personal data anywhere &mdash; every dataset is public, tract- or resource-level. No AgentCore Identity surface needed; nothing here authenticates as a person.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Stocks</span>
+          <p>Two parallel instances of the same stock, not summed: <i>unclosed gaps</i> in urban tracts (Site Advisor's) and in rural tracts (Route Advisor's) &mdash; different populations, different mechanisms. Both feed one shared Watchdog stock: rows in the flagged-tracts log, each awaiting confirmation that a resource, or a route change, actually happened.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Flows</span>
+          <p>In: tracts newly qualifying as low-access &mdash; environment-driven, no agent affects this. Out: a resource opens (urban) or a route/distribution day shifts to cover a tract (rural) &mdash; different in kind, same effect on the stock. Into the log: every top-ranked recommendation from either Advisor, tagged by source. Out of the log: a Watchdog-confirmed change &mdash; the only way a row closes.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Existing loop &mdash; broken how</span>
+          <p><span class="tag">Site Advisor</span>Organizers can't easily cross severity data against what's already nearby, so siting runs on instinct instead of evidence that already exists.<br><span class="tag violet">Route Advisor</span>The right response already exists &mdash; mobile markets, food-bank routes &mdash; but it's planned once and rarely re-optimized against current need. A coordination gap, not an information vacuum.<br><span class="tag amber">Watchdog</span>Once a recommendation is made, nothing ever checks whether it was acted on &mdash; a good call and a bad one look identical a year later: silence.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Leverage point</span>
+          <p><span class="tag">Site Advisor</span>Rung 6, information flow &mdash; surface the crossed picture at the moment organizers decide.<br><span class="tag violet">Route Advisor</span>Rung 6 again, pointed at route/schedule decisions instead of siting &mdash; plus rung 9, delay, shrinking an annual replanning cadence to quarterly.<br><span class="tag amber">Watchdog</span>Rung 8, negative feedback strength &mdash; escalate by re-checking on a schedule, don't just make one recommendation and hope.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Goal state</span>
+          <p><i>Unclosed gaps</i> trending down in both regions, tracked separately, not pooled. Urban: shrinking median time from a Site Advisor recommendation to a Watchdog-confirmed resource. Rural: shrinking median time from a Route Advisor recommendation to a Watchdog-confirmed route change. Not zero food deserts anywhere &mdash; measurable movement, provably tracked, per region.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Loop design</span>
+          <p>All three agent-loops are balancing (human stays the actuator). Neither Advisor needs a governor on its core loop &mdash; each only surfaces evidence. Watchdog's governor is its recheck cadence. One shared reinforcing loop &mdash; trust/adoption &mdash; is governed everywhere by the decision-support framing guardrail, plus a second, rural-only reinforcing risk: a route has fixed capacity, so always favoring the single highest-need tract can zero-sum-starve tracts it already serves. Governed by requiring that trade-off to be disclosed in the output itself, not just implied.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Topology</span>
+          <p>Three agents, not two. Site Advisor and Route Advisor are siblings, not one agent with a region flag &mdash; on purpose, since a flag would reopen exactly the model-controlled surface the Step 8 fix closed. Each is one Agent calling tools in a fixed order (Workflow-shaped, not true Agents-as-tools). Watchdog is generalized to watch both &mdash; one accountability agent, not three &mdash; still split from the Advisors by lifecycle.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Memory</span>
+          <p>Same three-way split, now shared across three agents. Reference data is a queried knowledge base, not memory. Neither Advisor remembers anything beyond one turn. Watchdog holds the one genuine persistent state &mdash; the flagged-tracts log &mdash; now with a <code>recommendation_type</code> and source-agent column, so one table serves both Advisors instead of duplicating the mechanism.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Guardrails</span>
+          <p>Region boundary enforced in code for both Advisors identically: zero region/bounding-box arguments, each pinned to its own config constant (an earlier version silently accepted an unused argument; removed, not patched). Route Advisor adds one Site Advisor didn't need: the capacity trade-off must be disclosed in the output itself &mdash; a content rule, as real as the access rules, and worth actually testing for. Watchdog still writes only its own log. Every answer cites its data source + vintage and frames output as decision support.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Success metric</span>
+          <p>Per region, not pooled: reduction in <i>unclosed gaps</i> over the demo window, plus median days from recommendation to Watchdog-confirmed change. Rural adds a second number worth watching on its own: whether the capacity trade-off is actually being disclosed, not just whether a recommendation fires &mdash; a guardrail that's silently failing doesn't look broken, it just looks quiet.</p>
+        </div>
+        <div class="cell">
+          <span class="lbl">Archetype risk</span>
+          <p><b>Fixes That Fail</b> is still primary for Site Advisor + Watchdog &mdash; stale Atlas data, caught by the recheck. For Route Advisor, <b>Success to the Successful</b> is now primary, not secondary: fixed route capacity makes the zero-sum version of this archetype concrete rather than hypothetical. <b>Limits to Growth</b> applies to both, sharper for rural &mdash; a county-sized Overpass query is bigger and slower than a city one, closer to the shared public API's real limits.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="callout amber">
+      <strong>Before you submit</strong>
+      Walk this canvas once more against §05 of the blueprint. The archetype risk cell above is the answer to that check &mdash; if it ever stops feeling true, the design drifted and it's worth another pass, not a rewrite.
+    </div>
+
+    <footer>
+      Companion to the <a href="https://claude.ai/code/artifact/6175fa33-63cb-412e-8582-2e437bf54035">Agent Systems Blueprint</a>, the <a href="https://claude.ai/code/artifact/4a61e279-b77f-4522-8391-73b04e6461e0">project tracker</a>, and the <a href="https://claude.ai/code/artifact/73ac9269-09b8-4f17-a5fb-c2b89b87aefc">diagram set</a>. Built for the Agents for Humans hackathon, Good Neighbor track.
+    </footer>
+  </div>
+</main>
+
+</body>
+</html>

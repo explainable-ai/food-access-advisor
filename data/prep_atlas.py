@@ -49,8 +49,18 @@ TRACT_COL_MATCH = re.compile(r"censustract", re.I)
 POP_COL_MATCH = re.compile(r"^pop2010$|^pop$|^population$", re.I)
 LILA_HALF_MATCH = re.compile(r"lilatracts.*half", re.I)
 LILA_ONE_MATCH = re.compile(r"lilatracts.*1and10", re.I)
-LAT_COL_MATCH = re.compile(r"^lat|latitude", re.I)
-LON_COL_MATCH = re.compile(r"^lon|longitude", re.I)
+# NOTE: deliberately NOT `^lat` / `^lon` — the Atlas's own "Low Access
+# Tracts" flag columns (e.g. LATracts_half, LATracts1) start with the
+# letters "LAT" by coincidence (LA = Low Access), which made an earlier,
+# looser version of this pattern false-match one of them as if it were a
+# latitude column, silently writing a 0/1 flag into centroid_lat. Anchored
+# tightly to actual coordinate-column spellings instead, including the
+# Census Gazetteer's INTPTLAT/INTPTLONG (see _load_centroids below) —
+# found by running against real column names, not assumed.
+LAT_COL_MATCH = re.compile(r"^lat(itude)?$|intptlat", re.I)
+LON_COL_MATCH = re.compile(r"^lon(gitude)?$|intptlon", re.I)
+
+CENTROID_PATH = Path(__file__).parent / "raw" / "tract_centroids.txt"
 
 
 def _find_col(columns, pattern):
@@ -58,6 +68,82 @@ def _find_col(columns, pattern):
         if pattern.search(str(c)):
             return c
     return None
+
+
+def _load_data_sheet(path):
+    """The Atlas workbook ships with multiple sheets — a "Notes"/read-me
+    sheet (often first, and often the ONLY one openpyxl reports if the
+    others are hidden or the notes sheet is simply sheet index 0), a
+    variable-lookup sheet, and the actual tract-level data sheet. Sheet
+    order and naming have both shifted across re-releases, so rather than
+    hardcode sheet_name=0 (which grabbed the notes sheet on this run — 10
+    rows, one column, clearly not tract data) this reads every sheet's
+    header and picks the one that actually has a census-tract column.
+    """
+    xl = pd.ExcelFile(path)
+    print(f"Sheets in workbook: {xl.sheet_names}\n")
+
+    for name in xl.sheet_names:
+        df = pd.read_excel(path, sheet_name=name)
+        if _find_col(df.columns, TRACT_COL_MATCH) is not None:
+            print(f"Using sheet '{name}' ({len(df)} rows) — has a census-tract column.\n")
+            return df
+
+    raise SystemExit(
+        "None of the workbook's sheets have a recognizable census-tract "
+        f"column. Sheets found: {xl.sheet_names}. Open the file yourself, "
+        "find the sheet with tract-level rows, and either rename it to "
+        "match here or pass sheet_name= explicitly in _load_data_sheet()."
+    )
+
+
+def _load_centroids() -> dict:
+    """Tract centroid lookup (FIPS -> (lat, lon)) from the Census Bureau's
+    Gazetteer file, keyed by GEOID (the same 11-digit tract FIPS code the
+    Atlas calls CensusTract).
+
+    Optional and separate from the Atlas download on purpose: the LRAM/SRAM
+    files don't reliably ship their own lat/lon columns (confirmed against
+    a real download — every *_COL_MATCH pattern for coordinates came back
+    empty), and unlike the severity flags, a centroid is a pure geometry
+    fact that doesn't change release to release, so it's a one-time,
+    separate download rather than something to keep re-deriving.
+
+    Get it from:
+      https://www2.census.gov/geo/docs/maps-data/data/gazetteer/Gaz_tracts_national.zip
+    Unzip it and save the .txt file inside as data/raw/tract_centroids.txt.
+
+    Returns an empty dict (not an error) if the file isn't there — centroid
+    lookup degrades to "not available" rather than blocking the rest of
+    prep, same as the rest of this script's missing-column handling.
+    """
+    if not CENTROID_PATH.exists():
+        return {}
+
+    # Census Gazetteer files are tab-delimited and (depending on release)
+    # sometimes pad column names with trailing whitespace — strip defensively.
+    gaz = pd.read_csv(CENTROID_PATH, sep="\t", dtype=str)
+    gaz.columns = [c.strip() for c in gaz.columns]
+
+    geoid_col = _find_col(gaz.columns, re.compile(r"^geoid$", re.I))
+    lat_col = _find_col(gaz.columns, LAT_COL_MATCH)
+    lon_col = _find_col(gaz.columns, LON_COL_MATCH)
+    if geoid_col is None or lat_col is None or lon_col is None:
+        print(
+            f"WARNING: {CENTROID_PATH} doesn't look like a Gazetteer tracts "
+            f"file (columns found: {list(gaz.columns)}) — skipping centroid join."
+        )
+        return {}
+
+    centroids = {}
+    for _, row in gaz.iterrows():
+        fips = str(row[geoid_col]).strip()
+        try:
+            centroids[fips] = (float(row[lat_col]), float(row[lon_col]))
+        except (TypeError, ValueError):
+            continue
+    print(f"Loaded {len(centroids)} tract centroids from {CENTROID_PATH.name}.\n")
+    return centroids
 
 
 def main():
@@ -69,7 +155,7 @@ def main():
             "and save it there first."
         )
 
-    df = pd.read_excel(RAW_PATH, sheet_name=0)
+    df = _load_data_sheet(RAW_PATH)
     print(f"Loaded {len(df)} rows. Columns found:\n{list(df.columns)}\n")
 
     tract_col = _find_col(df.columns, TRACT_COL_MATCH)
@@ -102,6 +188,18 @@ def main():
             "against the tract FIPS codes actually in the download."
         )
 
+    centroids = _load_centroids()
+    if not centroids and (lat_col is None or lon_col is None):
+        print(
+            "No centroid source available (neither the Atlas download nor "
+            f"{CENTROID_PATH.name} has lat/lon) — every row will get "
+            "NULL centroid_lat/centroid_lon. See this file's _load_centroids "
+            "docstring for where to get the Gazetteer file. Distance-based "
+            "scoring in tools/gap_scorer.py degrades gracefully for tracts "
+            "with no centroid (treated as no resource found nearby) rather "
+            "than crashing, but it can't rank what it can't place."
+        )
+
     conn = sqlite3.connect(DB_PATH)
     conn.execute("DROP TABLE IF EXISTS tracts")
     conn.execute(
@@ -117,29 +215,41 @@ def main():
         """
     )
     rows = []
+    centroid_hits = 0
     for _, r in df.iterrows():
+        fips = r["_tract_fips_str"]
+        if lat_col and lon_col and pd.notna(r[lat_col]) and pd.notna(r[lon_col]):
+            centroid_lat, centroid_lon = float(r[lat_col]), float(r[lon_col])
+        elif fips in centroids:
+            centroid_lat, centroid_lon = centroids[fips]
+        else:
+            centroid_lat, centroid_lon = None, None
+        if centroid_lat is not None:
+            centroid_hits += 1
+
         rows.append(
             (
-                r["_tract_fips_str"],
+                fips,
                 int(r[pop_col]) if pd.notna(r[pop_col]) else 0,
                 int(bool(r[half_col])) if pd.notna(r[half_col]) else 0,
                 int(bool(r[one_col])) if pd.notna(r[one_col]) else 0,
-                float(r[lat_col]) if lat_col and pd.notna(r[lat_col]) else None,
-                float(r[lon_col]) if lon_col and pd.notna(r[lon_col]) else None,
+                centroid_lat,
+                centroid_lon,
             )
         )
     conn.executemany("INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)", rows)
     conn.commit()
     conn.close()
-    print(f"Wrote {len(rows)} tracts to {DB_PATH}")
+    print(f"Wrote {len(rows)} tracts to {DB_PATH} ({centroid_hits}/{len(rows)} with a usable centroid)")
 
-    if lat_col is None or lon_col is None:
+    if centroid_hits < len(rows):
         print(
-            "\nNOTE: no latitude/longitude column matched. The Atlas "
-            "download doesn't always include tract centroids directly — "
-            "you may need to join in Census TIGER/Line tract centroids "
-            "separately (see README > Data setup) before centroid_lat/lon "
-            "are usable for distance scoring."
+            f"\nNOTE: {len(rows) - centroid_hits} tract(s) have no centroid "
+            "(neither the Atlas download nor the Gazetteer join provided "
+            "one) — distance-based scoring for those specific tracts will "
+            "fall back to 'no resource found nearby' rather than crash, "
+            "but they can't be accurately ranked against tracts that do "
+            "have a real centroid."
         )
 
 

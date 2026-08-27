@@ -50,6 +50,21 @@ def test_empty_resources_does_not_crash_and_maxes_distance_component():
     assert 0 <= result[0]["need_score"] <= 100
 
 
+def test_missing_centroid_does_not_crash():
+    """A real Atlas download doesn't always ship lat/lon (see
+    data/prep_atlas.py's centroid-join fallback) — a tract with no
+    centroid must degrade to 'no resource found', not raise."""
+    tract = make_tract("A", population=2000)
+    tract["centroid_lat"] = None
+    tract["centroid_lon"] = None
+    resources = [{"kind": "grocery", "name": "G", "lat": 41.80, "lon": -87.63}]
+
+    result = score_gaps([tract], resources, top_n=1)
+
+    assert result[0]["nearest_resource_kind"] is None
+    assert 0 <= result[0]["need_score"] <= 100
+
+
 def test_nearby_convenience_store_scores_worse_than_nearby_grocery():
     """A corner store shouldn't count the same as a real grocery store —
     same distance, different kind, should not produce the same need_score."""

@@ -23,7 +23,12 @@ def _severity_weight(tract: dict) -> float:
 
 
 def _nearest_resource(tract: dict, resources: list):
-    if not resources:
+    # A tract with no centroid (real Atlas downloads don't always ship
+    # lat/lon — see data/prep_atlas.py) can't have a distance computed to
+    # anything. Treated the same as "no resources at all" rather than
+    # crashing on radians(None) — the tract still gets ranked, just
+    # without a distance signal, instead of taking down the whole run.
+    if not resources or tract.get("centroid_lat") is None or tract.get("centroid_lon") is None:
         return None
     best, best_dist = None, float("inf")
     for res in resources:

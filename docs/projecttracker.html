@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents for Humans Tracker</title>
+<!--
+  Static export of a Claude artifact, added to this repo for offline/
+  version-controlled context (design docs shouldn't only live behind a
+  claude.ai link that reviewers may not have access to).
+  Live version: https://claude.ai/code/artifact/4a61e279-b77f-4522-8391-73b04e6461e0
+  NOTE: this is a point-in-time export. The live artifact is self-updating and may have been revised since this export was made — treat this file as a snapshot for repo history, not as the current source of truth.
+-->
+</head>
+<body>
+<style id="app-style">
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --paper: #F5F7F6;
+    --paper-raised: #FFFFFF;
+    --ink: #17212B;
+    --ink-soft: #52606D;
+    --line: #C9D2DC;
+    --line-strong: #9FB0C0;
+    --blueprint: #1D5FA8;
+    --blueprint-soft: #E4EDF7;
+    --amber: #A85B12;
+    --amber-soft: #F5E6D3;
+    --teal: #2A7D68;
+    --teal-soft: #DEEFEA;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper: #0E2A4D; --paper-raised: #123765; --ink: #EAF2FA; --ink-soft: #AEC6DE;
+      --line: rgba(234,242,250,0.24); --line-strong: rgba(234,242,250,0.42);
+      --blueprint: #74BBF2; --blueprint-soft: rgba(116,187,242,0.16);
+      --amber: #E3A45E; --amber-soft: rgba(227,164,94,0.16);
+      --teal: #74D8BE; --teal-soft: rgba(116,216,190,0.16);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper: #0E2A4D; --paper-raised: #123765; --ink: #EAF2FA; --ink-soft: #AEC6DE;
+    --line: rgba(234,242,250,0.24); --line-strong: rgba(234,242,250,0.42);
+    --blueprint: #74BBF2; --blueprint-soft: rgba(116,187,242,0.16);
+    --amber: #E3A45E; --amber-soft: rgba(227,164,94,0.16);
+    --teal: #74D8BE; --teal-soft: rgba(116,216,190,0.16);
+  }
+
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  h1,h2,h3,h4{ font-family:"Archivo",ui-sans-serif,system-ui,sans-serif; text-wrap:balance; letter-spacing:-0.01em; margin:0; }
+  .mono{ font-family:"IBM Plex Mono",ui-monospace,"SF Mono",monospace; }
+  input, textarea, select, button{ font-family:inherit; color:inherit; }
+  a{ color:var(--blueprint); }
+
+  .sheet{ max-width: 880px; margin:0 auto; padding: 32px 20px 90px; }
+
+  /* ---- header / hero ---- */
+  .backlink{ font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-decoration:none; display:inline-block; margin-bottom:14px; }
+  .backlink:hover{ color:var(--blueprint); }
+
+  .hero{ border:1.5px solid var(--line-strong); background:var(--paper-raised); padding:26px 26px 22px; margin-bottom:28px; }
+  .hero-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; }
+  .eyebrow{ font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:0.12em; color:var(--blueprint); text-transform:uppercase; margin:0 0 8px; }
+  .hero h1{ font-size: clamp(1.6rem, 4vw, 2.15rem); font-weight:800; margin-bottom:10px; }
+  .projname{ border:none; border-bottom:1.5px dashed var(--line-strong); background:transparent; font-family:"Archivo",sans-serif; font-weight:700; font-size:1.05rem; color:var(--ink); padding:2px 0; width:100%; max-width:420px; }
+  .projname::placeholder{ color:var(--ink-soft); font-weight:600; }
+  .projname:focus{ outline:none; border-color:var(--blueprint); }
+
+  .countdown{ text-align:right; }
+  .countdown .cd-label{ font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:0.08em; color:var(--ink-soft); text-transform:uppercase; }
+  .countdown .cd-num{ font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:1.7rem; color:var(--amber); font-variant-numeric:tabular-nums; }
+  .countdown .cd-sub{ font-size:11px; color:var(--ink-soft); }
+
+  .statrow{ display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border-top:1px solid var(--line); margin-top:20px; }
+  .stat{ background:var(--paper-raised); padding:12px 14px; }
+  .stat .n{ font-family:"IBM Plex Mono",monospace; font-size:1.3rem; font-variant-numeric:tabular-nums; }
+  .stat .l{ font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em; margin-top:2px; }
+  @media (max-width:560px){ .statrow{ grid-template-columns:repeat(2,1fr); } }
+
+  .savebar{ display:flex; align-items:center; gap:8px; margin-top:16px; font-size:12px; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--line-strong); flex:none; }
+  .dot.ok{ background:var(--teal); }
+  .dot.busy{ background:var(--amber); }
+  .dot.off{ background:var(--line-strong); }
+  .banner{ background:var(--amber-soft); color:var(--amber); border:1px solid var(--amber); padding:8px 12px; font-size:12.5px; margin-top:12px; display:none; }
+  .banner.show{ display:block; }
+
+  /* ---- sections ---- */
+  section{ margin:0 0 40px; }
+  .sec-tag{ display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
+  .sec-tag .num{ font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--blueprint); border:1px solid var(--blueprint); padding:2px 7px; }
+  .sec-tag h2{ font-size:1.25rem; font-weight:700; }
+  .lede{ color:var(--ink-soft); font-size:0.95rem; margin:0 0 16px; max-width:64ch; }
+
+  /* ---- idea cards ---- */
+  .idea-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:760px){ .idea-grid{ grid-template-columns:1fr; } }
+  .idea-card{ border:1px solid var(--line); background:var(--paper-raised); padding:14px 15px 15px; display:flex; flex-direction:column; gap:7px; cursor:pointer; transition:border-color .12s ease; }
+  .idea-card:hover{ border-color:var(--line-strong); }
+  .idea-card.picked{ border-color:var(--blueprint); box-shadow: inset 0 0 0 1px var(--blueprint); }
+  .idea-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .idea-title{ font-weight:600; font-size:0.94rem; }
+  .tag{ font-family:"IBM Plex Mono",monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:0.05em; padding:2px 7px; border-radius:999px; white-space:nowrap; flex:none; }
+  .tag.everyday{ background:var(--blueprint-soft); color:var(--blueprint); }
+  .tag.professional{ background:var(--teal-soft); color:var(--teal); }
+  .tag.goodneighbor{ background:var(--amber-soft); color:var(--amber); }
+  .idea-line{ font-size:12.5px; color:var(--ink-soft); }
+  .idea-line b{ color:var(--ink); font-weight:600; }
+  .idea-pick{ margin-top:4px; display:flex; align-items:center; gap:6px; font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--blueprint); }
+  .idea-pick input{ accent-color:var(--blueprint); width:14px; height:14px; }
+
+  /* ---- concept panel ---- */
+  .concept{ border:1.5px solid var(--line-strong); background:var(--paper-raised); padding:18px 20px 20px; }
+  .concept-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; }
+  @media (max-width:640px){ .concept-grid{ grid-template-columns:1fr; } }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field.full{ grid-column:1/-1; }
+  .field label{ font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:0.05em; text-transform:uppercase; color:var(--blueprint); }
+  .field input[type=text], .field select, .field textarea{
+    border:1px solid var(--line); background:var(--paper); color:var(--ink);
+    padding:8px 10px; font-size:13.5px; width:100%; resize:vertical;
+  }
+  .field textarea{ min-height:52px; font-family:"IBM Plex Sans",sans-serif; }
+  .field input[type=text]:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--blueprint); }
+
+  /* ---- checklists / phases ---- */
+  .progress{ height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin:6px 0 10px; }
+  .progress i{ display:block; height:100%; background:var(--teal); }
+  .phase{ margin-bottom:20px; }
+  .phase-head{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .phase-head h4{ font-size:0.92rem; font-weight:600; }
+  .phase-head .frac{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-soft); }
+
+  .item{ display:flex; align-items:flex-start; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); }
+  .item input[type=checkbox]{ margin-top:3px; width:15px; height:15px; accent-color:var(--teal); flex:none; }
+  .item label{ font-size:13.5px; cursor:pointer; }
+  .item.done label{ color:var(--ink-soft); text-decoration:line-through; }
+
+  .grp-title{ font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-soft); margin:18px 0 6px; }
+  .grp-title:first-child{ margin-top:0; }
+
+  .notes textarea{ width:100%; min-height:100px; border:1px solid var(--line); background:var(--paper-raised); color:var(--ink); padding:12px 14px; font-size:13.5px; resize:vertical; }
+  .notes textarea:focus{ outline:none; border-color:var(--blueprint); }
+
+  footer{ border-top:1px solid var(--line); padding-top:18px; font-size:12px; color:var(--ink-soft); }
+</style>
+
+<div class="sheet">
+  <a class="backlink" href="https://claude.ai/code/artifact/6175fa33-63cb-412e-8582-2e437bf54035" target="_blank" rel="noopener">&larr; Agent Systems Blueprint</a>
+  <a class="backlink" href="https://claude.ai/code/artifact/2f98ad95-8fb3-43b6-a1fd-de090bf6f1e3" target="_blank" rel="noopener">&middot; Design Canvas</a>
+  <a class="backlink" href="https://claude.ai/code/artifact/73ac9269-09b8-4f17-a5fb-c2b89b87aefc" target="_blank" rel="noopener">&middot; Diagrams</a>
+  <div id="app"></div>
+</div>
+
+<script id="app-logic">
+const STYLE_CSS = document.getElementById('app-style').textContent;
+const LOGIC_SRC = document.getElementById('app-logic').textContent;
+
+/* ---------------- helpers ---------------- */
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeJSON(o){ return JSON.stringify(o).replace(/</g, '\\u003c'); }
+function progressOf(items){ const done = items.filter(i => i.done).length; return { done, total: items.length, pct: items.length ? Math.round(100*done/items.length) : 0 }; }
+function getPath(obj, path){ return path.split('.').reduce((o,k) => (o||{})[k], obj); }
+function setPath(obj, path, val){ const parts = path.split('.'); let o = obj; for (let i=0;i<parts.length-1;i++){ o = o[parts[i]]; } o[parts[parts.length-1]] = val; }
+
+const DEADLINE = new Date('2026-09-14T17:00:00-07:00');
+
+/* ---------------- render: ideas ---------------- */
+const TRACK_LABEL = { everyday:'Everyday', professional:'Professional', goodneighbor:'Good Neighbor' };
+
+function ideaCard(idea, s){
+  const picked = s.selectedIdeaId === idea.id;
+  return `
+    <div class="idea-card ${picked?'picked':''}" data-pick-idea="${idea.id}">
+      <div class="idea-head">
+        <span class="idea-title">${esc(idea.title)}</span>
+        <span class="tag ${idea.track}">${TRACK_LABEL[idea.track]}</span>
+      </div>
+      <div class="idea-line"><b>Stock —</b> ${esc(idea.stock)}</div>
+      <div class="idea-line"><b>Broken loop —</b> ${esc(idea.brokenLoop)}</div>
+      <div class="idea-line"><b>Leverage —</b> ${esc(idea.leverage)}</div>
+      <label class="idea-pick"><input type="radio" name="idea" value="${idea.id}" ${picked?'checked':''} data-pick-idea="${idea.id}"> ${picked?'This is our idea':'Pick this one'}</label>
+    </div>`;
+}
+
+/* ---------------- render: checklist item ---------------- */
+function itemRow(item){
+  return `
+    <div class="item ${item.done?'done':''}">
+      <input type="checkbox" id="chk-${item.id}" data-toggle="${item.id}" ${item.done?'checked':''}>
+      <label for="chk-${item.id}">${esc(item.label)}</label>
+    </div>`;
+}
+
+/* ---------------- full app render ---------------- */
+function appHTML(s){
+  const now = progressOf(s.checklist.filter(c => c.group==='now'));
+  const req = progressOf(s.checklist.filter(c => c.group==='required'));
+  const bonus = progressOf(s.checklist.filter(c => c.group==='bonus'));
+  const phases = progressOf(s.tasks);
+
+  const phaseNames = [...new Set(s.tasks.map(t => t.phase))];
+
+  return `
+    <header class="hero">
+      <div class="hero-top">
+        <div>
+          <p class="eyebrow">Agents for Humans &middot; Build Tracker</p>
+          <h1>Project Tracker</h1>
+          <input class="projname" data-field="project.name" value="${esc(s.project.name)}" placeholder="Name this project&hellip;">
+        </div>
+        <div class="countdown">
+          <div class="cd-label">Submission closes</div>
+          <div class="cd-num" id="cdnum">&mdash;</div>
+          <div class="cd-sub">Sep 14, 2026 &middot; 5:00pm PT</div>
+        </div>
+      </div>
+      <div class="statrow">
+        <div class="stat"><div class="n">${now.done}/${now.total}</div><div class="l">Do now</div></div>
+        <div class="stat"><div class="n">${req.done}/${req.total}</div><div class="l">Required</div></div>
+        <div class="stat"><div class="n">${bonus.done}/${bonus.total}</div><div class="l">Bonus</div></div>
+        <div class="stat"><div class="n">${phases.done}/${phases.total}</div><div class="l">Build tasks</div></div>
+      </div>
+      <div class="banner ${s.readOnlyBanner?'show':''}" id="banner">${esc(s.bannerText||'')}</div>
+      <div class="savebar"><span class="dot ${s.saveState}" id="savedot"></span><span id="savetext">${esc(s.saveText||'')}</span></div>
+    </header>
+
+    <section id="ideas-sec">
+      <div class="sec-tag"><span class="num">01</span><h2>Idea shortlist</h2></div>
+      <p class="lede">Nine starting concepts, three per track, each with the stock, the broken loop, and the leverage point behind it. Pick one to seed the concept snapshot below &mdash; you can still edit everything after.</p>
+      <div class="idea-grid">
+        ${s.ideas.map(i => ideaCard(i, s)).join('')}
+      </div>
+    </section>
+
+    <section id="concept-sec">
+      <div class="sec-tag"><span class="num">02</span><h2>Concept snapshot</h2></div>
+      <p class="lede">Your filled-in canvas. This is what turns into your submission's text description and architecture diagram.</p>
+      <div class="concept">
+        <div class="concept-grid">
+          <div class="field">
+            <label>Track</label>
+            <select data-field="concept.track">
+              <option value="" ${!s.concept.track?'selected':''}>&mdash; choose &mdash;</option>
+              <option value="everyday" ${s.concept.track==='everyday'?'selected':''}>Everyday</option>
+              <option value="professional" ${s.concept.track==='professional'?'selected':''}>Professional</option>
+              <option value="goodneighbor" ${s.concept.track==='goodneighbor'?'selected':''}>Good Neighbor</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Topology</label>
+            <select data-field="concept.topology">
+              <option value="" ${!s.concept.topology?'selected':''}>&mdash; choose &mdash;</option>
+              <option value="Workflow" ${s.concept.topology==='Workflow'?'selected':''}>Workflow (DAG)</option>
+              <option value="Graph" ${s.concept.topology==='Graph'?'selected':''}>Graph</option>
+              <option value="Swarm" ${s.concept.topology==='Swarm'?'selected':''}>Swarm</option>
+              <option value="Agents-as-tools" ${s.concept.topology==='Agents-as-tools'?'selected':''}>Agents-as-tools</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>One-liner</label>
+            <input type="text" data-field="concept.oneLiner" value="${esc(s.concept.oneLiner)}" placeholder="What it does, for whom, in one sentence">
+          </div>
+          <div class="field">
+            <label>Stock</label>
+            <input type="text" data-field="concept.stock" value="${esc(s.concept.stock)}" placeholder="The level that's building up or draining">
+          </div>
+          <div class="field">
+            <label>Leverage point</label>
+            <input type="text" data-field="concept.leverage" value="${esc(s.concept.leverage)}" placeholder="Rung # and why">
+          </div>
+          <div class="field full">
+            <label>Broken loop</label>
+            <textarea data-field="concept.brokenLoop" placeholder="X should notice Y and respond, but currently doesn't because Z">${esc(s.concept.brokenLoop)}</textarea>
+          </div>
+          <div class="field">
+            <label>Goal metric</label>
+            <input type="text" data-field="concept.goal" value="${esc(s.concept.goal)}" placeholder="The number you'll show moving in the demo">
+          </div>
+          <div class="field">
+            <label>Archetype risk</label>
+            <input type="text" data-field="concept.risk" value="${esc(s.concept.risk)}" placeholder="Which failure pattern is most likely">
+          </div>
+          <div class="field full">
+            <label>Guardrails</label>
+            <textarea data-field="concept.guardrails" placeholder="Tools, permissions, policy limits">${esc(s.concept.guardrails)}</textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="phases-sec">
+      <div class="sec-tag"><span class="num">03</span><h2>Build tasks</h2></div>
+      <p class="lede">The nine-step process, broken into checkable work. ${phases.done}/${phases.total} done.</p>
+      <div class="progress"><i style="width:${phases.pct}%"></i></div>
+      ${phaseNames.map(p => {
+        const items = s.tasks.filter(t => t.phase === p);
+        const pr = progressOf(items);
+        return `
+          <div class="phase">
+            <div class="phase-head"><h4>${esc(p)}</h4><span class="frac mono">${pr.done}/${pr.total}</span></div>
+            <div class="progress"><i style="width:${pr.pct}%"></i></div>
+            ${items.map(itemRow).join('')}
+          </div>`;
+      }).join('')}
+    </section>
+
+    <section id="checklist-sec">
+      <div class="sec-tag"><span class="num">04</span><h2>Submission checklist</h2></div>
+      <p class="lede">Straight from the devpost requirements &mdash; nothing added, nothing renamed.</p>
+
+      <div class="grp-title">Do right now</div>
+      ${s.checklist.filter(c=>c.group==='now').map(itemRow).join('')}
+
+      <div class="grp-title">Required to submit</div>
+      ${s.checklist.filter(c=>c.group==='required').map(itemRow).join('')}
+
+      <div class="grp-title">Bonus (optional)</div>
+      ${s.checklist.filter(c=>c.group==='bonus').map(itemRow).join('')}
+    </section>
+
+    <section id="notes-sec">
+      <div class="sec-tag"><span class="num">05</span><h2>Notes &amp; parking lot</h2></div>
+      <div class="notes"><textarea data-field="notes" placeholder="Open questions, risks, teammate assignments, anything you don't want to lose&hellip;">${esc(s.notes)}</textarea></div>
+    </section>
+
+    <footer>
+      Tracks the requirements posted at agentsforhumans.devpost.com as of Aug 25, 2026. Deadline: Sep 14, 2026, 5:00pm PT. Re-check the Rules page before you submit &mdash; hackathon terms can change.
+    </footer>
+  `;
+}
+
+/* ---------------- boot / state / persistence ---------------- */
+let state = null;
+let artifactCap = null;
+let readOnly = false;
+let saveTimer = null;
+
+function render(){
+  document.getElementById('app').innerHTML = appHTML(state);
+  tickCountdown();
+}
+
+function setSave(kind, text){
+  state.saveState = kind;
+  state.saveText = text;
+  const dot = document.getElementById('savedot');
+  const txt = document.getElementById('savetext');
+  if (dot){ dot.className = 'dot ' + kind; }
+  if (txt){ txt.textContent = text; }
+}
+
+function setBanner(text){
+  state.readOnlyBanner = !!text;
+  state.bannerText = text || '';
+  const b = document.getElementById('banner');
+  if (b){ b.textContent = text || ''; b.className = 'banner ' + (text ? 'show' : ''); }
+}
+
+function tickCountdown(){
+  const el = document.getElementById('cdnum');
+  if (!el) return;
+  const ms = DEADLINE - new Date();
+  if (ms <= 0){ el.textContent = 'Closed'; return; }
+  const d = Math.floor(ms/86400000);
+  const h = Math.floor((ms%86400000)/3600000);
+  const m = Math.floor((ms%3600000)/60000);
+  el.textContent = d + 'd ' + h + 'h ' + m + 'm';
+}
+setInterval(tickCountdown, 30000);
+
+function schedulePersist(){
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(doPersist, 500);
+}
+
+async function doPersist(){
+  if (readOnly){ setSave('off', "Read-only view — changes aren't saved here"); return; }
+  if (!artifactCap){ setSave('off', 'Not connected — changes stay on this device only'); return; }
+  setSave('busy', 'Saving…');
+  try{
+    await artifactCap.publish(buildFullDocument(state));
+    setSave('ok', 'Saved');
+  }catch(err){
+    const code = err && err.code;
+    if (code === 'conflict'){ setSave('busy', 'Updated elsewhere — reloading…'); return; }
+    if (code === 'not_writer' || code === 'not_granted' || code === 'not_declared'){
+      readOnly = true; setBanner("This view can't save changes — they'll only last until you close the tab.");
+      setSave('off', 'Read-only view'); return;
+    }
+    setSave('off', 'Save failed — will retry on next change');
+  }
+}
+
+function buildFullDocument(s){
+  const clean = { ...s };
+  delete clean.saveState; delete clean.saveText; delete clean.readOnlyBanner; delete clean.bannerText;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents for Humans Tracker</title>
+<style id="app-style">${STYLE_CSS}</style>
+</head>
+<body>
+<div class="sheet">
+  <a class="backlink" href="https://claude.ai/code/artifact/6175fa33-63cb-412e-8582-2e437bf54035" target="_blank" rel="noopener">&larr; Agent Systems Blueprint</a>
+  <a class="backlink" href="https://claude.ai/code/artifact/2f98ad95-8fb3-43b6-a1fd-de090bf6f1e3" target="_blank" rel="noopener">&middot; Design Canvas</a>
+  <a class="backlink" href="https://claude.ai/code/artifact/73ac9269-09b8-4f17-a5fb-c2b89b87aefc" target="_blank" rel="noopener">&middot; Diagrams</a>
+  <div id="app"></div>
+</div>
+<script id="app-logic">${LOGIC_SRC}<\/script>
+<script id="app-state">window.__STATE__ = ${safeJSON(clean)};<\/script>
+<script>boot(window.__STATE__);<\/script>
+</body>
+</html>`;
+}
+
+/* ---------------- event delegation ---------------- */
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset.toggle){
+    const item = state.checklist.find(i => i.id === t.dataset.toggle) || state.tasks.find(i => i.id === t.dataset.toggle);
+    if (item){ item.done = t.checked; render(); schedulePersist(); }
+    return;
+  }
+  if (t.dataset.pickIdea !== undefined){
+    const idea = state.ideas.find(i => i.id === t.dataset.pickIdea);
+    if (idea){
+      state.selectedIdeaId = idea.id;
+      state.concept.track = idea.track;
+      state.concept.oneLiner = idea.concept;
+      state.concept.stock = idea.stock;
+      state.concept.brokenLoop = idea.brokenLoop;
+      state.concept.leverage = idea.leverage;
+      state.concept.topology = idea.topology;
+      render(); schedulePersist();
+    }
+    return;
+  }
+  if (t.dataset.field){
+    setPath(state, t.dataset.field, t.value);
+    if (t.tagName === 'SELECT'){ render(); }
+    schedulePersist();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-pick-idea]');
+  if (card && e.target.tagName !== 'INPUT'){
+    const id = card.getAttribute('data-pick-idea');
+    const radio = document.querySelector(`input[data-pick-idea="${id}"]`);
+    if (radio && !radio.checked){ radio.checked = true; radio.dispatchEvent(new Event('change', {bubbles:true})); }
+  }
+});
+
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.dataset.field && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')){
+    setPath(state, t.dataset.field, t.value);
+  }
+});
+
+document.addEventListener('focusout', (e) => {
+  if (e.target.dataset && e.target.dataset.field){ schedulePersist(); }
+});
+
+async function boot(initial){
+  state = initial;
+  render();
+  if (window.claude && typeof window.claude.use === 'function'){
+    try{
+      artifactCap = await window.claude.use('artifact');
+      if (!artifactCap){ setSave('off', 'Not connected — changes stay on this device only'); }
+      else { setSave('ok', 'Ready'); }
+    }catch(e){ setSave('off', 'Not connected — changes stay on this device only'); }
+  } else {
+    setSave('off', 'Not connected — changes stay on this device only');
+  }
+}
+</script>
+
+<script id="app-state">
+window.__STATE__ = {
+  project: { name: '' },
+  selectedIdeaId: 'g4',
+  saveState: 'off', saveText: '', readOnlyBanner: false, bannerText: '',
+  concept: { track:'goodneighbor', oneLiner:'A Site Advisor agent maps low-income, low-access urban tracts against real resources and recommends the highest-need site; a sibling Route Advisor does the same for rural tracts but recommends a route or distribution-schedule change instead, since a fixed-site store often isn’t viable at rural density; a scheduled Watchdog agent checks whether either kind of recommendation ever got acted on.', stock:'39 million Americans live in low-income, low-access census tracts (USDA’s Food Access Research Atlas) — concentrated in Black and Native communities in cities where supermarket investment withdrew decades ago, and in remote rural counties where population density never supported it in the first place.', brokenLoop:'Urban: community leaders siting a new resource work from instinct, not the tract-level evidence that already exists. Rural: the right kind of response already exists — mobile markets, food-bank distribution routes — but it’s planned once and rarely re-optimized against where need currently sits, a coordination gap rather than an information vacuum. Both: once a recommendation is made, nothing checks whether it was ever acted on.', leverage:'Rung 6 (information flow) for both Advisors, aimed at a different decision each — siting for urban, route/schedule reprioritization for rural — plus rung 8 (Watchdog’s follow-through) and rung 9 (shrinking rural’s typically annual replanning cadence).', goal:'Top 3 highest-need tracts per region (urban: zero resource within a real transit-time distance; rural: zero resource within the Atlas’s 10/20-mile rural threshold) surfaced with a cited brief in under a minute. Watchdog re-checks each flagged tract on a schedule and reports whether it moved — tracked separately per region, not pooled.', topology:'Agents-as-tools', risk:'Fixes that fail (urban — stale Atlas data, caught by the Watchdog recheck) and success-to-the-successful in a sharper, capacity-driven form for rural (a mobile route has fixed stop capacity, so always favoring the single highest-need tract can starve a tract it already serves) — mitigated by requiring that trade-off to be disclosed in the output itself, not just implied.', guardrails:'Cite the dataset and its vintage year on every answer. Refuse regions outside the indexed pilot city/county rather than guess — enforced in code (neither Advisor accepts a region argument), not just prompted. Frame every output as decision support, never a decision. Rural adds: disclose the route-capacity trade-off explicitly rather than only ever sounding additive. No PII involved — public, tract- or resource-level data only.' },
+  notes: 'ELEVATED SCOPE (locked in):\n\nPilot city: Chicago (South/West Side) — well-documented, swap for your own city if preferred. Cover the whole US via the same architecture later; demo just one.\n\nDatasets — CORRECTED 8/26: the standalone USDA SNAP Retailer Locator (individual retailer points) has been discontinued. USDA folded it into the Food Access Research Atlas as two tract-level products, neither with point coordinates: LRAM (Large Retailer Access Map — large grocery only, 2019, the classic Atlas methodology, USE THIS as the primary severity signal) and SRAM (SNAP-authorized Retailer Access Map — any SNAP retailer incl. convenience/dollar stores, 2025, more current but more lenient). Both are downloaded and processed the same way as the original Atlas file (data/prep_atlas.py). OpenStreetMap Overpass API is now the ONLY point-level existing-resources source in this project (community gardens, grocery/supermarket, farm, convenience — convenience kept separate and discounted in scoring, since a corner store isn’t real grocery access). GTFS transit feed for the pilot city is still the next planned upgrade (real transit-time distance, not straight-line). Stretch: USDA Farmers Market Directory API.\n\nArchitecture: TWO agents, justified by different lifecycles, not complexity for its own sake. (1) Advisor — on-demand, Agents-as-tools: orchestrator + Access Data tool + Existing Resources tool (OSM only) + deterministic Gap Scorer (plain weighted arithmetic, not an LLM — defensibility matters for a civic tool) + Evidence Brief generator (LLM). (2) Watchdog — scheduled (weekly/monthly), re-checks previously flagged tracts and reports whether a resource ever appeared. This is the piece that answers "what hasn’t already been done" — AI-FEED and the food-rescue apps are all one-shot; nothing in the prior art closes the loop on its own recommendation.\n\nMVP (build first): Advisor only, one city, Atlas (LRAM) + Overpass, deterministic scorer. SCAFFOLDED 8/26 — code sent, strands-agents installed and test-verified in-session (pytest 4/4 passing), Agent() builds with all 4 tools registered. Still needed: real LRAM download run through prep_atlas.py (sample data in place now), AWS Bedrock credentials to actually invoke it.\nNext: GTFS transit-time distance (biggest single differentiator over the source data).\nThen: Watchdog agent (the accountability story).\nCut first if time is short: ML trend-forecasting layer — real academic precedent exists already, so it’s the least differentiated for the effort.\n\nOPEN ITEMS (8/26, after Step 9 + canvas + diagrams): (1) Overpass silent-failure logging — existing_resources.py currently swallows an OSM query failure into an empty list with just a print(); the Step 9 pre-mortem flagged this should become a real observability signal instead of a silent one. Not yet fixed. (2) Watchdog agent — still not scaffolded; it’s the next real build step per the MVP-then-stretch order, and the diagram set already marks it clearly as “planned, not yet in the repo” rather than overclaiming it exists. Also done since the last note: the 12-cell design canvas (§07) and three diagrams — the pure systems-thinking causal-loop diagram, the Strands agent architecture (Advisor solid/built, Watchdog dashed/planned), and an AWS system architecture diagram drawn with the `diagrams` Python package — all published as their own artifacts and linked from this tracker.\n\nRURAL ANGLE ADDED (8/26): elevated to a THREE-agent, two-region system after a full steps 1–9 systems-thinking pass on rural specifically — deliberately checked whether it was really “the same loop, wider miles” before assuming so, and it wasn’t. Rural’s broken loop is different in kind: mobile markets and food-bank routes already exist, but get planned once and rarely re-optimized against current need — a coordination gap, not an information vacuum like urban’s. New sibling agent: Route Advisor — same shape as the original Advisor (one Agent, tools in a fixed order, zero region arguments, pinned to a RURAL_PILOT_COUNTY config with the same discipline as PILOT_CITY), but it recommends route/schedule shifts against existing distribution networks instead of new sites. Renamed the original Advisor to Site Advisor now that there are two. Watchdog is generalized rather than tripled — one accountability agent watching both Advisors’ recommendations; the flagged-tracts log gets a recommendation_type + source-agent column instead of building a third agent to do the same job.\n\nNew guardrail specific to Route Advisor: a mobile route has fixed stop capacity, so “add a stop here” is usually really “move a stop from somewhere else” — a zero-sum trade-off that must be disclosed in the output itself, not just implied. That’s Success-to-the-Successful in a concrete, capacity-driven form, and it’s elevated to the PRIMARY risk for Route Advisor (vs. a secondary, milder version of the same archetype for Site Advisor — only the pilot city ever gets data prepped).\n\nData-source research done before committing any code (8/26): USDA’s Farmers Market Directory API is real but its primary endpoint (search.ams.usda.gov) currently has an EXPIRED SSL CERTIFICATE; a maintained mirror exists at USDA’s Local Food Portal (Michigan State University) with free self-service API key registration, but it couldn’t be verified end-to-end from this sandbox (broken robots.txt blocked the fetch tools). Feeding America has NO public API — confirmed directly from their own site, ZIP-search widget only, nothing programmatic. A lookalike “Feed America” (feedam.org — different domain, different EIN, a suspiciously-open “no key required” bulk-export claim) surfaced in search and is flagged as unverified and likely not legitimate — not to be used. Decision: ship Route Advisor OSM-only for MVP, same discipline as the original Advisor being OSM-only before SRAM/LRAM got layered in — OSM does have real tags for this (social_facility=food_bank, amenity=marketplace, confirmed on the OSM wiki), just thinner rural coverage than urban. The Farmers Market API is a stretch enhancement pending an actual registered-key test, not a blocking dependency.\n\nCanvas (§07) updated 8/26 to reflect three agents across two regions — Boundary, Stocks, Flows, Existing loop, Leverage point, Goal state, Loop design, Topology, Memory, Guardrails, Success metric, and Archetype risk cells are now all agent-tagged (Site Advisor / Route Advisor / Watchdog).\n\nNot yet done: Route Advisor has no code yet — design only, same status as Watchdog. The rural pilot county itself still isn’t picked (Topeka and Kansas City were floated early on as options for the whole project, never decided either way).',
+  ideas: [
+    { id:'e1', track:'everyday', title:'Warranty & Renewal Watchtower', stock:'Warranty, subscription, and return-window dates scattered across email and drawers.', brokenLoop:"The only feedback (a late fee, an expired warranty) arrives after the window closes.", leverage:'Rung 6 — information flow, surfaced early in the channel someone actually checks.', concept:'Reads receipts and email, tracks expiry dates, and pings once, early, before a warranty or return window closes.', topology:'Workflow' },
+    { id:'e2', track:'everyday', title:'Household Decision Digest', stock:'Small pending decisions (forms, reschedules, disputes) piling up across email, text, and mail.', brokenLoop:'No single feedback signal aggregates "what needs a decision today" — each channel is its own silent stock.', leverage:'Rung 6 — one daily digest with one-tap decisions instead of five scattered inboxes.', concept:'A daily digest agent that pulls pending decisions from every channel into one place with one-tap responses.', topology:'Agents-as-tools' },
+    { id:'e3', track:'everyday', title:'Quiet Habit Coach', stock:'A health, fitness, or medication adherence streak.', brokenLoop:'The feedback for skipping (out of sight, out of mind) is stronger than the feedback for keeping up.', leverage:'Rung 7–8 — strengthen the correcting loop before the miss, and cap nag frequency so it doesn’t erode trust.', concept:'Notices when a habit is about to be missed — not after — and nudges once, with a built-in cap on frequency.', topology:'Graph' },
+    { id:'p1', track:'professional', title:'Auto-Draft Invoice Agent', stock:'Unbilled completed jobs for a solo contractor.', brokenLoop:'Invoicing competes with billable work for the same hours, and billable work always wins.', leverage:'Rung 5 — change the default from "invoice when I get to it" to "invoice drafted, you approve."', concept:'Watches completed jobs and drafts the invoice automatically; the contractor just approves and sends.', topology:'Workflow' },
+    { id:'p2', track:'professional', title:'Research Triage Agent', stock:'Unread papers and preprints relevant to an active research project.', brokenLoop:'Relevance surfaces too late — usually right before a deadline, when it’s too late to incorporate.', leverage:'Rung 6 — surface relevant new work weekly, ranked against the researcher’s own current draft.', concept:'Scans new papers weekly and ranks them against your draft, so relevant work surfaces while you can still use it.', topology:'Swarm' },
+    { id:'p3', track:'professional', title:'Classroom Admin Copilot', stock:'Ungraded assignments and unanswered parent messages for a teacher.', brokenLoop:'Grading and parent comms compete for the same after-hours slot, and the backlog never clears.', leverage:'Rung 5 — default to "review and edit" instead of "write from scratch."', concept:'Drafts rubric-based first-pass grades and parent-message replies for the teacher to approve, not author.', topology:'Agents-as-tools' },
+    { id:'g1', track:'goodneighbor', title:'Volunteer-Shift Matchmaker', stock:'Open volunteer shifts and available volunteer hours, each visible only to one side.', brokenLoop:'No shared information flow lets supply and demand match in time.', leverage:'Rung 6, stretching to 4 — shared live visibility plus self-organizing matches.', concept:'Matches open shifts to volunteer availability in real time and re-broadcasts gaps as they open.', topology:'Graph' },
+    { id:'g2', track:'goodneighbor', title:'Food Bank Surplus Router', stock:'Perishable surplus at donors against unmet need at recipient orgs, both changing hourly.', brokenLoop:'The delay between "food available" and "someone claims it" outlasts the food’s shelf life.', leverage:'Rung 9 and 6 together — shrink the delay and broadcast the information the moment it changes.', concept:'Broadcasts surplus the moment it’s available and auto-matches it to the nearest org with need.', topology:'Swarm' },
+    { id:'g3', track:'goodneighbor', title:'Meeting Follow-Through Agent', stock:'Action items decided in nonprofit, HOA, or library board meetings.', brokenLoop:'Nothing tracks whether action items get done between meetings — accountability leaks silently.', leverage:'Rung 8 — strengthen the negative feedback that should catch a dropped commitment.', concept:'Pulls action items out of meeting notes and follows up with owners before the next meeting.', topology:'Workflow' },
+    { id:'w1', track:'everyday', title:'Home Command Center', stock:'Family coordination load — kids’ schedules, groceries, homework, school events, travel — scattered across apps, portals, and one parent’s head.', brokenLoop:'Nothing reconciles the separate channels into a shared view, so the household’s only real buffer is one person’s memory — and that person becomes the bottleneck.', leverage:'Rung 6, stretching to 10 — one shared view instead of five silent stocks, restructuring where the household’s information actually lives.', concept:'Watches school portals, group chats, calendars, and household apps, and keeps one shared view both parents (and kids) can see — surfacing decisions, not raw data.', topology:'Agents-as-tools' },
+    { id:'w2', track:'everyday', title:'Fantasy Football Co-Manager', stock:'Weekly roster decisions — lineups, waivers, trades — versus the research time available before each deadline.', brokenLoop:'Feedback on a bad lineup call only arrives after the games are over, and the news that should inform it (injuries, matchups, weather) is scattered and reconciled manually under time pressure.', leverage:'Rung 6 and 9 — aggregate the scattered signals into one view, and shrink the gap between late-breaking news and the lock deadline.', concept:'Tracks injury reports, matchups, and waiver trends all week, and proposes lineup and waiver moves before each deadline, with the reasoning shown — not just the pick.', topology:'Workflow' },
+    { id:'w3', track:'professional', title:'Data Pipeline Trust Sentinel', stock:'Data-quality trust debt — schema drift, null spikes, volume anomalies — building up silently across a pipeline.', brokenLoop:'Failures are either silent, too noisy to trust (alert fatigue drowns the real signal), or disconnected from impact — nobody hears "which dashboard or model is now wrong."', leverage:'Rung 8 — strengthen the correcting signal by attaching downstream impact, so a real anomaly is impossible to ignore and a benign one doesn’t cry wolf.', concept:'Watches pipeline runs and data-quality metrics, tells real anomalies from expected variance, and when something’s wrong, names exactly what’s downstream-affected.', topology:'Graph' },
+    { id:'g4', track:'goodneighbor', title:'Food Deserts in Low-Income Communities', stock:'39 million Americans live in low-income, low-access census tracts (USDA’s Food Access Research Atlas) — concentrated in Black and Native communities where supermarket investment withdrew decades ago.', brokenLoop:'Community leaders deciding where to put a new farm, market, or food-rescue route work from instinct, not the tract-level evidence that already exists — so new investment doesn’t reliably land where disinvestment was worst.', leverage:'Rung 6 — turn public, tract-level access data into a siting tool community organizers and city planners can actually use, instead of leaving it in a government dataset nobody queries.', concept:'Maps low-income, low-access census tracts against existing farms, gardens, and food-rescue routes, and recommends where a new site or route would close the biggest gap — evidence in place of guesswork. Built to hand advocates the case for investment, not just to route around the gap quietly.', topology:'Agents-as-tools' }
+  ],
+  tasks: [
+    { id:'t1', phase:'1 · Map the system', label:'Sketch the actors, stocks, and flows around your chosen idea', done:false },
+    { id:'t2', phase:'1 · Map the system', label:'Write down the boundary — what the agent can and can’t see', done:false },
+    { id:'t3', phase:'2 · Diagnose the broken loop', label:'Write the one-sentence broken-loop statement', done:false },
+    { id:'t4', phase:'2 · Diagnose the broken loop', label:'Check it against one real person in the target group', done:false },
+    { id:'t5', phase:'3 · Choose leverage point', label:'Place the fix on the ladder — rung + reason, in writing', done:false },
+    { id:'t6', phase:'4 · Define the goal as a stock', label:'Pick the metric you’ll show moving in the demo', done:false },
+    { id:'t7', phase:'5 · Design the loop', label:'Decide balancing vs. reinforcing, and add a governor if reinforcing', done:false },
+    { id:'t8', phase:'6 · Choose topology', label:'Pick a Strands pattern: Workflow, Graph, Swarm, or Agents-as-tools', done:false },
+    { id:'t9', phase:'6 · Choose topology', label:'Scaffold the Strands project and get one tool call working', done:false },
+    { id:'t10', phase:'7 · Instrument memory', label:'Decide what persists, and for how long', done:false },
+    { id:'t11', phase:'7 · Instrument memory', label:'Wire up memory (AgentCore Memory or a local store)', done:false },
+    { id:'t12', phase:'8 · Guard the boundary', label:'List every tool and permission the agent actually needs', done:false },
+    { id:'t13', phase:'8 · Guard the boundary', label:'Add guardrails or policy limits for anything destructive', done:false },
+    { id:'t14', phase:'9 · Close the loop on yourself', label:'Add basic logging or observability', done:false },
+    { id:'t15', phase:'9 · Close the loop on yourself', label:'Run the archetype pre-mortem against the design', done:false },
+    { id:'t16', phase:'10 · Ship it', label:'Record the demo video (≤ 5 min): working demo + pitch', done:false },
+    { id:'t17', phase:'10 · Ship it', label:'Write the README and add the architecture diagram', done:false },
+    { id:'t18', phase:'10 · Ship it', label:'Submit on devpost and double-check every requirement below', done:false }
+  ],
+  checklist: [
+    { id:'n1', group:'now', label:'Set up an AWS Account', done:false },
+    { id:'n2', group:'now', label:'Create an AWS Builder ID', done:false },
+    { id:'n3', group:'now', label:'Read through the Resources tab (datasets, docs, tutorials)', done:false },
+    { id:'n4', group:'now', label:'Join the Devpost Discord', done:false },
+
+    { id:'r1', group:'required', label:'Working agent built with AWS Strands Agents SDK', done:false },
+    { id:'r2', group:'required', label:'Public code repo with all source, assets, and setup instructions', done:false },
+    { id:'r3', group:'required', label:'MIT or Apache license visible in the repo’s About section', done:false },
+    { id:'r4', group:'required', label:'README written', done:false },
+    { id:'r5', group:'required', label:'Architecture diagram included', done:false },
+    { id:'r6', group:'required', label:'Demo video (≤ 5 min) uploaded publicly to YouTube or Vimeo', done:false },
+    { id:'r7', group:'required', label:'Video pitch covers: the problem, who it’s for, and why it matters', done:false },
+    { id:'r8', group:'required', label:'AWS Builder ID included in the submission', done:false },
+
+    { id:'b1', group:'bonus', label:'Deploy with AWS AgentCore (strengthens Technical Implementation score)', done:false },
+    { id:'b2', group:'bonus', label:'Add a live demo link (strengthens Technical Implementation score)', done:false },
+    { id:'b3', group:'bonus', label:'Publish a builder.aws.com post — title includes "Agents for Humans," tag #AgentsforHumans, published before the deadline', done:false }
+  ]
+};
+</script>
+<script>boot(window.__STATE__);</script>
+
+</body>
+</html>

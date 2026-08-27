@@ -8,7 +8,13 @@ write back via `update_flagged_tract`; it should not be re-deriving this
 itself from raw coordinates.
 """
 
-from strands import tool
+try:
+    from strands import tool
+except ImportError:  # pragma: no cover - optional runtime dependency in local tests.
+    def tool(func=None, **_kwargs):
+        if func is None:
+            return lambda f: f
+        return func
 
 from tools.geo import haversine_miles
 

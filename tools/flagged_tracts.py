@@ -23,7 +23,13 @@ import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 
-from strands import tool
+try:
+    from strands import tool
+except ImportError:  # pragma: no cover - optional runtime dependency in local tests.
+    def tool(func=None, **_kwargs):
+        if func is None:
+            return lambda f: f
+        return func
 
 DB_PATH = Path(__file__).parent.parent / "data" / "flagged_tracts.db"
 
