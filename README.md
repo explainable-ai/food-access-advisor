@@ -135,6 +135,28 @@ Running a single unattended recheck pass over the flagged-tracts backlog...
 It reports how many flagged tracts it checked, how many now have a nearby
 resource, and how many are still needed — and updates each row accordingly.
 
+### Running the Watchdog on Bedrock AgentCore Runtime
+
+`watchdog_agent.py`'s manual run above is the local/test path. To actually
+host the Watchdog as the scheduled service the architecture diagram above
+shows, `watchdog_agentcore_entry.py` wraps the same `build_watchdog()` in a
+`BedrockAgentCoreApp` for Amazon Bedrock AgentCore Runtime:
+
+```bash
+agentcore configure --entrypoint watchdog_agentcore_entry.py --requirements-file requirements.txt
+agentcore deploy
+agentcore invoke '{"prompt": "Run today’s recheck pass over every pending flagged tract."}'
+```
+
+`agentcore deploy` builds an ARM64 container in the cloud via CodeBuild and
+hosts it on AgentCore Runtime — no local Docker required. These commands
+come from the `bedrock-agentcore-starter-toolkit` package (added to
+`requirements.txt`); run `agentcore --help` to confirm current flags before
+deploying, since AWS is actively evolving this tooling. This deploy step
+needs your own AWS credentials and hasn't been run as part of this repo —
+`watchdog_agentcore_entry.py` is verified-correct code, not a live
+deployment.
+
 ## Test it
 
 ```bash
