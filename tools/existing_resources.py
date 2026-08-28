@@ -32,6 +32,17 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 MAX_ATTEMPTS = 2
 RETRY_DELAY_SECONDS = 3
 
+# Overpass's usage policy asks API consumers to identify themselves
+# (https://dev.overpass-api.de/overpass-doc/en/preface/commons.html);
+# requests' bare default ("python-requests/x.y.z") was getting a 406 from
+# this mirror even though the identical query worked fine via curl on the
+# same network — a real project identifier, not the generic default,
+# resolved it.
+REQUEST_HEADERS = {
+    "User-Agent": "food-access-advisor/1.0 (Agents for Humans hackathon; "
+    "https://github.com/explainable-ai/food-access-advisor)"
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +114,12 @@ def _query_overpass(south, west, north, east) -> list:
     last_exc = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            resp = requests.post(OVERPASS_URL, data={"data": query}, timeout=30)
+            resp = requests.post(
+                OVERPASS_URL,
+                data={"data": query},
+                headers=REQUEST_HEADERS,
+                timeout=30,
+            )
             resp.raise_for_status()
             elements = resp.json().get("elements", [])
             break
