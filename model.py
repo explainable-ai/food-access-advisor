@@ -20,6 +20,7 @@ was read by nothing.
 
 import os
 
+from botocore.config import Config
 from strands.models.bedrock import BedrockModel
 
 # "us." = geo cross-region inference profile: routes within US regions only
@@ -27,6 +28,19 @@ from strands.models.bedrock import BedrockModel
 # .env.example. Override via STRANDS_MODEL_ID if your account needs a
 # different region group (e.g. "eu.anthropic.claude-haiku-4-5-20251001-v1:0").
 DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+# botocore's default read_timeout (60s) is measured per chunk of a
+# streaming ConverseStream response, not per whole turn -- but a real run
+# still hit urllib3.exceptions.ReadTimeoutError waiting on one chunk after
+# two prior tool calls (get_low_access_tracts, get_existing_resources)
+# already in the turn. 300s gives real headroom for a multi-tool-call
+# agentic turn over a slower or corporate network; standard-mode retries
+# absorb a single transient blip instead of failing the whole run on it.
+BOTO_CLIENT_CONFIG = Config(
+    read_timeout=300,
+    connect_timeout=10,
+    retries={"max_attempts": 3, "mode": "standard"},
+)
 
 
 def build_model() -> BedrockModel:
@@ -41,7 +55,7 @@ def build_model() -> BedrockModel:
     """
     model_id = os.getenv("STRANDS_MODEL_ID", DEFAULT_MODEL_ID)
     region = os.getenv("AWS_REGION")
-    kwargs = {"model_id": model_id}
+    kwargs = {"model_id": model_id, "boto_client_config": BOTO_CLIENT_CONFIG}
     if region:
         kwargs["region_name"] = region
     return BedrockModel(**kwargs)
