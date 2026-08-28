@@ -1,0 +1,8 @@
+{
+  "companyName": "William Green - Individual Developer",
+  "companyWebsite": "https://github.com/wbgreen0405",
+  "intendedUsers": "1",
+  "industryOption": "Technology",
+  "otherIndustryOption": "",
+  "useCases": "I am developing a food-access advisory web application that uses Amazon Bedrock and Anthropic Claude to interpret questions, summarize food-access information, and provide grounded informational responses through a Python backend with appropriate user safeguards."
+}
