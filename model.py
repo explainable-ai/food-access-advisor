@@ -23,10 +23,10 @@ import os
 from strands.models.bedrock import BedrockModel
 
 # "us." = geo cross-region inference profile: routes within US regions only
-# (simpler IAM policy than "global."), matching AWS_REGION=us-west-2 in
+# (simpler IAM policy than "global."), matching AWS_REGION=us-east-1 in
 # .env.example. Override via STRANDS_MODEL_ID if your account needs a
-# different region group (e.g. "eu.anthropic.claude-sonnet-4-6").
-DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-6"
+# different region group (e.g. "eu.anthropic.claude-haiku-4-5-20251001-v1:0").
+DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 
 def build_model() -> BedrockModel:
