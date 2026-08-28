@@ -36,6 +36,8 @@ DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 # already in the turn. 300s gives real headroom for a multi-tool-call
 # agentic turn over a slower or corporate network; standard-mode retries
 # absorb a single transient blip instead of failing the whole run on it.
+# Kept as a safety net even with streaming disabled below -- the plain
+# `converse` call still goes over the same network and can still be slow.
 BOTO_CLIENT_CONFIG = Config(
     read_timeout=300,
     connect_timeout=10,
@@ -52,10 +54,23 @@ def build_model() -> BedrockModel:
     construction time; the first real network call happens on the first
     agent invocation, so building this is safe to do even without
     credentials configured yet.
+
+    streaming=False: a real run hit a ReadTimeoutError specifically inside
+    Bedrock's streamed response (ConverseStream), on a network that also
+    choked on Overpass's chunked responses (see tools/existing_resources.py)
+    -- this network doesn't reliably sustain long-lived streaming HTTP
+    connections. Using the plain, single-response `converse` API instead
+    trades away token-by-token output (not rendered by agent.py's CLI
+    today anyway) for a call that doesn't depend on a connection staying
+    alive for the whole generation.
     """
     model_id = os.getenv("STRANDS_MODEL_ID", DEFAULT_MODEL_ID)
     region = os.getenv("AWS_REGION")
-    kwargs = {"model_id": model_id, "boto_client_config": BOTO_CLIENT_CONFIG}
+    kwargs = {
+        "model_id": model_id,
+        "boto_client_config": BOTO_CLIENT_CONFIG,
+        "streaming": False,
+    }
     if region:
         kwargs["region_name"] = region
     return BedrockModel(**kwargs)
