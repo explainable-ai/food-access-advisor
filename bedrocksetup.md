@@ -30,13 +30,14 @@ answers a question."
    a one-time usage acknowledgment (console or API) before it can invoke
    Claude. This is a quick form, not a multi-day approval wait.
 4. **IAM permission for one specific model id.** This project pins
-   `model.py` to `us.anthropic.claude-sonnet-4-6` rather than relying on
-   Strands' own shifting default (see "Why one pinned model" below) — that
-   choice means you only need a single-ARN IAM policy, given in full below.
+   `model.py` to `us.anthropic.claude-haiku-4-5-20251001-v1:0` rather than
+   relying on Strands' own shifting default (see "Why one pinned model"
+   below) — that choice means you only need a single-ARN IAM policy, given
+   in full below.
 5. **Credentials** on whichever machine actually runs the agents — an IAM
    access key + secret via `aws configure`, or a filled-in `.env` (copy
    `.env.example`), or IAM Identity Center/SSO if your org requires it.
-6. **Region: `us-west-2`** — already this project's default
+6. **Region: `us-east-1`** — already this project's default
    (`.env.example`). It's one of AWS's primary Bedrock regions and
    supports the `us.` geo cross-region inference profile this project uses.
 
@@ -53,22 +54,22 @@ answers a question."
      "Version": "2012-10-17",
      "Statement": [
        {
-         "Sid": "InvokeClaudeSonnetViaBedrock",
+         "Sid": "InvokeClaudeHaikuViaBedrock",
          "Effect": "Allow",
          "Action": [
            "bedrock:InvokeModel",
            "bedrock:InvokeModelWithResponseStream"
          ],
          "Resource": [
-           "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6",
-           "arn:aws:bedrock:us-west-2:*:inference-profile/us.anthropic.claude-sonnet-4-6"
+           "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+           "arn:aws:bedrock:us-east-1:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
          ]
        }
      ]
    }
    ```
 
-   Swap `us-west-2` in both ARNs if you change `AWS_REGION` / `STRANDS_MODEL_ID`
+   Swap `us-east-1` in both ARNs if you change `AWS_REGION` / `STRANDS_MODEL_ID`
    away from the project defaults.
 
 4. Get credentials for that IAM identity: an access key + secret is
@@ -77,12 +78,13 @@ answers a question."
 5. On the machine that will actually run `python agent.py` /
    `python watchdog_agent.py`, either:
    - run `aws configure` and enter the access key, secret, and region
-     (`us-west-2`), **or**
+     (`us-east-1`), **or**
    - copy `.env.example` to `.env` and fill in the same three values
      (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
 6. Optional: override the model or region via the `STRANDS_MODEL_ID` /
    `AWS_REGION` environment variables — `model.py` reads both, falling back
-   to `us.anthropic.claude-sonnet-4-6` / whatever `boto3` otherwise resolves.
+   to `us.anthropic.claude-haiku-4-5-20251001-v1:0` / whatever `boto3`
+   otherwise resolves.
 
 ## Verify it actually works
 
@@ -99,9 +101,9 @@ access specifically, independent of this project's own code:
 ```bash
 python -c "
 import boto3
-client = boto3.client('bedrock-runtime', region_name='us-west-2')
+client = boto3.client('bedrock-runtime', region_name='us-east-1')
 resp = client.converse(
-    modelId='us.anthropic.claude-sonnet-4-6',
+    modelId='us.anthropic.claude-haiku-4-5-20251001-v1:0',
     messages=[{'role': 'user', 'content': [{'text': 'Say OK if you can hear me.'}]}],
 )
 print(resp['output']['message']['content'][0]['text'])
@@ -132,9 +134,9 @@ else standing the project up — a hackathon judge included.
   calling from.
 - **`ValidationException` about on-demand throughput not being
   supported** — you (or something) invoked the bare model id
-  (`anthropic.claude-sonnet-4-6`) instead of the `us.`-prefixed inference
-  profile id; use the inference profile id, which is what `model.py`
-  already defaults to.
+  (`anthropic.claude-haiku-4-5-20251001-v1:0`) instead of the
+  `us.`-prefixed inference profile id; use the inference profile id, which
+  is what `model.py` already defaults to.
 - **Credentials found but the wrong region** — check that `AWS_REGION` (or
   your `aws configure` region) matches the region baked into the IAM
   policy's ARNs; they have to agree.
@@ -142,5 +144,5 @@ else standing the project up — a hackathon judge included.
 ## Sources
 
 - [Global cross-Region inference — Amazon Bedrock docs](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html)
-- [Claude Sonnet 4.6 model card — Amazon Bedrock docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4-6.html)
+- [Claude Haiku 4.5 model card — Amazon Bedrock docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-4-5.html)
 - [Amazon Bedrock simplifies access with automatic enablement of serverless foundation models (AWS, Oct 2025)](https://aws.amazon.com/about-aws/whats-new/2025/10/amazon-bedrock-automatic-enablement-serverless-foundation-models)
