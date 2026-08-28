@@ -27,6 +27,7 @@ assumed.
 from strands import Agent
 
 from config import PILOT_CITY
+from model import build_model
 from tools.existing_resources import get_existing_resources
 from tools.flagged_tracts import read_flagged_tracts, update_flagged_tract
 from tools.recheck_status import check_resource_appeared
@@ -60,6 +61,7 @@ yours. You only report on what already happened to a past one.
 
 def build_watchdog() -> Agent:
     return Agent(
+        model=build_model(),
         system_prompt=SYSTEM_PROMPT,
         tools=[
             read_flagged_tracts,
