@@ -67,7 +67,7 @@ def get_low_access_tracts(limit: int = 25) -> list:
             """,
             (limit,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "data_mode": "real"} for r in rows]
     finally:
         conn.close()
 
@@ -93,11 +93,8 @@ def get_low_access_rural_tracts(limit: int = 25) -> list:
     so reusing the same two field names lets the one deterministic scorer
     rank both urban and rural tracts without a rural-specific copy of it.
 
-    `data/prep_atlas.py` does not yet know how to build RURAL_DB_PATH from
-    a real LRAM/SRAM download for a rural county — that's the next real
-    step after this scaffold. Until then, this always returns the
-    illustrative sample rows below, same as `get_low_access_tracts` does
-    before real data is prepped.
+    `data/prep_atlas.py --product LRAM --regions rural` builds this database.
+    Until that prep step runs, the tool returns clearly labelled sample rows.
 
     Args:
         limit: Maximum number of tracts to return, ordered by population
@@ -123,7 +120,7 @@ def get_low_access_rural_tracts(limit: int = 25) -> list:
             """,
             (limit,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "data_mode": "real"} for r in rows]
     finally:
         conn.close()
 
@@ -141,6 +138,7 @@ def _sample_tracts() -> list:
             "low_access_one_mile": 1,
             "centroid_lat": 41.7942,
             "centroid_lon": -87.6328,
+            "data_mode": "sample",
         },
         {
             "tract_fips": "17031680000",
@@ -149,6 +147,7 @@ def _sample_tracts() -> list:
             "low_access_one_mile": 1,
             "centroid_lat": 41.7699,
             "centroid_lon": -87.6553,
+            "data_mode": "sample",
         },
         {
             "tract_fips": "17031710000",
@@ -157,6 +156,7 @@ def _sample_tracts() -> list:
             "low_access_one_mile": 1,
             "centroid_lat": 41.7524,
             "centroid_lon": -87.6091,
+            "data_mode": "sample",
         },
     ]
 
@@ -166,8 +166,8 @@ def _sample_rural_tracts() -> list:
     — NOT real Atlas data. FIPS codes follow Alexander County's real state+
     county prefix (17003) but the tract suffixes and coordinates are
     illustrative, not verified against a real download — same caveat as
-    `_sample_tracts()`. Replace by extending `data/prep_atlas.py` to build
-    RURAL_DB_PATH from a real LRAM/SRAM download before using this for
+    `_sample_tracts()`. Run `data/prep_atlas.py --product LRAM --regions rural`
+    with a real Atlas download before using this for
     anything but a smoke test."""
     return [
         {
@@ -177,6 +177,7 @@ def _sample_rural_tracts() -> list:
             "low_access_one_mile": 1,
             "centroid_lat": 37.0059,
             "centroid_lon": -89.1770,
+            "data_mode": "sample",
         },
         {
             "tract_fips": "17003960200",
@@ -185,6 +186,7 @@ def _sample_rural_tracts() -> list:
             "low_access_one_mile": 1,
             "centroid_lat": 37.0512,
             "centroid_lon": -89.2185,
+            "data_mode": "sample",
         },
         {
             "tract_fips": "17003960300",
@@ -193,5 +195,6 @@ def _sample_rural_tracts() -> list:
             "low_access_one_mile": 1,
             "centroid_lat": 37.1203,
             "centroid_lon": -89.2564,
+            "data_mode": "sample",
         },
     ]

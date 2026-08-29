@@ -114,7 +114,7 @@ first.
 Both Advisors run out of the box against small, clearly-labeled sample
 tracts (see the docstrings in `tools/access_data.py` — `_sample_tracts`
 for the urban pilot city, `_sample_rural_tracts` for the rural pilot
-county) so you can smoke-test the plumbing immediately. For real urban
+county) so you can smoke-test the plumbing immediately. For real
 data:
 
 1. **USDA Food Access Research Atlas — LRAM or SRAM.** USDA discontinued
@@ -128,8 +128,8 @@ data:
    access rather than counting a dollar store as "access." **SRAM**
    (SNAP-authorized Retailer Access Map — every SNAP-authorized store
    including convenience and dollar stores, 2025 data) is more current but
-   more lenient. Download either as a CSV, save it as
-   `data/raw/food_access_atlas.xlsx`, then run `python data/prep_atlas.py`
+   more lenient. Download either product, save it locally, then run
+   `python data/prep_atlas.py --input data/raw/lram.csv --product LRAM --regions all`
    — it matches columns by pattern rather than one hardcoded spelling,
    since names have shifted across releases, and prints what it found if
    auto-matching needs a hand.
@@ -148,11 +148,12 @@ data:
    [Orchestration, API, and the planning-workspace UI](#orchestration-api-and-the-planning-workspace-ui)
    below for details and a real caveat about this script's verification.
 
-**Rural data is not yet wired up**: `data/prep_atlas.py` only knows how to
-build the urban database (`data/atlas_pilot_city.db`) today. Building
-`data/atlas_rural_county.db` from a real LRAM/SRAM download for Alexander
-County, IL is the next real step for the Route Advisor — until then it
-always runs on the illustrative sample rows.
+The default `--regions all` run builds both `data/atlas_pilot_city.db` and
+`data/atlas_rural_county.db` from the same official file. Use `--regions
+urban` or `--regions rural` to build only one. Each database records the
+selected product, source file, thresholds, region, and preparation time in
+its `metadata` table. Tool responses label fallback records as
+`data_mode=sample` and prepared records as `data_mode=real`.
 
 To point the Site Advisor at a different city, or the Route Advisor at a
 different rural county, edit `config.py` (county FIPS + bounding box) and
