@@ -163,6 +163,29 @@ def test_route_resources_surfaces_overpass_failure_as_502(monkeypatch):
     assert response.status_code == 502
 
 
+def test_route_optimization_endpoint_returns_constrained_plan():
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1, "service_minutes": 10,
+        "candidates": [
+            {"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90},
+            {"stop_id": "B", "lat": 37.02, "lon": -89.2, "demand": 5, "need_score": 40}],
+        "travel_time_matrix": [[0, 5, 6], [5, 0, 2], [6, 2, 0]],
+    })
+    assert response.status_code == 200
+    assert response.json()["selected_stops"][0]["stop_id"] == "A"
+
+
+def test_route_optimization_endpoint_rejects_bad_matrix():
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1,
+        "candidates": [{"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90}],
+        "travel_time_matrix": [[0]],
+    })
+    assert response.status_code == 422
+
+
 def test_site_evidence_returns_brief_text(monkeypatch):
     monkeypatch.setattr(api_main, "write_evidence_brief", lambda tract: "This tract has high need...")
 
