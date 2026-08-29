@@ -43,15 +43,19 @@ def compute_impact_metrics() -> dict:
 
     Returns:
         A dict keyed by region ("urban", "rural"), each with:
-        `total_flagged`, `unclosed` (pending + still_needed), `resolved`
-        (resource_found), `median_days_to_resolution` (None if no
-        resolved rows yet), and `tracts` (the raw rows, for a UI to list
-        individually).
+        `total_flagged`, `unclosed` (pending + still_needed),
+        `possible_change` (a Watchdog observation awaiting human
+        verification -- not yet resolved), `resolved` (resource_found --
+        reachable only via a human's verification, see
+        `tools/flagged_tracts.py`'s `verify_flagged_tract`),
+        `median_days_to_resolution` (None if no resolved rows yet), and
+        `tracts` (the raw rows, for a UI to list individually).
     """
     metrics = {
         region: {
             "total_flagged": 0,
             "unclosed": 0,
+            "possible_change": 0,
             "resolved": 0,
             "median_days_to_resolution": None,
             "tracts": [],
@@ -74,6 +78,8 @@ def compute_impact_metrics() -> dict:
                 checked = _parse_date(row.get("last_checked_date"))
                 if flagged and checked:
                     resolution_days[region].append((checked - flagged).days)
+            elif row["status"] == "possible_change":
+                bucket["possible_change"] += 1
             else:
                 bucket["unclosed"] += 1
 
