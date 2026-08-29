@@ -454,6 +454,10 @@ implemented. See [`docs/ADDITIONAL_DATA_AND_WATCHDOG.md`](docs/ADDITIONAL_DATA_A
 for the exact official sources, freshness rules, change semantics, and the
 production persistence boundary.
 
+AWS deployments use DynamoDB for Watchdog metadata/state and S3 for full
+versioned evidence payloads, while local development remains SQLite by default.
+See [`deploy/AWS_PERSISTENCE_SETUP.md`](deploy/AWS_PERSISTENCE_SETUP.md).
+
 - **Watchdog on a real recurring schedule.** `watchdog_agentcore_entry.py`
   is deployable today; [`deploy/EVENTBRIDGE_SETUP.md`](deploy/EVENTBRIDGE_SETUP.md)
   now documents the EventBridge Scheduler + Lambda shim needed to actually
