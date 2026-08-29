@@ -82,16 +82,27 @@ class ChicagoSocrataClient:
                limit: int = 50000) -> tuple[list[dict[str, Any]], datetime]:
         if limit < 1 or limit > 50000:
             raise ValueError("limit must be between 1 and 50000")
-        params: dict[str, Any] = {"$limit": limit}
-        if where:
-            params["$where"] = where
         headers = {"X-App-Token": self.app_token} if self.app_token else {}
-        response = self.session.get(dataset.api_url, params=params, headers=headers, timeout=self.timeout_seconds)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, list):
-            raise ValueError(f"{dataset.source_id} response must be a JSON list")
-        return payload, self.clock()
+        rows: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            # Socrata otherwise returns only one page and does not guarantee
+            # implicit row order. The system row ID provides a deterministic
+            # order, so page boundaries do not drift between identical runs.
+            params: dict[str, Any] = {"$limit": limit, "$offset": offset, "$order": ":id ASC"}
+            if where:
+                params["$where"] = where
+            response = self.session.get(dataset.api_url, params=params, headers=headers,
+                                        timeout=self.timeout_seconds)
+            response.raise_for_status()
+            page = response.json()
+            if not isinstance(page, list):
+                raise ValueError(f"{dataset.source_id} response must be a JSON list")
+            rows.extend(page)
+            if len(page) < limit:
+                break
+            offset += len(page)
+        return rows, self.clock()
 
     def _citation(self, dataset: ChicagoDataset, retrieved_at: datetime,
                   fields: list[str]) -> SourceCitation:
