@@ -49,6 +49,7 @@ from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_f
 from tools.gap_scorer import score_gaps
 from tools.impact_metrics import compute_impact_metrics
 from tools.route_optimizer import optimize_route
+from tools.travel_time_provider import TravelTimeProviderError, get_amazon_location_matrix
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 # Produced by data/prep_tract_boundaries.py -- see that script for why
@@ -173,15 +174,23 @@ def route_resources():
 def optimize_route_scenario(request: RouteOptimizationRequest):
     """Run deterministic route selection; no Bedrock or network call."""
     try:
+        matrix = request.travel_time_matrix
+        source = None
+        if matrix is None and request.travel_time_provider == "amazon_location":
+            points = [request.depot.model_dump(), *[candidate.model_dump() for candidate in request.candidates]]
+            matrix = get_amazon_location_matrix(points)
+            source = "amazon_location_routes_v2"
         return optimize_route(
             candidates=[candidate.model_dump() for candidate in request.candidates],
             depot=request.depot.model_dump(), max_route_minutes=request.max_route_minutes,
             vehicle_capacity=request.vehicle_capacity, max_stops=request.max_stops,
-            service_minutes=request.service_minutes, travel_time_matrix=request.travel_time_matrix,
-            average_speed_mph=request.average_speed_mph,
+            service_minutes=request.service_minutes, travel_time_matrix=matrix,
+            average_speed_mph=request.average_speed_mph, travel_time_source=source,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except TravelTimeProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 async def _run_evidence(write_brief_fn, tract: RankedTract) -> EvidenceResponse:
