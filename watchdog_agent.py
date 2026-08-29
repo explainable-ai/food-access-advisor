@@ -42,6 +42,9 @@ from model import build_model
 from tools.existing_resources import get_existing_resources, get_rural_existing_resources
 from tools.flagged_tracts import read_flagged_tracts, update_flagged_tract
 from tools.recheck_status import check_resource_appeared
+from tools.telemetry import configure_telemetry, print_metrics
+
+configure_telemetry()
 
 SYSTEM_PROMPT = f"""You are the Food-Access Watchdog for {PILOT_CITY['name']} \
 and the rural pilot county. You run on a schedule, unattended — nobody is \
@@ -100,4 +103,5 @@ if __name__ == "__main__":
     watchdog = build_watchdog()
     print(f"Food-Access Watchdog — pilot city: {PILOT_CITY['name']}")
     print("Running a single unattended recheck pass over the flagged-tracts backlog...\n")
-    watchdog("Run today's recheck pass over every pending flagged tract.")
+    result = watchdog("Run today's recheck pass over every pending flagged tract.")
+    print_metrics(result)
