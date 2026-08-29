@@ -13,3 +13,4 @@ data/snap_retailers_pilot_city.csv
 docs/Food_Access_Advisor_Dataset_Integration_Prompt.md
 .gitignore
 docs/Geospatial_Prioritization_and_Route_Optimization_Requirements.md
+.env.local

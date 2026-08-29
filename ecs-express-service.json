@@ -1,0 +1,61 @@
+{
+    "executionRoleArn":  "arn:aws:iam::576951331959:role/ecsTaskExecutionRole",
+    "infrastructureRoleArn":  "arn:aws:iam::576951331959:role/ecsInfrastructureRoleForExpressServices",
+    "taskRoleArn":  "arn:aws:iam::576951331959:role/FoodAccessApiTaskRole",
+    "serviceName":  "food-access-advisor-api",
+    "healthCheckPath":  "/health",
+    "primaryContainer":  {
+                             "image":  "576951331959.dkr.ecr.us-east-1.amazonaws.com/food-access-advisor-api:20260829-092108",
+                             "containerPort":  8000,
+                             "environment":  [
+                                                 {
+                                                     "value":  "us-east-1",
+                                                     "name":  "AWS_REGION"
+                                                 },
+                                                 {
+                                                     "value":  "us-east-1",
+                                                     "name":  "AWS_DEFAULT_REGION"
+                                                 },
+                                                 {
+                                                     "value":  "dynamodb",
+                                                     "name":  "WATCHDOG_STORAGE_PROVIDER"
+                                                 },
+                                                 {
+                                                     "value":  "food-access-watchdog-evidence",
+                                                     "name":  "WATCHDOG_EVIDENCE_TABLE"
+                                                 },
+                                                 {
+                                                     "value":  "food-access-flagged-tracts",
+                                                     "name":  "FLAGGED_TRACTS_TABLE"
+                                                 },
+                                                 {
+                                                     "value":  "food-access-evidence-576951331959-us-east-1",
+                                                     "name":  "EVIDENCE_BUCKET"
+                                                 },
+                                                 {
+                                                     "value":  "us-east-1",
+                                                     "name":  "AWS_LOCATION_REGION"
+                                                 },
+                                                 {
+                                                     "value":  "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                                                     "name":  "STRANDS_MODEL_ID"
+                                                 }
+                                             ]
+                         },
+    "scalingTarget":  {
+                          "minTaskCount":  1,
+                          "maxTaskCount":  3,
+                          "autoScalingMetric":  "AVERAGE_CPU",
+                          "autoScalingTargetValue":  60
+                      },
+    "tags":  [
+                 {
+                     "key":  "Project",
+                     "value":  "FoodAccessAdvisor"
+                 },
+                 {
+                     "key":  "Environment",
+                     "value":  "Hackathon"
+                 }
+             ]
+}
