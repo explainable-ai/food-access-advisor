@@ -15,11 +15,11 @@ in the wrong mode, and a flag would reopen exactly the model-controlled
 surface `tools/access_data.py` and `tools/existing_resources.py` were
 fixed to close.
 
-Status: scaffolded against illustrative sample data only (see
-`tools/access_data.py`'s `_sample_rural_tracts`) — `data/prep_atlas.py`
-does not yet build a real Alexander County database. Same maturity level
-the Site Advisor started at before real Atlas data was prepped for
-Chicago.
+The rural Atlas database can be prepared with `data/prep_atlas.py`; until
+that happens the access tool returns rows explicitly labelled as samples.
+Constrained route scenarios are computed deterministically by
+`tools/route_optimizer.py` and exposed through the FastAPI backend, not
+decided by the language model.
 
 Run: python route_advisor.py
 """
