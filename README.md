@@ -204,6 +204,24 @@ regions: how many flagged tracts remain unclosed, how many resolved, and
 the median days it took to resolve them. Auto-refreshes every 30 seconds,
 so leaving it open while running the Watchdog shows the numbers move.
 
+### Tracing and metrics (opt-in)
+
+All three entrypoints call `tools/telemetry.py`'s `configure_telemetry()`
+at startup, which is a real no-op unless you set one of:
+
+```bash
+export STRANDS_TELEMETRY_CONSOLE=1        # print spans + event-loop metrics
+export OTEL_EXPORTER_OTLP_ENDPOINT=<url>  # also export to an OTLP collector
+```
+
+With `STRANDS_TELEMETRY_CONSOLE` set, each run additionally prints its
+event-loop metrics (latency, token counts, tool-call counts) via Strands'
+own `metrics_to_string` — useful for actually seeing where a slow run's
+time went (model call vs. a specific tool) instead of guessing. OTLP
+export needs `opentelemetry-exporter-otlp-proto-http` installed
+separately; it's not in `requirements.txt` since it's unused unless you
+opt in.
+
 ### Running the Watchdog on Bedrock AgentCore Runtime
 
 `watchdog_agent.py`'s manual run above is the local/test path. To actually
@@ -241,11 +259,11 @@ pytest
 ```
 
 `tools/gap_scorer.py`, `tools/recheck_status.py`, `tools/flagged_tracts.py`,
-`tools/impact_metrics.py`, and the deterministic parts of
-`tools/access_data.py` / `tools/existing_resources.py` are pure Python
-(plus SQLite for the log) with no AWS dependency — all tested directly
-against temp databases or mocked HTTP calls, no credentials, no live
-network required.
+`tools/impact_metrics.py`, `tools/telemetry.py`, and the deterministic
+parts of `tools/access_data.py` / `tools/existing_resources.py` are pure
+Python (plus SQLite for the log) with no AWS dependency — all tested
+directly against temp databases, mocked HTTP calls, or (for telemetry) a
+fake `StrandsTelemetry`, no credentials, no live network required.
 
 ## Guardrails
 
