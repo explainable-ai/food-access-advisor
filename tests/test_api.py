@@ -93,6 +93,128 @@ def test_flagged_tracts_returns_rows_for_valid_status(tmp_path, monkeypatch):
     assert rows[0]["tract_fips"] == "17031840000"
 
 
+def test_site_ranked_tracts_returns_scored_list(monkeypatch):
+    monkeypatch.setattr(api_main, "get_existing_resources", lambda: [])
+
+    response = client.get("/api/site-advisor/ranked-tracts")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) > 0
+    assert "need_score" in body[0]
+
+
+def test_route_ranked_tracts_returns_scored_list(monkeypatch):
+    monkeypatch.setattr(api_main, "get_rural_existing_resources", lambda: [])
+
+    response = client.get("/api/route-advisor/ranked-tracts")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) > 0
+    assert "need_score" in body[0]
+
+
+def test_site_ranked_tracts_surfaces_overpass_failure_as_502(monkeypatch):
+    def _raise():
+        raise OverpassQueryError("Overpass API unavailable after 2 attempts")
+
+    monkeypatch.setattr(api_main, "get_existing_resources", _raise)
+
+    response = client.get("/api/site-advisor/ranked-tracts")
+
+    assert response.status_code == 502
+
+
+def test_site_resources_returns_list(monkeypatch):
+    monkeypatch.setattr(
+        api_main, "get_existing_resources", lambda: [{"kind": "grocery", "name": "Test", "lat": 41.8, "lon": -87.6}]
+    )
+
+    response = client.get("/api/site-advisor/resources")
+
+    assert response.status_code == 200
+    assert response.json() == [{"kind": "grocery", "name": "Test", "lat": 41.8, "lon": -87.6}]
+
+
+def test_route_resources_surfaces_overpass_failure_as_502(monkeypatch):
+    def _raise():
+        raise OverpassQueryError("boom")
+
+    monkeypatch.setattr(api_main, "get_rural_existing_resources", _raise)
+
+    response = client.get("/api/route-advisor/resources")
+
+    assert response.status_code == 502
+
+
+def test_site_evidence_returns_brief_text(monkeypatch):
+    monkeypatch.setattr(api_main, "write_evidence_brief", lambda tract: "This tract has high need...")
+
+    response = client.post(
+        "/api/site-advisor/evidence",
+        json={"tract": {"tract_fips": "17031840000", "need_score": 92.0}},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"brief": "This tract has high need..."}
+
+
+def test_route_evidence_surfaces_failure_as_502(monkeypatch):
+    def _raise(tract):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(api_main, "write_route_brief", _raise)
+
+    response = client.post(
+        "/api/route-advisor/evidence",
+        json={"tract": {"tract_fips": "17003960100", "need_score": 80.0}},
+    )
+
+    assert response.status_code == 502
+
+
+def test_verify_updates_status(tmp_path, monkeypatch):
+    use_temp_db(tmp_path, monkeypatch)
+    flagged_tracts.flag_tract_for_recheck(
+        tract_fips="17031840000", recommendation_type="site", source_agent="advisor"
+    )
+    flagged_tracts.update_flagged_tract("17031840000", "site", "possible_change")
+
+    response = client.post(
+        "/api/flagged-tracts/verify",
+        json={"tract_fips": "17031840000", "recommendation_type": "site", "verification": "verified_open"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "resource_found"
+
+
+def test_verify_rejects_unknown_verification_at_schema_level(tmp_path, monkeypatch):
+    use_temp_db(tmp_path, monkeypatch)
+    flagged_tracts.flag_tract_for_recheck(
+        tract_fips="17031840000", recommendation_type="site", source_agent="advisor"
+    )
+
+    response = client.post(
+        "/api/flagged-tracts/verify",
+        json={"tract_fips": "17031840000", "recommendation_type": "site", "verification": "bogus_choice"},
+    )
+
+    assert response.status_code == 422  # Literal type rejects it before the handler runs
+
+
+def test_verify_missing_tract_returns_400(tmp_path, monkeypatch):
+    use_temp_db(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/flagged-tracts/verify",
+        json={"tract_fips": "00000000000", "recommendation_type": "site", "verification": "verified_open"},
+    )
+
+    assert response.status_code == 400
+
+
 def test_impact_metrics_returns_both_regions(tmp_path, monkeypatch):
     use_temp_db(tmp_path, monkeypatch)
     flagged_tracts.flag_tract_for_recheck(
