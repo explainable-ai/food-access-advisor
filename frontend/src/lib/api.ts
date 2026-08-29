@@ -47,6 +47,13 @@ export type RankedTract = {
   centroid_lat: number | null;
   centroid_lon: number | null;
   need_score: number;
+  rank: number;
+  score_components: Record<string, number | null>;
+  score_contributions: Record<string, number>;
+  weights_used: Record<string, number>;
+  missing_components: string[];
+  score_explanation: string;
+  sensitivity: { percent: number; score_min: number; score_max: number; rank_best: number; rank_worst: number; rank_stable: boolean };
   nearest_resource_kind: string | null;
   nearest_resource_miles: number | null;
   nearest_resource_minutes: number | null;
