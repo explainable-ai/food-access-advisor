@@ -186,6 +186,29 @@ def test_route_optimization_endpoint_rejects_bad_matrix():
     assert response.status_code == 422
 
 
+def test_route_optimization_endpoint_uses_amazon_location(monkeypatch):
+    monkeypatch.setattr(api_main, "get_amazon_location_matrix", lambda points: [[0, 5], [5, 0]])
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1,
+        "candidates": [{"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90}],
+    })
+    assert response.status_code == 200
+    assert response.json()["travel_time_source"] == "amazon_location_routes_v2"
+
+
+def test_route_optimization_endpoint_surfaces_amazon_location_failure(monkeypatch):
+    def fail(_points):
+        raise api_main.TravelTimeProviderError("routing unavailable")
+    monkeypatch.setattr(api_main, "get_amazon_location_matrix", fail)
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1,
+        "candidates": [{"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90}],
+    })
+    assert response.status_code == 502
+
+
 def test_site_evidence_returns_brief_text(monkeypatch):
     monkeypatch.setattr(api_main, "write_evidence_brief", lambda tract: "This tract has high need...")
 
