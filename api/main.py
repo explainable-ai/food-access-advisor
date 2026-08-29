@@ -36,6 +36,8 @@ from api.schemas import (
     ExistingResource,
     ImpactMetrics,
     RankedTract,
+    RouteOptimizationRequest,
+    RouteOptimizationResponse,
     VerifyRequest,
 )
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
@@ -46,6 +48,7 @@ from tools.existing_resources import OverpassQueryError, get_existing_resources,
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import score_gaps
 from tools.impact_metrics import compute_impact_metrics
+from tools.route_optimizer import optimize_route
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 # Produced by data/prep_tract_boundaries.py -- see that script for why
@@ -164,6 +167,21 @@ def route_resources():
         return get_rural_existing_resources()
     except OverpassQueryError as exc:
         raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+
+
+@app.post("/api/route-advisor/optimize", response_model=RouteOptimizationResponse)
+def optimize_route_scenario(request: RouteOptimizationRequest):
+    """Run deterministic route selection; no Bedrock or network call."""
+    try:
+        return optimize_route(
+            candidates=[candidate.model_dump() for candidate in request.candidates],
+            depot=request.depot.model_dump(), max_route_minutes=request.max_route_minutes,
+            vehicle_capacity=request.vehicle_capacity, max_stops=request.max_stops,
+            service_minutes=request.service_minutes, travel_time_matrix=request.travel_time_matrix,
+            average_speed_mph=request.average_speed_mph,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 async def _run_evidence(write_brief_fn, tract: RankedTract) -> EvidenceResponse:
