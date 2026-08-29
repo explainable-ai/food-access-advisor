@@ -71,19 +71,22 @@ flowchart LR
     ER3 -.queries.-> OSM
     UFT -->|writes status| LOG
     WD --> REPORT["Recheck summary\n(resolved / still needed)"]
+
+    LOG -.reads all rows.-> IMPACT[compute_impact_metrics]
+    IMPACT --> DASH["Impact dashboard\n(dashboard.py, Flask)"]
 ```
 
 Only `write_evidence_brief` and `write_route_brief` call a language model.
 Every other tool — `get_low_access_tracts`, `get_low_access_rural_tracts`,
 `get_existing_resources`, `get_rural_existing_resources`, `score_gaps`,
 `flag_top_tract_for_recheck`, `flag_top_route_for_recheck`,
-`read_flagged_tracts`, `check_resource_appeared`, `update_flagged_tract` —
-is deterministic: reading a local database, calling a public API, doing
-arithmetic, or writing a validated row. That split is deliberate: for a
-tool whose output might end up in a funding application, "here's the
-exact formula" is more defensible than "the model said so." `score_gaps`
-itself is shared unchanged between both Advisors — see its use in
-`route_advisor.py`.
+`read_flagged_tracts`, `check_resource_appeared`, `update_flagged_tract`,
+`compute_impact_metrics` — is deterministic: reading a local database,
+calling a public API, doing arithmetic, or writing a validated row. That
+split is deliberate: for a tool whose output might end up in a funding
+application, "here's the exact formula" is more defensible than "the
+model said so." `score_gaps` itself is shared unchanged between both
+Advisors — see its use in `route_advisor.py`.
 
 ## Setup
 
@@ -184,6 +187,23 @@ It checks "site" (urban) rows against Chicago's live OSM data at a 1-mile
 threshold, and "route" (rural) rows against Alexander County's live OSM
 data at a 10-mile threshold — never the wrong region's data for either.
 
+### Impact dashboard
+
+The design canvas's own stated success metric — "unclosed gaps trending
+down, per region, not pooled" plus "median days to resolution" — is
+computed by `tools/impact_metrics.py` and served as a small live-refreshing
+local dashboard:
+
+```bash
+python dashboard.py
+```
+
+Then open <http://127.0.0.1:5050>. It reads `data/flagged_tracts.db`
+directly (no LLM call) and shows, separately for the urban and rural
+regions: how many flagged tracts remain unclosed, how many resolved, and
+the median days it took to resolve them. Auto-refreshes every 30 seconds,
+so leaving it open while running the Watchdog shows the numbers move.
+
 ### Running the Watchdog on Bedrock AgentCore Runtime
 
 `watchdog_agent.py`'s manual run above is the local/test path. To actually
@@ -204,7 +224,8 @@ come from the `bedrock-agentcore-starter-toolkit` package (added to
 deploying, since AWS is actively evolving this tooling. This deploy step
 needs your own AWS credentials and hasn't been run as part of this repo —
 `watchdog_agentcore_entry.py` is verified-correct code, not a live
-deployment.
+deployment. Actually running it on a recurring schedule (e.g. via
+EventBridge) is a separate step, not yet wired up — see Roadmap.
 
 ## Test it
 
@@ -213,10 +234,11 @@ pytest
 ```
 
 `tools/gap_scorer.py`, `tools/recheck_status.py`, `tools/flagged_tracts.py`,
-and the deterministic parts of `tools/access_data.py` /
-`tools/existing_resources.py` are pure Python (plus SQLite for the log)
-with no AWS dependency — all tested directly against temp databases or
-mocked HTTP calls, no credentials, no live network required.
+`tools/impact_metrics.py`, and the deterministic parts of
+`tools/access_data.py` / `tools/existing_resources.py` are pure Python
+(plus SQLite for the log) with no AWS dependency — all tested directly
+against temp databases or mocked HTTP calls, no credentials, no live
+network required.
 
 ## Guardrails
 
@@ -273,6 +295,11 @@ mocked HTTP calls, no credentials, no live network required.
 
 ## Roadmap
 
+- **Watchdog on a real recurring schedule.** `watchdog_agentcore_entry.py`
+  is deployable today, but nothing yet triggers it on a cadence — wiring
+  an actual EventBridge rule to invoke the deployed AgentCore Runtime
+  endpoint monthly is the next step to make the architecture diagram's
+  "Scheduled trigger" real instead of manual.
 - **Transit-time distance.** Straight-line miles (what's implemented now)
   understates real access — a tract "0.6 miles" from a grocery store can be
   a 40-minute bus ride away. Swapping in a GTFS feed + a routing engine
