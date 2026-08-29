@@ -98,7 +98,7 @@ async def route_advisor_endpoint(request: AdvisorRequest) -> AdvisorResponse:
     return await _run_advisor("route", "route_advisor", request.question)
 
 
-def _ranked_tracts(get_tracts, get_resources, top_n: int) -> list:
+def _ranked_tracts(get_tracts, get_resources, top_n: int, weights=None) -> list:
     """Deterministic ranking -- the same three calls the corresponding
     Advisor agent makes (get_*_tracts -> get_*_resources -> score_gaps),
     just without the LLM step. No Bedrock call, no added latency; only
@@ -106,21 +106,46 @@ def _ranked_tracts(get_tracts, get_resources, top_n: int) -> list:
     raise OverpassQueryError."""
     tracts = get_tracts()
     resources = get_resources()
-    return score_gaps(tracts, resources, top_n=top_n)
+    return score_gaps(tracts, resources, top_n=top_n, weights=weights)
+
+
+def _weights(**values):
+    supplied = {name: value for name, value in values.items() if value is not None}
+    if supplied and not any(value > 0 for value in supplied.values()):
+        raise HTTPException(status_code=422, detail="At least one priority weight must be greater than zero")
+    return supplied or None
 
 
 @app.get("/api/site-advisor/ranked-tracts", response_model=list[RankedTract])
-def site_ranked_tracts(top_n: int = Query(default=3)):
+def site_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
+                       food_access_gap: float | None = Query(default=None, ge=0),
+                       poverty: float | None = Query(default=None, ge=0),
+                       no_vehicle: float | None = Query(default=None, ge=0),
+                       population_served: float | None = Query(default=None, ge=0),
+                       transit_burden: float | None = Query(default=None, ge=0),
+                       existing_coverage: float | None = Query(default=None, ge=0)):
     try:
-        return _ranked_tracts(get_low_access_tracts, get_existing_resources, top_n)
+        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
+                           population_served=population_served, transit_burden=transit_burden,
+                           existing_coverage=existing_coverage)
+        return _ranked_tracts(get_low_access_tracts, get_existing_resources, top_n, weights)
     except OverpassQueryError as exc:
         raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
 
 
 @app.get("/api/route-advisor/ranked-tracts", response_model=list[RankedTract])
-def route_ranked_tracts(top_n: int = Query(default=3)):
+def route_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
+                        food_access_gap: float | None = Query(default=None, ge=0),
+                        poverty: float | None = Query(default=None, ge=0),
+                        no_vehicle: float | None = Query(default=None, ge=0),
+                        population_served: float | None = Query(default=None, ge=0),
+                        transit_burden: float | None = Query(default=None, ge=0),
+                        existing_coverage: float | None = Query(default=None, ge=0)):
     try:
-        return _ranked_tracts(get_low_access_rural_tracts, get_rural_existing_resources, top_n)
+        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
+                           population_served=population_served, transit_burden=transit_burden,
+                           existing_coverage=existing_coverage)
+        return _ranked_tracts(get_low_access_rural_tracts, get_rural_existing_resources, top_n, weights)
     except OverpassQueryError as exc:
         raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
 

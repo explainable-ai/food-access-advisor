@@ -27,6 +27,28 @@ DEFAULT_VARIABLES = (
     ACSVariable("households_no_vehicle", "B08201_002E", "B08201_002M", "households"),
 )
 
+PRIORITIZATION_VARIABLES = DEFAULT_VARIABLES + (
+    ACSVariable("poverty_universe", "B17001_001E", "B17001_001M", "people"),
+    ACSVariable("population_below_poverty", "B17001_002E", "B17001_002M", "people"),
+)
+
+
+def enrich_tracts(tracts: list[dict], evidence: list[TractEvidence]) -> list[dict]:
+    """Join ACS measures onto Atlas rows by exact 11-digit tract GEOID."""
+    by_geoid = {item.tract_geoid: item for item in evidence}
+    enriched = []
+    for tract in tracts:
+        row = dict(tract)
+        item = by_geoid.get(str(tract.get("tract_fips", "")))
+        if item:
+            for name in ("households_total", "households_no_vehicle", "poverty_universe", "population_below_poverty"):
+                value = item.values.get(name)
+                row[name] = value.value if value else None
+            row["acs_provenance"] = [citation.model_dump(mode="json") for citation in item.source_citations]
+            row["acs_quality"] = item.quality.model_dump(mode="json")
+        enriched.append(row)
+    return enriched
+
 
 def _parse_number(value: str | int | float | None) -> int | float | None:
     if value in (None, "", "null"):

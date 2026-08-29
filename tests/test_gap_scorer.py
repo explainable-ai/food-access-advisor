@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools.gap_scorer import score_gaps  # noqa: E402
+from tools.gap_scorer import PriorityWeights, score_gaps  # noqa: E402
 
 
 def make_tract(fips, population, half=1, one=1, lat=41.80, lon=-87.63):
@@ -78,3 +78,43 @@ def test_nearby_convenience_store_scores_worse_than_nearby_grocery():
     )[0]
 
     assert near_convenience["need_score"] > near_grocery["need_score"]
+
+
+def test_acs_components_are_visible_and_explainable():
+    tract = make_tract("A", population=3000)
+    tract.update(population_below_poverty=600, poverty_universe=2000,
+                 households_no_vehicle=250, households_total=1000)
+    result = score_gaps([tract], [], top_n=1)[0]
+    assert result["score_components"]["poverty"] == 30.0
+    assert result["score_components"]["no_vehicle"] == 25.0
+    assert result["missing_components"] == ["transit_burden"]
+    assert result["score_explanation"]
+
+
+def test_adjustable_weights_can_change_ranking():
+    high_poverty = make_tract("A", population=1000, half=0, one=1)
+    high_poverty["poverty_rate"] = 0.8
+    high_population = make_tract("B", population=5000, half=0, one=1)
+    high_population["poverty_rate"] = 0.1
+    weights = {"food_access_gap": 0, "poverty": 1, "no_vehicle": 0,
+               "population_served": 0, "transit_burden": 0, "existing_coverage": 0}
+    result = score_gaps([high_population, high_poverty], [], top_n=2, weights=weights)
+    assert result[0]["tract_fips"] == "A"
+    assert "poverty" in result[0]["score_explanation"]
+    assert "food-access gap" not in result[0]["score_explanation"]
+
+
+def test_weights_are_normalized_and_invalid_weights_fail():
+    assert sum(PriorityWeights(poverty=2).normalized().values()) == 1
+    try:
+        score_gaps([make_tract("A", 1)], [], weights={"poverty": -1})
+    except ValueError as error:
+        assert "negative" in str(error)
+    else:
+        raise AssertionError("negative weights must fail")
+
+
+def test_sensitivity_range_contains_baseline_score():
+    result = score_gaps([make_tract("A", 2000)], [], top_n=1)[0]
+    assert result["sensitivity"]["score_min"] <= result["need_score"] <= result["sensitivity"]["score_max"]
+    assert result["sensitivity"]["rank_stable"] is True

@@ -104,6 +104,21 @@ def test_site_ranked_tracts_returns_scored_list(monkeypatch):
     assert "need_score" in body[0]
 
 
+def test_site_ranked_tracts_accepts_adjustable_weights(monkeypatch):
+    monkeypatch.setattr(api_main, "get_existing_resources", lambda: [])
+    response = client.get("/api/site-advisor/ranked-tracts", params={"poverty": 1, "food_access_gap": 0})
+    assert response.status_code == 200
+    assert response.json()[0]["weights_used"]["poverty"] > 0
+
+
+def test_site_ranked_tracts_rejects_all_zero_weights(monkeypatch):
+    response = client.get("/api/site-advisor/ranked-tracts", params={
+        "food_access_gap": 0, "poverty": 0, "no_vehicle": 0,
+        "population_served": 0, "transit_burden": 0, "existing_coverage": 0})
+    assert response.status_code == 422
+    assert "greater than zero" in response.json()["detail"]
+
+
 def test_route_ranked_tracts_returns_scored_list(monkeypatch):
     monkeypatch.setattr(api_main, "get_rural_existing_resources", lambda: [])
 

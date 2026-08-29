@@ -155,6 +155,25 @@ selected product, source file, thresholds, region, and preparation time in
 its `metadata` table. Tool responses label fallback records as
 `data_mode=sample` and prepared records as `data_mode=real`.
 
+4. **ACS poverty and vehicle access.** After preparing the Atlas database,
+   run `python data/prep_acs.py --year 2024 --regions all`. This calls the
+   official ACS 5-year API and persists poverty-universe, below-poverty,
+   total-household, and no-vehicle-household values by exact tract GEOID.
+   Set `CENSUS_API_KEY` for higher API limits; the public API can also run
+   without a key at lower limits. Direct enrichment requires matching tract
+   boundaries: SRAM and current ACS both use 2020 tract geography. LRAM uses
+   2010 tracts, so the prep command fails closed unless an explicit Census
+   tract crosswalk is added; it never joins incompatible polygons by GEOID
+   alone. An incomplete ACS response also rolls back without relabeling old
+   values as the new vintage.
+
+The ranked-tract endpoints accept non-negative query weights named
+`food_access_gap`, `poverty`, `no_vehicle`, `population_served`,
+`transit_burden`, and `existing_coverage`. Weights are normalized to sum to
+one. Every result returns the normalized components, their point
+contributions, missing-evidence disclosures, a plain-language explanation,
+and a ±20% one-weight-at-a-time score/rank sensitivity range.
+
 To point the Site Advisor at a different city, or the Route Advisor at a
 different rural county, edit `config.py` (county FIPS + bounding box) and
 re-run `data/prep_atlas.py`. Nothing else in the project hardcodes a

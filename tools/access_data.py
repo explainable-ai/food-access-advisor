@@ -21,6 +21,27 @@ DB_PATH = Path(__file__).parent.parent / "data" / "atlas_pilot_city.db"
 # accidentally fall through to reading Chicago's tracts.
 RURAL_DB_PATH = Path(__file__).parent.parent / "data" / "atlas_rural_county.db"
 
+ACS_COLUMNS = ("poverty_universe", "population_below_poverty", "households_total", "households_no_vehicle")
+
+
+def _read_database(path, limit):
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    try:
+        available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
+        optional = ", ".join(name if name in available else f"NULL AS {name}" for name in ACS_COLUMNS)
+        rows = connection.execute(
+            f"""SELECT tract_fips, population, low_access_half_mile,
+                       low_access_one_mile, centroid_lat, centroid_lon, {optional}
+                FROM tracts
+                WHERE low_access_half_mile = 1 OR low_access_one_mile = 1
+                ORDER BY population DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [{**dict(row), "data_mode": "real"} for row in rows]
+    finally:
+        connection.close()
+
 
 @tool
 def get_low_access_tracts(limit: int = 25) -> list:
@@ -53,23 +74,7 @@ def get_low_access_tracts(limit: int = 25) -> list:
     if not DB_PATH.exists():
         return _sample_tracts()[:limit]
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            """
-            SELECT tract_fips, population, low_access_half_mile,
-                   low_access_one_mile, centroid_lat, centroid_lon
-            FROM tracts
-            WHERE low_access_half_mile = 1 OR low_access_one_mile = 1
-            ORDER BY population DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-        return [{**dict(r), "data_mode": "real"} for r in rows]
-    finally:
-        conn.close()
+    return _read_database(DB_PATH, limit)
 
 
 @tool
@@ -106,23 +111,7 @@ def get_low_access_rural_tracts(limit: int = 25) -> list:
     if not RURAL_DB_PATH.exists():
         return _sample_rural_tracts()[:limit]
 
-    conn = sqlite3.connect(RURAL_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            """
-            SELECT tract_fips, population, low_access_half_mile,
-                   low_access_one_mile, centroid_lat, centroid_lon
-            FROM tracts
-            WHERE low_access_half_mile = 1 OR low_access_one_mile = 1
-            ORDER BY population DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-        return [{**dict(r), "data_mode": "real"} for r in rows]
-    finally:
-        conn.close()
+    return _read_database(RURAL_DB_PATH, limit)
 
 
 def _sample_tracts() -> list:
