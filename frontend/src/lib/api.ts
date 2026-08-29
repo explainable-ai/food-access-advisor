@@ -6,7 +6,9 @@ export type AdvisorResponse = {
   answer: string;
 };
 
-export type FlaggedTractStatus = "pending" | "resource_found" | "still_needed";
+export type FlaggedTractStatus = "pending" | "possible_change" | "still_needed" | "resource_found";
+
+export type VerificationChoice = "verified_open" | "planned_not_open" | "incorrect_record" | "unrelated";
 
 export type FlaggedTract = {
   id: number | null;
@@ -25,6 +27,7 @@ export type FlaggedTract = {
 export type RegionMetrics = {
   total_flagged: number;
   unclosed: number;
+  possible_change: number;
   resolved: number;
   median_days_to_resolution: number | null;
   tracts: FlaggedTract[];
@@ -33,6 +36,28 @@ export type RegionMetrics = {
 export type ImpactMetrics = {
   urban: RegionMetrics;
   rural: RegionMetrics;
+};
+
+// Matches tools/gap_scorer.py's score_gaps() output exactly.
+export type RankedTract = {
+  tract_fips: string;
+  population: number | null;
+  low_access_half_mile: number | null;
+  low_access_one_mile: number | null;
+  centroid_lat: number | null;
+  centroid_lon: number | null;
+  need_score: number;
+  nearest_resource_kind: string | null;
+  nearest_resource_miles: number | null;
+  nearest_resource_minutes: number | null;
+};
+
+// Matches tools/existing_resources.py's row shape exactly.
+export type ExistingResource = {
+  kind: string;
+  name: string;
+  lat: number;
+  lon: number;
 };
 
 export type TractBoundaryFeature = {
@@ -56,6 +81,10 @@ const API_BASE_URL: string =
 // fast, so they get a much shorter timeout.
 const ADVISOR_TIMEOUT_MS = 120_000;
 const READ_TIMEOUT_MS = 15_000;
+// The evidence endpoints call write_evidence_brief/write_route_brief
+// directly -- one Bedrock call, not the multi-tool agent loop -- so they
+// get a timeout between the two.
+const EVIDENCE_TIMEOUT_MS = 30_000;
 
 class ApiError extends Error {}
 
@@ -114,4 +143,64 @@ export function getImpactMetrics(): Promise<ImpactMetrics> {
 
 export function getTractBoundaries(countyFips: string): Promise<TractBoundaries> {
   return request<TractBoundaries>(`/api/tract-boundaries?county=${encodeURIComponent(countyFips)}`, {}, READ_TIMEOUT_MS);
+}
+
+// Deterministic ranking (no LLM call) -- the same score_gaps() output the
+// corresponding Advisor agent computes internally, exposed directly so the
+// ranked table can populate instantly on page load.
+export function getSiteRankedTracts(topN = 3): Promise<RankedTract[]> {
+  return request<RankedTract[]>(`/api/site-advisor/ranked-tracts?top_n=${topN}`, {}, READ_TIMEOUT_MS);
+}
+
+export function getRouteRankedTracts(topN = 3): Promise<RankedTract[]> {
+  return request<RankedTract[]>(`/api/route-advisor/ranked-tracts?top_n=${topN}`, {}, READ_TIMEOUT_MS);
+}
+
+export function getSiteResources(): Promise<ExistingResource[]> {
+  return request<ExistingResource[]>("/api/site-advisor/resources", {}, READ_TIMEOUT_MS);
+}
+
+export function getRouteResources(): Promise<ExistingResource[]> {
+  return request<ExistingResource[]>("/api/route-advisor/resources", {}, READ_TIMEOUT_MS);
+}
+
+// A single Bedrock call (write_evidence_brief/write_route_brief directly),
+// not the full agent loop -- fast enough to call when a user clicks one
+// ranked-table row.
+export function getSiteEvidence(tract: RankedTract): Promise<{ brief: string }> {
+  return request<{ brief: string }>(
+    "/api/site-advisor/evidence",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tract }) },
+    EVIDENCE_TIMEOUT_MS,
+  );
+}
+
+export function getRouteEvidence(tract: RankedTract): Promise<{ brief: string }> {
+  return request<{ brief: string }>(
+    "/api/route-advisor/evidence",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tract }) },
+    EVIDENCE_TIMEOUT_MS,
+  );
+}
+
+export function verifyFlaggedTract(
+  tractFips: string,
+  recommendationType: string,
+  verification: VerificationChoice,
+  note?: string,
+): Promise<FlaggedTract> {
+  return request<FlaggedTract>(
+    "/api/flagged-tracts/verify",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tract_fips: tractFips,
+        recommendation_type: recommendationType,
+        verification,
+        note: note ?? "",
+      }),
+    },
+    READ_TIMEOUT_MS,
+  );
 }

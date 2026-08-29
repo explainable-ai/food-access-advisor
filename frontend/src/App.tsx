@@ -9,12 +9,20 @@ function App() {
     <div className="app-shell">
       <nav className="top-nav">
         <span className="brand">Food-Access Planning Workspace</span>
-        <NavLink to="/" end>
-          Overview
-        </NavLink>
-        <NavLink to="/site-advisor">Site Advisor</NavLink>
-        <NavLink to="/route-advisor">Route Advisor</NavLink>
-        <NavLink to="/follow-up">Follow-up</NavLink>
+        <div className="nav-tabs">
+          <NavLink to="/" end className={({ isActive }) => (isActive ? "nav-tab active" : "nav-tab")}>
+            Overview
+          </NavLink>
+          <NavLink to="/site-advisor" className={({ isActive }) => (isActive ? "nav-tab active" : "nav-tab")}>
+            Site Analysis
+          </NavLink>
+          <NavLink to="/route-advisor" className={({ isActive }) => (isActive ? "nav-tab active" : "nav-tab")}>
+            Route Analysis
+          </NavLink>
+          <NavLink to="/follow-up" className={({ isActive }) => (isActive ? "nav-tab active" : "nav-tab")}>
+            Follow-up
+          </NavLink>
+        </div>
       </nav>
       <main>
         <Routes>

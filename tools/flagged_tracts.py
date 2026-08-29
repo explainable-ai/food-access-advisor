@@ -33,7 +33,19 @@ except ImportError:  # pragma: no cover - optional runtime dependency in local t
 
 DB_PATH = Path(__file__).parent.parent / "data" / "flagged_tracts.db"
 
-ALLOWED_STATUSES = ("pending", "resource_found", "still_needed")
+ALLOWED_STATUSES = ("pending", "possible_change", "still_needed", "resource_found")
+
+# Maps the planning-workspace UI's four human verification actions onto this
+# enum. "resource_found" is deliberately reachable ONLY through this map, not
+# something the Watchdog itself ever writes (see watchdog_agent.py) -- an
+# unverified OSM point nearby is a "possible change," proof only once a human
+# confirms it.
+VERIFICATION_STATUS_MAP = {
+    "verified_open": "resource_found",
+    "planned_not_open": "possible_change",
+    "incorrect_record": "still_needed",
+    "unrelated": "still_needed",
+}
 
 
 def _connect():
@@ -142,8 +154,9 @@ def read_flagged_tracts(status: str = "pending") -> list:
     nothing outside that scope for this table to accidentally return.
 
     Args:
-        status: One of "pending", "resource_found", "still_needed". Defaults
-            to "pending" — the Watchdog's normal job is working the backlog
+        status: One of "pending", "possible_change", "still_needed",
+            "resource_found". Defaults to "pending" — the Watchdog's normal
+            job is working the backlog
             of tracts nobody has checked on yet, not re-reporting ones it
             already resolved.
 
@@ -183,8 +196,9 @@ def update_flagged_tract(tract_fips: str, recommendation_type: str, status: str,
         recommendation_type: "site" or "route" — matches the row written by
             `flag_tract_for_recheck`, since the same tract could in
             principle be flagged once for each recommendation type.
-        status: Must be one of "pending", "resource_found", "still_needed".
-            Any other value is rejected rather than silently written.
+        status: Must be one of "pending", "possible_change", "still_needed",
+            "resource_found". Any other value is rejected rather than
+            silently written.
         note: Optional free-text explanation of what the recheck found
             (e.g. "grocery store now within 0.4mi per OSM").
 
@@ -215,6 +229,42 @@ def update_flagged_tract(tract_fips: str, recommendation_type: str, status: str,
         return dict(row)
     finally:
         conn.close()
+
+
+def verify_flagged_tract(tract_fips: str, recommendation_type: str, verification: str, note: str = "") -> dict:
+    """Apply a human's verification of a Watchdog-observed change. Deliberately
+    NOT a `@tool` — same reasoning as `flag_tract_for_recheck`: this is a
+    human action taken from the planning-workspace UI's Follow-up page, not
+    something a model should be able to invoke on its own.
+
+    The Watchdog only ever writes "possible_change" when it finds a nearby
+    resource (see watchdog_agent.py) -- it's an unverified observation, not
+    proof. A human reviewing it picks one of four outcomes, each mapped onto
+    the existing status enum via VERIFICATION_STATUS_MAP rather than adding
+    a status per outcome:
+
+    - "verified_open": the resource is confirmed real and open -> resource_found
+    - "planned_not_open": real but not open yet -> stays possible_change
+    - "incorrect_record": the OSM point was wrong/duplicate -> still_needed
+    - "unrelated": a real resource, but not the one that matters here -> still_needed
+
+    Args:
+        tract_fips, recommendation_type: Identify the row, same as
+            `update_flagged_tract`.
+        verification: One of VERIFICATION_STATUS_MAP's keys.
+        note: Optional free-text context from the person verifying.
+
+    Returns:
+        The updated row as a dict, or `{"error": ...}` for an unknown
+        verification value or a missing row (delegated to
+        `update_flagged_tract`, which already handles the latter).
+    """
+    if verification not in VERIFICATION_STATUS_MAP:
+        return {
+            "error": f"Unknown verification {verification!r}. Use one of: {tuple(VERIFICATION_STATUS_MAP)}"
+        }
+    status = VERIFICATION_STATUS_MAP[verification]
+    return update_flagged_tract(tract_fips, recommendation_type, status, note=note)
 
 
 def _sample_flagged_tracts() -> list:

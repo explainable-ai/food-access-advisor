@@ -1,14 +1,20 @@
 """Pydantic request/response models for the FastAPI backend.
 
 Field names deliberately mirror the existing tool return shapes verbatim
-(tools/flagged_tracts.py's row, tools/impact_metrics.py's per-region dict)
-rather than inventing a new API-specific shape -- one less thing to keep in
-sync as those tools evolve.
+(tools/flagged_tracts.py's row, tools/impact_metrics.py's per-region dict,
+tools/gap_scorer.py's score_gaps output) rather than inventing a new
+API-specific shape -- one less thing to keep in sync as those tools evolve.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
+
+FlaggedTractStatus = Literal["pending", "possible_change", "still_needed", "resource_found"]
+
+# The planning-workspace Follow-up page's four human verification actions --
+# see tools/flagged_tracts.py's VERIFICATION_STATUS_MAP for what each maps to.
+VerificationChoice = Literal["verified_open", "planned_not_open", "incorrect_record", "unrelated"]
 
 
 class AdvisorRequest(BaseModel):
@@ -28,7 +34,7 @@ class FlaggedTract(BaseModel):
     centroid_lat: Optional[float] = None
     centroid_lon: Optional[float] = None
     flagged_date: str
-    status: str
+    status: FlaggedTractStatus
     last_checked_date: Optional[str] = None
     note: Optional[str] = None
 
@@ -36,6 +42,7 @@ class FlaggedTract(BaseModel):
 class RegionMetrics(BaseModel):
     total_flagged: int
     unclosed: int
+    possible_change: int
     resolved: int
     median_days_to_resolution: Optional[float] = None
     tracts: list[FlaggedTract]
@@ -44,3 +51,44 @@ class RegionMetrics(BaseModel):
 class ImpactMetrics(BaseModel):
     urban: RegionMetrics
     rural: RegionMetrics
+
+
+class RankedTract(BaseModel):
+    """Matches tools/gap_scorer.py's score_gaps() output exactly -- the
+    deterministic ranked-tracts endpoints return this with no LLM call."""
+
+    tract_fips: str
+    population: Optional[int] = None
+    low_access_half_mile: Optional[int] = None
+    low_access_one_mile: Optional[int] = None
+    centroid_lat: Optional[float] = None
+    centroid_lon: Optional[float] = None
+    need_score: float
+    nearest_resource_kind: Optional[str] = None
+    nearest_resource_miles: Optional[float] = None
+    nearest_resource_minutes: Optional[float] = None
+
+
+class ExistingResource(BaseModel):
+    """Matches tools/existing_resources.py's get_existing_resources() /
+    get_rural_existing_resources() row shape exactly."""
+
+    kind: str
+    name: str
+    lat: float
+    lon: float
+
+
+class EvidenceRequest(BaseModel):
+    tract: RankedTract
+
+
+class EvidenceResponse(BaseModel):
+    brief: str
+
+
+class VerifyRequest(BaseModel):
+    tract_fips: str
+    recommendation_type: str
+    verification: VerificationChoice
+    note: Optional[str] = ""

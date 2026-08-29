@@ -75,6 +75,24 @@ def test_resolved_tract_computes_days_to_resolution(tmp_path, monkeypatch):
     assert metrics["urban"]["median_days_to_resolution"] > 0
 
 
+def test_possible_change_counted_separately_from_unclosed_and_resolved(tmp_path, monkeypatch):
+    use_temp_db(tmp_path, monkeypatch)
+    flagged_tracts.flag_tract_for_recheck(
+        tract_fips="17031840000", recommendation_type="site", source_agent="advisor"
+    )
+    flagged_tracts.flag_tract_for_recheck(
+        tract_fips="17031680000", recommendation_type="site", source_agent="advisor"
+    )
+    flagged_tracts.update_flagged_tract("17031680000", "site", "possible_change")
+
+    metrics = compute_impact_metrics()
+
+    assert metrics["urban"]["possible_change"] == 1
+    assert metrics["urban"]["unclosed"] == 1  # only the still-pending tract
+    assert metrics["urban"]["resolved"] == 0
+    assert metrics["urban"]["total_flagged"] == 2
+
+
 def test_no_resolved_tracts_returns_none_median_not_a_crash(tmp_path, monkeypatch):
     use_temp_db(tmp_path, monkeypatch)
     flagged_tracts.flag_tract_for_recheck(
