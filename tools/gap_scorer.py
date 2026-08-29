@@ -121,13 +121,20 @@ def _weighted_score(components, normalized_weights):
     return round(max(0.0, min(score * 100, 100.0)), 1), contributions
 
 
-def _explanation(components, missing):
+def _explanation(contributions, missing):
     labels = {"food_access_gap": "food-access gap", "poverty": "poverty",
               "no_vehicle": "households without a vehicle", "population_served": "population served",
               "transit_burden": "transit burden", "existing_coverage": "existing coverage"}
-    available = [(name, value) for name, value in components.items() if value is not None and name != "existing_coverage"]
-    strongest = sorted(available, key=lambda item: item[1], reverse=True)[:2]
-    text = "Highest contributing needs: " + ", ".join(f"{labels[name]} ({value * 100:.0f}/100)" for name, value in strongest) + "."
+    positive = [(name, points) for name, points in contributions.items()
+                if name != "existing_coverage" and points > 0]
+    strongest = sorted(positive, key=lambda item: item[1], reverse=True)[:2]
+    text = "Highest weighted contributions: " + (
+        ", ".join(f"{labels[name]} (+{points:.1f} points)" for name, points in strongest)
+        if strongest else "none"
+    ) + "."
+    coverage = contributions.get("existing_coverage")
+    if coverage is not None and coverage < 0:
+        text += f" Existing coverage reduced the score by {abs(coverage):.1f} points."
     if missing:
         text += " Not scored due to missing evidence: " + ", ".join(labels[name] for name in missing) + "."
     return text
@@ -149,7 +156,7 @@ def _score_all(tracts, resources, weights):
         missing = [name for name, value in components.items() if value is None]
         entry = {**tract, "need_score": score, "score_components": {name: round(value * 100, 1) if value is not None else None for name, value in components.items()},
                  "score_contributions": contributions, "weights_used": {name: round(value, 4) for name, value in normalized_weights.items()},
-                 "missing_components": missing, "score_explanation": _explanation(components, missing),
+                 "missing_components": missing, "score_explanation": _explanation(contributions, missing),
                  "nearest_resource_kind": nearest[index].get("kind") if nearest[index] else None,
                  "nearest_resource_miles": nearest[index].get("distance_miles") if nearest[index] else None,
                  "nearest_resource_minutes": nearest[index].get("transit_minutes") if nearest[index] else None}
