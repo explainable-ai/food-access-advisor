@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="{{ refresh_seconds }}">
+<title>Food-Access Impact Dashboard</title>
+<style>
+  :root {
+    --paper: #F5F7F6;
+    --paper-raised: #FFFFFF;
+    --ink: #17212B;
+    --ink-soft: #52606D;
+    --line: #C9D2DC;
+    --blueprint: #1D5FA8;
+    --blueprint-soft: #E4EDF7;
+    --teal: #2A7D68;
+    --teal-soft: #DEEFEA;
+    --amber: #A85B12;
+    --amber-soft: #F5E6D3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    padding: 32px 20px 80px;
+  }
+  .sheet { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 6px; }
+  .sub { color: var(--ink-soft); font-size: 0.9rem; margin: 0 0 28px; max-width: 62ch; }
+  .regions { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 640px) { .regions { grid-template-columns: 1fr; } }
+  .card { background: var(--paper-raised); border: 1px solid var(--line); border-radius: 8px; padding: 20px 22px; }
+  .card h2 { font-size: 1.1rem; margin: 0 0 4px; text-transform: capitalize; }
+  .region-note { color: var(--ink-soft); font-size: 0.82rem; margin: 0 0 18px; }
+  .stat-row { display: flex; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 70px; }
+  .stat .n { font-size: 1.7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 0.72rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat.unclosed .n { color: var(--amber); }
+  .stat.resolved .n { color: var(--teal); }
+  .median { font-size: 0.88rem; color: var(--ink-soft); border-top: 1px solid var(--line); padding-top: 14px; }
+  .median b { color: var(--ink); }
+  .tracts { margin-top: 16px; }
+  .tract-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 0.82rem; }
+  .tract-row:last-child { border-bottom: none; }
+  .tract-row .fips { font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+  .status-pill { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .status-pending { background: var(--blueprint-soft); color: var(--blueprint); }
+  .status-still_needed { background: var(--amber-soft); color: var(--amber); }
+  .status-resource_found { background: var(--teal-soft); color: var(--teal); }
+  .empty { color: var(--ink-soft); font-size: 0.85rem; font-style: italic; padding: 8px 0; }
+  footer { text-align: center; color: var(--ink-soft); font-size: 0.78rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Food-Access Impact Dashboard</h1>
+  <p class="sub">Unclosed gaps and time-to-resolution, tracked per region — the design canvas's own stated success metric, not pooled across urban and rural.</p>
+
+  <div class="regions">
+    {% for region, data in metrics.items() %}
+    <div class="card">
+      <h2>{{ region }}</h2>
+      <p class="region-note">{{ "Site Advisor recommendations" if region == "urban" else "Route Advisor recommendations" }}</p>
+      <div class="stat-row">
+        <div class="stat unclosed">
+          <div class="n">{{ data.unclosed }}</div>
+          <div class="l">Unclosed gaps</div>
+        </div>
+        <div class="stat resolved">
+          <div class="n">{{ data.resolved }}</div>
+          <div class="l">Resolved</div>
+        </div>
+        <div class="stat">
+          <div class="n">{{ data.total_flagged }}</div>
+          <div class="l">Total flagged</div>
+        </div>
+      </div>
+      <div class="median">
+        Median days to resolution:
+        <b>{{ data.median_days_to_resolution if data.median_days_to_resolution is not none else "—" }}</b>
+      </div>
+      <div class="tracts">
+        {% for tract in data.tracts %}
+        <div class="tract-row">
+          <span class="fips">{{ tract.tract_fips }}</span>
+          <span class="status-pill status-{{ tract.status }}">{{ tract.status.replace("_", " ") }}</span>
+        </div>
+        {% else %}
+        <div class="empty">Nothing flagged yet in this region.</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <footer>Auto-refreshes every {{ refresh_seconds }}s · reads data/flagged_tracts.db directly, no LLM call</footer>
+</div>
+</body>
+</html>
