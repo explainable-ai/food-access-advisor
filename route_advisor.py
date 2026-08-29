@@ -34,8 +34,10 @@ from tools.evidence_brief import write_route_brief
 from tools.existing_resources import get_rural_existing_resources
 from tools.flagged_tracts import flag_tract_for_recheck
 from tools.gap_scorer import score_gaps
+from tools.telemetry import configure_telemetry, print_metrics
 
 load_dotenv()
+configure_telemetry()
 
 SYSTEM_PROMPT = f"""You are the Route Advisor for {PILOT_RURAL_COUNTY['name']}. \
 Community organizers and regional planners ask you where a route or \
@@ -124,4 +126,5 @@ if __name__ == "__main__":
             break
         if not question.strip():
             continue
-        route_advisor(question)
+        result = route_advisor(question)
+        print_metrics(result)

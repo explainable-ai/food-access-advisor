@@ -23,8 +23,10 @@ from tools.existing_resources import get_existing_resources
 from tools.evidence_brief import write_evidence_brief
 from tools.flagged_tracts import flag_tract_for_recheck
 from tools.gap_scorer import score_gaps
+from tools.telemetry import configure_telemetry, print_metrics
 
 load_dotenv()
+configure_telemetry()
 
 SYSTEM_PROMPT = f"""You are the Food-Access Advisor for {PILOT_CITY['name']}. \
 Community organizers and city planners ask you where a new food resource \
@@ -109,4 +111,5 @@ if __name__ == "__main__":
             break
         if not question.strip():
             continue
-        advisor(question)
+        result = advisor(question)
+        print_metrics(result)
