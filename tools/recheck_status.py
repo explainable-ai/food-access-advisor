@@ -20,6 +20,15 @@ from tools.geo import haversine_miles
 
 NEARBY_THRESHOLD_MILES = 1.0
 
+# Rural low-access thresholds are an order of magnitude wider than urban's
+# (see config.PILOT_RURAL_COUNTY's 10-/20-mile LILA columns vs. the urban
+# half-/one-mile ones) — checking a "route" recommendation against the
+# urban 1-mile threshold would mark nearly every real rural improvement as
+# "still needed" even after a resource genuinely closed the gap. The
+# Watchdog picks this constant for "route" rows, NEARBY_THRESHOLD_MILES for
+# "site" rows — see watchdog_agent.py.
+RURAL_NEARBY_THRESHOLD_MILES = 10.0
+
 
 @tool
 def check_resource_appeared(
@@ -37,9 +46,8 @@ def check_resource_appeared(
             query) — always freshly queried, never cached, so a resource
             that opened since the tract was flagged actually shows up.
         threshold_miles: Distance under which a resource counts as "closing
-            the gap." Same urban-scale threshold used implicitly by the
-            Atlas's half-mile/one-mile flags this project already relies on
-            — not re-litigated per call.
+            the gap." Defaults to the urban-scale threshold; pass
+            RURAL_NEARBY_THRESHOLD_MILES for a "route"-type flagged tract.
 
     Returns:
         A dict: `resource_now_nearby` (bool), `nearest_kind`,
