@@ -18,11 +18,32 @@ FIELDS = ("poverty_universe", "population_below_poverty", "households_total", "h
 def enrich_database(path, evidence, year):
     if not path.exists():
         raise FileNotFoundError(f"Prepare the Atlas database first: {path}")
+    if not evidence:
+        raise ValueError("ACS response contained no tract evidence")
     by_geoid = {item.tract_geoid: item for item in evidence}
+    evidence_vintages = {item.geography_vintage for item in evidence}
+    if len(evidence_vintages) != 1:
+        raise ValueError(f"ACS evidence contains mixed geography vintages: {sorted(evidence_vintages)}")
+    evidence_vintage = next(iter(evidence_vintages))
     with sqlite3.connect(path) as connection:
+        has_metadata = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata'"
+        ).fetchone()
+        if not has_metadata:
+            raise ValueError("Atlas database has no geography metadata; rebuild it with data/prep_atlas.py")
+        metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+        atlas_vintage = metadata.get("geography_vintage")
+        if not atlas_vintage:
+            raise ValueError("Atlas database has no geography_vintage; rebuild it before ACS enrichment")
+        if atlas_vintage != evidence_vintage:
+            raise ValueError(
+                f"Tract geography mismatch: Atlas uses {atlas_vintage}, ACS uses {evidence_vintage}. "
+                "Use a matching tract vintage or an explicit Census crosswalk."
+            )
         for field in FIELDS:
             if field not in {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}:
                 connection.execute(f"ALTER TABLE tracts ADD COLUMN {field} REAL")
+        connection.execute(f"UPDATE tracts SET {', '.join(f'{field} = NULL' for field in FIELDS)}")
         matched = 0
         for geoid, item in by_geoid.items():
             values = [item.values[field].value if field in item.values else None for field in FIELDS]
@@ -31,9 +52,14 @@ def enrich_database(path, evidence, year):
                 (*values, geoid),
             )
             matched += cursor.rowcount
-        connection.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        tract_count = connection.execute("SELECT COUNT(*) FROM tracts").fetchone()[0]
+        if matched != tract_count:
+            raise ValueError(
+                f"ACS snapshot matched {matched} of {tract_count} Atlas tracts; no changes were committed"
+            )
         connection.execute("INSERT OR REPLACE INTO metadata VALUES ('acs_vintage', ?)", (str(year),))
         connection.execute("INSERT OR REPLACE INTO metadata VALUES ('acs_dataset', ?)", (f"{year}/acs/acs5",))
+        connection.execute("INSERT OR REPLACE INTO metadata VALUES ('acs_geography_vintage', ?)", (evidence_vintage,))
     return matched
 
 
