@@ -71,7 +71,7 @@ def _subset_totals(candidates):
 def optimize_route(candidates: list, depot: dict, max_route_minutes: float,
                    vehicle_capacity: float, max_stops: int,
                    service_minutes: float = 20, travel_time_matrix: list | None = None,
-                   average_speed_mph: float = 35) -> dict:
+                   average_speed_mph: float = 35, travel_time_source: str | None = None) -> dict:
     """Select and sequence stops that maximize priority-weighted service.
 
     `travel_time_matrix` is indexed `[depot, candidate 0, candidate 1, ...]`.
@@ -81,7 +81,8 @@ def optimize_route(candidates: list, depot: dict, max_route_minutes: float,
     _validate(candidates, depot, max_route_minutes, vehicle_capacity, max_stops, service_minutes)
     matrix = (_validate_matrix(travel_time_matrix, len(candidates) + 1)
               if travel_time_matrix is not None else _estimated_matrix(depot, candidates, average_speed_mph))
-    source = "provided_road_network_matrix" if travel_time_matrix is not None else "haversine_drive_time_estimate"
+    source = travel_time_source or ("provided_road_network_matrix" if travel_time_matrix is not None
+                                    else "haversine_drive_time_estimate")
     demand, benefit, required_mask = _subset_totals(candidates)
 
     # (visited-mask, last-candidate-index) -> shortest travel time from depot.

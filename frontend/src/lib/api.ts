@@ -57,6 +57,7 @@ export type RankedTract = {
   nearest_resource_kind: string | null;
   nearest_resource_miles: number | null;
   nearest_resource_minutes: number | null;
+  households_no_vehicle?: number | null;
 };
 
 // Matches tools/existing_resources.py's row shape exactly.
@@ -78,6 +79,7 @@ export type RouteOptimizationRequest = {
   depot: { lat: number; lon: number };
   max_route_minutes: number; vehicle_capacity: number; max_stops: number;
   service_minutes?: number; travel_time_matrix?: number[][]; average_speed_mph?: number;
+  travel_time_provider?: "amazon_location" | "estimate";
 };
 
 export type RouteOptimizationResponse = {
