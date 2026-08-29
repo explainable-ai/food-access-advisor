@@ -40,6 +40,7 @@ from strands import Agent
 from config import PILOT_CITY
 from model import build_model
 from tools.existing_resources import get_existing_resources, get_rural_existing_resources
+from tools.evidence_snapshots import record_resource_snapshot
 from tools.flagged_tracts import read_flagged_tracts, update_flagged_tract
 from tools.recheck_status import check_resource_appeared
 from tools.telemetry import configure_telemetry, print_metrics
@@ -71,7 +72,13 @@ access tracts are flagged at a 10-mile threshold, not the urban 1-mile \
 default) — for a "site" row, leave threshold_miles at its default. Never \
 eyeball distances yourself — that tool's threshold is the source of \
 truth, you only relay it.
-5. Call update_flagged_tract for that tract: status="possible_change" if \
+5. After each successful regional resource fetch, call \
+record_resource_snapshot once: source_id="osm_resources", scope="urban" \
+for Chicago and scope="rural" for the county. Pass the exact resources \
+returned and status="complete". If a fetch fails, do not fabricate an \
+empty list: record status="failed" with the error. A failed source is \
+unavailable, never evidence that every resource disappeared.
+6. Call update_flagged_tract for that tract: status="possible_change" if \
 check_resource_appeared says resource_now_nearby is true, otherwise \
 status="still_needed". Never write status="resource_found" yourself — an \
 OSM point appearing nearby is an unverified observation, not proof it's \
@@ -79,7 +86,7 @@ open or related to the recommendation, so a human confirms that through \
 the planning workspace's Follow-up page, not you. Always pass a short \
 note explaining what you found (the nearest kind and distance, or that \
 nothing turned up).
-6. Finish with a short summary: how many tracts you checked, how many now \
+7. Finish with a short summary: how many tracts you checked, how many now \
 show a possible change awaiting human verification, how many are still \
 needed — broken out by recommendation_type if the backlog contained both \
 kinds.
@@ -99,6 +106,7 @@ def build_watchdog() -> Agent:
             get_existing_resources,
             get_rural_existing_resources,
             check_resource_appeared,
+            record_resource_snapshot,
             update_flagged_tract,
         ],
     )

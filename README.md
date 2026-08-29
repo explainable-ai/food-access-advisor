@@ -449,6 +449,11 @@ above, this needs your own AWS credentials to actually run.
 
 ## Roadmap
 
+Supplemental source adapters and the Watchdog snapshot/diff contract are now
+implemented. See [`docs/ADDITIONAL_DATA_AND_WATCHDOG.md`](docs/ADDITIONAL_DATA_AND_WATCHDOG.md)
+for the exact official sources, freshness rules, change semantics, and the
+production persistence boundary.
+
 - **Watchdog on a real recurring schedule.** `watchdog_agentcore_entry.py`
   is deployable today; [`deploy/EVENTBRIDGE_SETUP.md`](deploy/EVENTBRIDGE_SETUP.md)
   now documents the EventBridge Scheduler + Lambda shim needed to actually

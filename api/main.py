@@ -44,6 +44,7 @@ from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from orchestration import route_request
 from tools.access_data import get_low_access_rural_tracts, get_low_access_tracts
 from tools.evidence_brief import write_evidence_brief, write_route_brief
+from tools.evidence_snapshots import read_changes
 from tools.existing_resources import OverpassQueryError, get_existing_resources, get_rural_existing_resources
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import score_gaps
@@ -228,6 +229,12 @@ def flagged_tracts(status: str = Query(default="pending")):
 @app.get("/api/impact-metrics", response_model=ImpactMetrics)
 def impact_metrics() -> ImpactMetrics:
     return compute_impact_metrics()
+
+
+@app.get("/api/watchdog/changes")
+def watchdog_changes(limit: int = Query(default=100, ge=1, le=1000), source_id: str | None = None):
+    """Return the auditable snapshot-diff and source-health feed."""
+    return read_changes(limit=limit, source_id=source_id)
 
 
 @app.post("/api/flagged-tracts/verify")

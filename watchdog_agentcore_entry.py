@@ -35,9 +35,12 @@ separate `@aws/agentcore` npm CLI — check `agentcore configure --help`
 yourself if commands here don't match what you have installed).
 """
 
+import asyncio
+
 from bedrock_agentcore import BedrockAgentCoreApp
 
 from watchdog_agent import build_watchdog
+from tools.additional_evidence import refresh_additional_sources
 
 app = BedrockAgentCoreApp()
 
@@ -53,6 +56,10 @@ async def handler(payload: dict):
     prompt = payload.get(
         "prompt", "Run today's recheck pass over every pending flagged tract."
     )
+    if payload.get("refresh_additional_sources", True):
+        refresh = await asyncio.to_thread(refresh_additional_sources)
+        source_summary = ", ".join(f"{item['source_id']}={item['status']}" for item in refresh)
+        prompt = f"{prompt}\nSupplemental source refresh: {source_summary}. Include source-health changes in the summary."
     watchdog = build_watchdog()
     async for event in watchdog.stream_async(prompt):
         yield event
