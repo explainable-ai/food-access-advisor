@@ -275,6 +275,10 @@ gain or lose coverage, capacity use, and infeasibility. Supply a
 depot-plus-candidates road-network travel-time matrix when available; if it
 is omitted, the response is explicitly labelled
 `haversine_drive_time_estimate` rather than presented as road-network truth.
+Amazon Location calls are server-side through the Routes V2 `geo-routes`
+client. Grant the API/AgentCore execution role only
+`geo-routes:CalculateRouteMatrix` on the regional default provider; see
+[`deploy/AMAZON_LOCATION_SETUP.md`](deploy/AMAZON_LOCATION_SETUP.md).
 Run the API with:
 
 ```bash
