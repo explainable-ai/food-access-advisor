@@ -85,5 +85,33 @@ class TractEvidence(BaseModel):
         return value
 
 
+class ResourceEvidence(BaseModel):
+    """One normalized public resource record, independent of source schema."""
+
+    entity_id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
+    status: str | None = None
+    observed_at: datetime | None = None
+    source_citation: SourceCitation
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("observed_at")
+    @classmethod
+    def observed_at_must_be_timezone_aware(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("observed_at must be timezone-aware")
+        return value
+
+
+class ResourceEvidenceBatch(BaseModel):
+    source_id: str = Field(min_length=1)
+    records: list[ResourceEvidence] = Field(default_factory=list)
+    citation: SourceCitation
+    quality: DataQualityReport
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
