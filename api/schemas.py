@@ -6,9 +6,9 @@ tools/gap_scorer.py's score_gaps output) rather than inventing a new
 API-specific shape -- one less thing to keep in sync as those tools evolve.
 """
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 FlaggedTractStatus = Literal["pending", "possible_change", "still_needed", "resource_found"]
 
@@ -64,6 +64,17 @@ class RankedTract(BaseModel):
     centroid_lat: Optional[float] = None
     centroid_lon: Optional[float] = None
     need_score: float
+    rank: Optional[int] = None
+    poverty_universe: Optional[float] = None
+    population_below_poverty: Optional[float] = None
+    households_total: Optional[float] = None
+    households_no_vehicle: Optional[float] = None
+    score_components: dict[str, Optional[float]] = Field(default_factory=dict)
+    score_contributions: dict[str, float] = Field(default_factory=dict)
+    weights_used: dict[str, float] = Field(default_factory=dict)
+    missing_components: list[str] = Field(default_factory=list)
+    score_explanation: str = ""
+    sensitivity: dict[str, Any] = Field(default_factory=dict)
     nearest_resource_kind: Optional[str] = None
     nearest_resource_miles: Optional[float] = None
     nearest_resource_minutes: Optional[float] = None
