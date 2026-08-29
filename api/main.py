@@ -110,7 +110,10 @@ def _ranked_tracts(get_tracts, get_resources, top_n: int, weights=None) -> list:
 
 
 def _weights(**values):
-    return {name: value for name, value in values.items() if value is not None} or None
+    supplied = {name: value for name, value in values.items() if value is not None}
+    if supplied and not any(value > 0 for value in supplied.values()):
+        raise HTTPException(status_code=422, detail="At least one priority weight must be greater than zero")
+    return supplied or None
 
 
 @app.get("/api/site-advisor/ranked-tracts", response_model=list[RankedTract])
