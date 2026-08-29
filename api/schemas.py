@@ -122,6 +122,7 @@ class RouteOptimizationRequest(BaseModel):
     service_minutes: float = Field(default=20, ge=0)
     travel_time_matrix: Optional[list[list[float]]] = None
     average_speed_mph: float = Field(default=35, gt=0)
+    travel_time_provider: Literal["amazon_location", "estimate"] = "amazon_location"
 
 
 class RouteOptimizationResponse(BaseModel):
