@@ -266,7 +266,16 @@ new routing logic, which stays exactly the plain `if` it always was.
 `GET /api/flagged-tracts` and `GET /api/impact-metrics` wrap
 `tools/flagged_tracts.py` and `tools/impact_metrics.py` directly;
 `GET /api/tract-boundaries` serves the GeoJSON `data/prep_tract_boundaries.py`
-produces. Run it with:
+produces. `POST /api/route-advisor/optimize` runs an exact constrained
+orienteering model for up to 15 candidate stops. It maximizes
+priority-weighted demand while enforcing depot return, maximum route time,
+service time per stop, vehicle capacity, maximum stops, and required
+existing stops. The response reports selected stop order, communities that
+gain or lose coverage, capacity use, and infeasibility. Supply a
+depot-plus-candidates road-network travel-time matrix when available; if it
+is omitted, the response is explicitly labelled
+`haversine_drive_time_estimate` rather than presented as road-network truth.
+Run the API with:
 
 ```bash
 uvicorn api.main:app --reload

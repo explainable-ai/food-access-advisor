@@ -67,6 +67,27 @@ export type ExistingResource = {
   lon: number;
 };
 
+export type RouteCandidate = {
+  stop_id: string; lat: number; lon: number; demand: number; need_score: number;
+  population?: number | null; tract_fips?: string | null;
+  currently_served?: boolean; required?: boolean;
+};
+
+export type RouteOptimizationRequest = {
+  candidates: RouteCandidate[];
+  depot: { lat: number; lon: number };
+  max_route_minutes: number; vehicle_capacity: number; max_stops: number;
+  service_minutes?: number; travel_time_matrix?: number[][]; average_speed_mph?: number;
+};
+
+export type RouteOptimizationResponse = {
+  status: "optimal" | "infeasible"; reason?: string | null; travel_time_source: string;
+  route_minutes?: number; capacity_used?: number; capacity_remaining?: number;
+  selected_stops: Array<RouteCandidate & { sequence: number }>;
+  unselected_stops: Array<(RouteCandidate & { reason?: string }) | string>;
+  coverage_change?: { gained: string[]; lost: string[]; still_uncovered: string[] };
+};
+
 export type TractBoundaryFeature = {
   type: "Feature";
   properties: { tract_fips: string };
@@ -169,6 +190,14 @@ export function getSiteResources(): Promise<ExistingResource[]> {
 
 export function getRouteResources(): Promise<ExistingResource[]> {
   return request<ExistingResource[]>("/api/route-advisor/resources", {}, READ_TIMEOUT_MS);
+}
+
+export function optimizeRoute(requestBody: RouteOptimizationRequest): Promise<RouteOptimizationResponse> {
+  return request<RouteOptimizationResponse>(
+    "/api/route-advisor/optimize",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestBody) },
+    READ_TIMEOUT_MS,
+  );
 }
 
 // A single Bedrock call (write_evidence_brief/write_route_brief directly),
