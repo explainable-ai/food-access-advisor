@@ -26,7 +26,7 @@ import time
 import requests
 from strands import tool
 
-from config import PILOT_CITY
+from config import PILOT_CITY, PILOT_RURAL_COUNTY
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 MAX_ATTEMPTS = 2
@@ -42,6 +42,28 @@ REQUEST_HEADERS = {
     "User-Agent": "food-access-advisor/1.0 (Agents for Humans hackathon; "
     "https://github.com/explainable-ai/food-access-advisor)"
 }
+
+# Node/way filters for the urban query — unchanged from the original
+# single-region version.
+URBAN_NODE_FILTERS = [
+    'node["leisure"="garden"]',
+    'way["landuse"="allotments"]',
+    'node["shop"="farm"]',
+    'node["shop"="grocery"]',
+    'node["shop"="supermarket"]',
+    'node["shop"="convenience"]',
+]
+
+# Rural adds two tags that barely come up in a dense city query but matter
+# more at rural density — mobile markets and food banks are a meaningfully
+# larger share of rural food access than urban (see the rural
+# systems-thinking pass in docs/design-canvas.html and the tracker's
+# data-source research notes). Both confirmed as real, documented OSM tags
+# on the OSM wiki before using them here, not guessed.
+RURAL_NODE_FILTERS = URBAN_NODE_FILTERS + [
+    'node["social_facility"="food_bank"]',
+    'node["amenity"="marketplace"]',
+]
 
 logger = logging.getLogger(__name__)
 
@@ -95,19 +117,36 @@ def get_existing_resources() -> list:
             missing rather than quietly acting on a wrong assumption.
     """
     south, west, north, east = PILOT_CITY["bbox"]
-    return _query_overpass(south, west, north, east)
+    return _query_overpass(south, west, north, east, URBAN_NODE_FILTERS)
 
 
-def _query_overpass(south, west, north, east) -> list:
+@tool
+def get_rural_existing_resources() -> list:
+    """Find existing food resources near the rural pilot county via
+    OpenStreetMap (see config.PILOT_RURAL_COUNTY — currently Alexander
+    County, IL).
+
+    Same boundary discipline as `get_existing_resources`: no arguments,
+    always resolves to `config.PILOT_RURAL_COUNTY["bbox"]`. Extends the
+    urban tag set with `social_facility=food_bank` and
+    `amenity=marketplace` — see RURAL_NODE_FILTERS.
+
+    Returns:
+        Same shape as `get_existing_resources`, with two additional
+        possible `kind` values: "food_bank" and "market".
+    """
+    south, west, north, east = PILOT_RURAL_COUNTY["bbox"]
+    return _query_overpass(south, west, north, east, RURAL_NODE_FILTERS)
+
+
+def _query_overpass(south, west, north, east, node_filters) -> list:
+    filter_lines = "\n      ".join(
+        f"{f}({south},{west},{north},{east});" for f in node_filters
+    )
     query = f"""
     [out:json][timeout:25];
     (
-      node["leisure"="garden"]({south},{west},{north},{east});
-      way["landuse"="allotments"]({south},{west},{north},{east});
-      node["shop"="farm"]({south},{west},{north},{east});
-      node["shop"="grocery"]({south},{west},{north},{east});
-      node["shop"="supermarket"]({south},{west},{north},{east});
-      node["shop"="convenience"]({south},{west},{north},{east});
+      {filter_lines}
     );
     out center;
     """
@@ -144,7 +183,11 @@ def _query_overpass(south, west, north, east) -> list:
             continue
         tags = el.get("tags", {})
         shop = tags.get("shop")
-        if "leisure" in tags or "landuse" in tags:
+        if tags.get("social_facility") == "food_bank":
+            kind = "food_bank"
+        elif tags.get("amenity") == "marketplace":
+            kind = "market"
+        elif "leisure" in tags or "landuse" in tags:
             kind = "garden"
         elif shop in ("grocery", "supermarket"):
             kind = "grocery"

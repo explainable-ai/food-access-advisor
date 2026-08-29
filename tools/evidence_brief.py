@@ -1,4 +1,5 @@
-"""Evidence-brief tool: the only LLM-backed tool in the Advisor's toolbox.
+"""Evidence-brief tools: the only LLM-backed tools in either Advisor's
+toolbox.
 
 Everything upstream (access data, existing resources, gap scoring) is
 deterministic and traceable on purpose — this is the one place language
@@ -30,6 +31,38 @@ a decision itself.
 - Keep it to one paragraph, plain language, no bullet points, no headers.
 """
 
+# Same job as BRIEF_SYSTEM_PROMPT, plus one addition that only applies to
+# routes, not sites: a mobile market or delivery route has fixed stop
+# capacity, so "add a stop here" is usually really "move a stop from
+# somewhere else" — a zero-sum trade-off (Success-to-the-Successful, per
+# the design canvas's archetype-risk pass on rural specifically). Enforced
+# here, in this tool's own system prompt, rather than left to the Route
+# Advisor's orchestrator prompt to remember — a content rule worth actually
+# testing needs to live somewhere a test can check it, and this is the one
+# place in the pipeline that generates the sentence a reader would see it
+# in.
+ROUTE_BRIEF_SYSTEM_PROMPT = """You write short, factual briefing paragraphs for \
+community organizers and regional planners about rural food-access gaps. \
+You are given one already-ranked tract with its need score, population, \
+and nearest-resource distance — you do not decide the ranking, you \
+explain it.
+
+Rules:
+- Cite the USDA Food Access Research Atlas by name and note that the \
+figures reflect its most recently published vintage.
+- State the nearest-resource distance exactly as given — never invent or \
+round it in a way that changes the claim.
+- A mobile market or delivery route has fixed stop capacity, so adding a \
+stop here is often really moving one from somewhere else. Your brief MUST \
+name this trade-off explicitly — never write as though a new stop is \
+purely additive with no cost elsewhere. This is a required disclosure, \
+not optional color.
+- Never claim this analysis, alone, proves where a route or stop should \
+be added — frame it explicitly as decision support for a human decision, \
+not a decision itself.
+- Keep it to one paragraph, plain language, no bullet points, no headers.
+"""
+
 
 @tool
 def write_evidence_brief(top_tract: dict) -> str:
@@ -48,5 +81,23 @@ def write_evidence_brief(top_tract: dict) -> str:
     # sub-agent would otherwise silently fall back to Strands' own shifting
     # default, which is exactly the inconsistency pinning was meant to avoid.
     brief_agent = Agent(model=build_model(), system_prompt=BRIEF_SYSTEM_PROMPT)
+    response = brief_agent(f"Write the brief for this tract: {top_tract}")
+    return str(response)
+
+
+@tool
+def write_route_brief(top_tract: dict) -> str:
+    """Turn one ranked, scored rural tract into a citable, plain-language
+    brief for the Route Advisor — same job as `write_evidence_brief`, plus
+    a required disclosure of the route-capacity trade-off (see
+    ROUTE_BRIEF_SYSTEM_PROMPT).
+
+    Args:
+        top_tract: One entry from `score_gaps`'s output.
+
+    Returns:
+        A single paragraph, same shape as `write_evidence_brief`'s output.
+    """
+    brief_agent = Agent(model=build_model(), system_prompt=ROUTE_BRIEF_SYSTEM_PROMPT)
     response = brief_agent(f"Write the brief for this tract: {top_tract}")
     return str(response)
