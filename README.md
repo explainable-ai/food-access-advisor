@@ -4,24 +4,31 @@ A Strands Agents SDK agent for the **Agents for Humans** hackathon (Good Neighbo
 
 Community leaders deciding where to put a new farm, market, or food-rescue
 route usually work from instinct, not evidence — even though the evidence
-already exists in public datasets nobody queries. This agent maps
+already exists in public datasets nobody queries. This project maps
 low-income, low-access census tracts (USDA's Food Access Research Atlas)
 against what food resources already exist nearby, and answers a plain
 question like *"where in Chicago would a new food resource have the
 highest impact?"* with a ranked, cited recommendation.
 
-This is the **Advisor** — the on-demand half of the project. A second,
-scheduled **Watchdog** agent now closes the loop: it works through the
-tracts the Advisor flagged and reports whether a resource ever actually
-appeared nearby. They are two separate `strands.Agent` instances with
-disjoint tool lists, not one agent with a mode flag — see
-[Guardrails](#guardrails) for why that split matters.
+Three agents, split by job and lifecycle, not one agent with a mode flag —
+see [Guardrails](#guardrails) for why that split matters:
+
+- **Site Advisor** (`agent.py`) — on-demand, recommends a new fixed site
+  for the urban pilot city (Chicago, IL).
+- **Route Advisor** (`route_advisor.py`) — on-demand, recommends a route
+  or distribution-schedule change instead of a new site for the rural
+  pilot county (Alexander County, IL), where a fixed-site store is often
+  not viable at rural density. Scaffolded against illustrative sample
+  data — see [Data setup](#data-setup).
+- **Watchdog** (`watchdog_agent.py`) — scheduled, closes the loop by
+  working through both Advisors' flagged tracts and reporting whether a
+  resource or route change ever actually appeared/happened.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    U["Community organizer\n(plain-language question)"] --> ADV[Advisor agent]
+    U["Community organizer\n(plain-language question)"] --> ADV[Site Advisor]
     ADV -->|1| AD[get_low_access_tracts]
     ADV -->|2| ER[get_existing_resources]
     ADV -->|3| GS[score_gaps]
@@ -31,32 +38,52 @@ flowchart LR
     AD -.reads.-> ATLAS[(USDA Food Access Research Atlas\nLRAM/SRAM, local SQLite)]
     ER -.queries.-> OSM[(OpenStreetMap\nOverpass API)]
     EB -.LLM call.-> BEDROCK[(Amazon Bedrock)]
-    FLAG -->|writes pending row| LOG[(flagged_tracts.db)]
+    FLAG -->|writes pending row, type=site| LOG[(flagged_tracts.db)]
 
     GS -->|ranked tracts| ADV
     EB -->|cited paragraph| ADV
     ADV --> ANSWER["Ranked recommendation\n+ citable brief"]
 
+    P["Regional planner\n(routing question)"] --> RA[Route Advisor]
+    RA -->|1| ADR[get_low_access_rural_tracts]
+    RA -->|2| ERR[get_rural_existing_resources]
+    RA -->|3| GS
+    RA -->|4| RB[write_route_brief]
+    RA -->|5| FLAGR[flag_top_route_for_recheck]
+
+    ADR -.reads.-> RATLAS[(USDA Atlas, rural county\nlocal SQLite)]
+    ERR -.queries.-> OSM
+    RB -.LLM call, discloses\ncapacity trade-off.-> BEDROCK
+    FLAGR -->|writes pending row, type=route| LOG
+
+    RB -->|cited paragraph| RA
+    RA --> RANSWER["Ranked route recommendation\n+ citable brief"]
+
     SCHED["Scheduled trigger\n(e.g. monthly)"] --> WD[Watchdog agent]
     WD -->|1| RFT[read_flagged_tracts]
     WD -->|2| ER2[get_existing_resources]
+    WD -->|2| ER3[get_rural_existing_resources]
     WD -->|3| CRA[check_resource_appeared]
     WD -->|4| UFT[update_flagged_tract]
 
-    RFT -.reads pending.-> LOG
+    RFT -.reads pending, any type.-> LOG
     ER2 -.queries.-> OSM
+    ER3 -.queries.-> OSM
     UFT -->|writes status| LOG
     WD --> REPORT["Recheck summary\n(resolved / still needed)"]
 ```
 
-Only `write_evidence_brief` calls a language model. Every other tool —
-`get_low_access_tracts`, `get_existing_resources`, `score_gaps`,
-`flag_top_tract_for_recheck`, `read_flagged_tracts`,
-`check_resource_appeared`, `update_flagged_tract` — is deterministic:
-reading a local database, calling a public API, doing arithmetic, or
-writing a validated row. That split is deliberate: for a tool whose output
-might end up in a funding application, "here's the exact formula" is more
-defensible than "the model said so."
+Only `write_evidence_brief` and `write_route_brief` call a language model.
+Every other tool — `get_low_access_tracts`, `get_low_access_rural_tracts`,
+`get_existing_resources`, `get_rural_existing_resources`, `score_gaps`,
+`flag_top_tract_for_recheck`, `flag_top_route_for_recheck`,
+`read_flagged_tracts`, `check_resource_appeared`, `update_flagged_tract` —
+is deterministic: reading a local database, calling a public API, doing
+arithmetic, or writing a validated row. That split is deliberate: for a
+tool whose output might end up in a funding application, "here's the
+exact formula" is more defensible than "the model said so." `score_gaps`
+itself is shared unchanged between both Advisors — see its use in
+`route_advisor.py`.
 
 ## Setup
 
@@ -74,9 +101,11 @@ first.
 
 ### Data setup
 
-The agent runs out of the box against three small, clearly-labeled sample
-tracts (see the docstring in `tools/access_data.py`) so you can smoke-test
-the plumbing immediately. For real data:
+Both Advisors run out of the box against small, clearly-labeled sample
+tracts (see the docstrings in `tools/access_data.py` — `_sample_tracts`
+for the urban pilot city, `_sample_rural_tracts` for the rural pilot
+county) so you can smoke-test the plumbing immediately. For real urban
+data:
 
 1. **USDA Food Access Research Atlas — LRAM or SRAM.** USDA discontinued
    the old standalone SNAP Retailer Locator (individual retailer points);
@@ -98,14 +127,22 @@ the plumbing immediately. For real data:
    Overpass API in `tools/existing_resources.py` for community gardens,
    grocery stores, farms, and convenience stores (kept separate from real
    grocery stores in scoring — see `tools/gap_scorer.py`, a corner store
-   isn't the same access as a supermarket). Neither LRAM nor SRAM publish
-   individual retailer coordinates, so OSM is this project's only
-   point-level resource layer — that's a real gap worth knowing about, not
-   a hidden one.
+   isn't the same access as a supermarket). The rural query additionally
+   looks for `social_facility=food_bank` and `amenity=marketplace`.
+   Neither LRAM nor SRAM publish individual retailer coordinates, so OSM
+   is this project's only point-level resource layer — that's a real gap
+   worth knowing about, not a hidden one.
 
-To point this at a different city, edit `config.py` (county FIPS + bounding
-box) and re-run `data/prep_atlas.py`. Nothing else in the project hardcodes
-a location — that's the scalability story: the Atlas already covers every
+**Rural data is not yet wired up**: `data/prep_atlas.py` only knows how to
+build the urban database (`data/atlas_pilot_city.db`) today. Building
+`data/atlas_rural_county.db` from a real LRAM/SRAM download for Alexander
+County, IL is the next real step for the Route Advisor — until then it
+always runs on the illustrative sample rows.
+
+To point the Site Advisor at a different city, or the Route Advisor at a
+different rural county, edit `config.py` (county FIPS + bounding box) and
+re-run `data/prep_atlas.py`. Nothing else in the project hardcodes a
+location — that's the scalability story: the Atlas already covers every
 census tract in the country.
 
 ## Run it
@@ -117,6 +154,15 @@ python agent.py
 ```
 Food-Access Advisor ready — pilot city: Chicago, IL
 > where's the highest-need spot for a new food resource?
+```
+
+```bash
+python route_advisor.py
+```
+
+```
+Route Advisor ready — rural pilot county: Alexander County, IL
+> where would a route change help most?
 ```
 
 Each answer also flags its top tract in `data/flagged_tracts.db` for the
@@ -134,6 +180,9 @@ Running a single unattended recheck pass over the flagged-tracts backlog...
 
 It reports how many flagged tracts it checked, how many now have a nearby
 resource, and how many are still needed — and updates each row accordingly.
+It checks "site" (urban) rows against Chicago's live OSM data at a 1-mile
+threshold, and "route" (rural) rows against Alexander County's live OSM
+data at a 10-mile threshold — never the wrong region's data for either.
 
 ### Running the Watchdog on Bedrock AgentCore Runtime
 
@@ -163,35 +212,58 @@ deployment.
 pytest
 ```
 
-`tools/gap_scorer.py`, `tools/recheck_status.py`, and `tools/flagged_tracts.py`
-are pure Python (plus SQLite for the log) with no AWS dependency — all
-tested directly against temp databases, no mocking, no credentials, no
-network required.
+`tools/gap_scorer.py`, `tools/recheck_status.py`, `tools/flagged_tracts.py`,
+and the deterministic parts of `tools/access_data.py` /
+`tools/existing_resources.py` are pure Python (plus SQLite for the log)
+with no AWS dependency — all tested directly against temp databases or
+mocked HTTP calls, no credentials, no live network required.
 
 ## Guardrails
 
-- **Stay-in-the-pilot-city is enforced in code, not just in the prompt.**
-  `get_low_access_tracts` and `get_existing_resources` take no city/region/
-  bounding-box arguments at all — both always resolve to `config.PILOT_CITY`.
-  An earlier version accepted a `city` string and free-form bounding-box
-  floats that were never actually validated against anything, which meant
-  the only thing stopping the model from answering for the wrong region was
-  the system prompt asking it nicely. That's fixed: there's no argument
-  left for the model (or a bug) to misuse, so the boundary holds even if
-  the prompt is ignored, edited, or the model just gets it wrong. The
-  system prompt still tells the agent to *say* when a question is out of
-  scope — that's a wording/UX instruction now, not the only thing enforcing
-  the boundary.
-- **Advisor and Watchdog are separate agents with disjoint tool lists, not
-  one agent with a mode flag.** The Advisor has no tool that can write to a
-  flagged tract's status; the Watchdog has no tool that can answer a siting
-  question or make a new recommendation. `flag_top_tract_for_recheck` (the
-  Advisor's only write into the shared log) hardcodes
-  `recommendation_type="site"` and `source_agent="advisor"` — those are not
-  model-settable arguments, so the Advisor cannot mislabel a row as coming
-  from a different agent. `update_flagged_tract` (the Watchdog's only write)
-  takes a fixed, validated status enum and writes to exactly one table —
-  there's no table-name or raw-SQL argument for a model to misuse.
+- **Stay-in-the-pilot-region is enforced in code, not just in the prompt,
+  for both Advisors.** `get_low_access_tracts` / `get_existing_resources`
+  take no city/region/bounding-box arguments at all — both always resolve
+  to `config.PILOT_CITY`. `get_low_access_rural_tracts` /
+  `get_rural_existing_resources` are pinned the same way to
+  `config.PILOT_RURAL_COUNTY`. An earlier version accepted a `city` string
+  and free-form bounding-box floats that were never actually validated
+  against anything, which meant the only thing stopping the model from
+  answering for the wrong region was the system prompt asking it nicely.
+  That's fixed: there's no argument left for the model (or a bug) to
+  misuse, so the boundary holds even if the prompt is ignored, edited, or
+  the model just gets it wrong. The system prompt still tells each agent
+  to *say* when a question is out of scope — that's a wording/UX
+  instruction now, not the only thing enforcing the boundary.
+- **Site Advisor, Route Advisor, and Watchdog are three separate agents
+  with disjoint tool lists, not one agent with a mode flag.** Neither
+  Advisor has a tool that can write to a flagged tract's status; the
+  Watchdog has no tool that can answer a siting or routing question or
+  make a new recommendation. `flag_top_tract_for_recheck` (Site Advisor's
+  only write) hardcodes `recommendation_type="site"` and
+  `source_agent="advisor"`; `flag_top_route_for_recheck` (Route Advisor's
+  only write) hardcodes `recommendation_type="route"` and
+  `source_agent="route_advisor"` — neither is a model-settable argument,
+  so neither Advisor can mislabel a row as coming from the other.
+  `update_flagged_tract` (the Watchdog's only write) takes a fixed,
+  validated status enum and writes to exactly one table — there's no
+  table-name or raw-SQL argument for a model to misuse.
+- **The Route Advisor's capacity trade-off is a required disclosure, not
+  optional color.** A mobile route or delivery day has fixed stop
+  capacity, so "add a stop here" is usually really "move a stop from
+  somewhere else" — a Success-to-the-Successful risk found during the
+  rural systems-thinking pass (see `docs/design-canvas.html`).
+  `write_route_brief`'s own system prompt requires naming this trade-off
+  explicitly in every brief; it isn't left to the orchestrator prompt to
+  remember, since a content rule worth actually testing needs to live
+  where the sentence a reader sees is actually generated.
+- **The Watchdog checks each flagged tract against the resources and
+  distance threshold that actually match its region.** A "site" row is
+  checked against `get_existing_resources` (urban) at the 1-mile default;
+  a "route" row is checked against `get_rural_existing_resources` (rural)
+  at `RURAL_NEARBY_THRESHOLD_MILES` (10 miles) — never the other region's
+  data, which would silently compare a tract to resources roughly 180
+  miles away and always report "still needed" regardless of what actually
+  opened nearby.
 - Every answer names the USDA Food Access Research Atlas and its
   publication vintage.
 - Every output is framed as decision support, not a decision — a human
@@ -207,13 +279,10 @@ network required.
   (e.g. OSRM) for the pilot city is the single biggest accuracy upgrade
   available, and the reason this project cites transit-time distance as a
   stretch goal rather than shipping it as a guess.
-- **Route Advisor (rural).** A sibling agent for rural food insecurity,
-  using the Atlas's 10-/20-mile rural thresholds instead of the urban
-  half-/one-mile ones, plus an extended OSM query
-  (`social_facility=food_bank`, `amenity=marketplace`) and a
-  capacity-aware scorer — see the design canvas for the full rural
-  systems-thinking pass. Will flag into the same `flagged_tracts` log
-  (`recommendation_type="route"`), which is exactly why that column exists.
+- **Real rural Atlas data.** The Route Advisor's code is built and tested,
+  but `data/prep_atlas.py` doesn't yet build `data/atlas_rural_county.db`
+  from a real LRAM/SRAM download for Alexander County, IL — it runs on
+  illustrative sample data until that's done (see Data setup above).
 - **Trend forecasting.** A model trained across multiple Atlas vintages to
   flag tracts trending toward low-access before they're fully flagged.
   Academic precedent already exists for this technique, so it's the lowest
