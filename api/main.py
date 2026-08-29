@@ -36,16 +36,21 @@ from api.schemas import (
     ExistingResource,
     ImpactMetrics,
     RankedTract,
+    RouteOptimizationRequest,
+    RouteOptimizationResponse,
     VerifyRequest,
 )
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from orchestration import route_request
 from tools.access_data import get_low_access_rural_tracts, get_low_access_tracts
 from tools.evidence_brief import write_evidence_brief, write_route_brief
+from tools.evidence_snapshots import read_changes
 from tools.existing_resources import OverpassQueryError, get_existing_resources, get_rural_existing_resources
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import score_gaps
 from tools.impact_metrics import compute_impact_metrics
+from tools.route_optimizer import optimize_route
+from tools.travel_time_provider import TravelTimeProviderError, get_amazon_location_matrix
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 # Produced by data/prep_tract_boundaries.py -- see that script for why
@@ -98,7 +103,7 @@ async def route_advisor_endpoint(request: AdvisorRequest) -> AdvisorResponse:
     return await _run_advisor("route", "route_advisor", request.question)
 
 
-def _ranked_tracts(get_tracts, get_resources, top_n: int) -> list:
+def _ranked_tracts(get_tracts, get_resources, top_n: int, weights=None) -> list:
     """Deterministic ranking -- the same three calls the corresponding
     Advisor agent makes (get_*_tracts -> get_*_resources -> score_gaps),
     just without the LLM step. No Bedrock call, no added latency; only
@@ -106,21 +111,46 @@ def _ranked_tracts(get_tracts, get_resources, top_n: int) -> list:
     raise OverpassQueryError."""
     tracts = get_tracts()
     resources = get_resources()
-    return score_gaps(tracts, resources, top_n=top_n)
+    return score_gaps(tracts, resources, top_n=top_n, weights=weights)
+
+
+def _weights(**values):
+    supplied = {name: value for name, value in values.items() if value is not None}
+    if supplied and not any(value > 0 for value in supplied.values()):
+        raise HTTPException(status_code=422, detail="At least one priority weight must be greater than zero")
+    return supplied or None
 
 
 @app.get("/api/site-advisor/ranked-tracts", response_model=list[RankedTract])
-def site_ranked_tracts(top_n: int = Query(default=3)):
+def site_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
+                       food_access_gap: float | None = Query(default=None, ge=0),
+                       poverty: float | None = Query(default=None, ge=0),
+                       no_vehicle: float | None = Query(default=None, ge=0),
+                       population_served: float | None = Query(default=None, ge=0),
+                       transit_burden: float | None = Query(default=None, ge=0),
+                       existing_coverage: float | None = Query(default=None, ge=0)):
     try:
-        return _ranked_tracts(get_low_access_tracts, get_existing_resources, top_n)
+        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
+                           population_served=population_served, transit_burden=transit_burden,
+                           existing_coverage=existing_coverage)
+        return _ranked_tracts(get_low_access_tracts, get_existing_resources, top_n, weights)
     except OverpassQueryError as exc:
         raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
 
 
 @app.get("/api/route-advisor/ranked-tracts", response_model=list[RankedTract])
-def route_ranked_tracts(top_n: int = Query(default=3)):
+def route_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
+                        food_access_gap: float | None = Query(default=None, ge=0),
+                        poverty: float | None = Query(default=None, ge=0),
+                        no_vehicle: float | None = Query(default=None, ge=0),
+                        population_served: float | None = Query(default=None, ge=0),
+                        transit_burden: float | None = Query(default=None, ge=0),
+                        existing_coverage: float | None = Query(default=None, ge=0)):
     try:
-        return _ranked_tracts(get_low_access_rural_tracts, get_rural_existing_resources, top_n)
+        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
+                           population_served=population_served, transit_burden=transit_burden,
+                           existing_coverage=existing_coverage)
+        return _ranked_tracts(get_low_access_rural_tracts, get_rural_existing_resources, top_n, weights)
     except OverpassQueryError as exc:
         raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
 
@@ -139,6 +169,29 @@ def route_resources():
         return get_rural_existing_resources()
     except OverpassQueryError as exc:
         raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+
+
+@app.post("/api/route-advisor/optimize", response_model=RouteOptimizationResponse)
+def optimize_route_scenario(request: RouteOptimizationRequest):
+    """Run deterministic route selection; no Bedrock or network call."""
+    try:
+        matrix = request.travel_time_matrix
+        source = None
+        if matrix is None and request.travel_time_provider == "amazon_location":
+            points = [request.depot.model_dump(), *[candidate.model_dump() for candidate in request.candidates]]
+            matrix = get_amazon_location_matrix(points)
+            source = "amazon_location_routes_v2"
+        return optimize_route(
+            candidates=[candidate.model_dump() for candidate in request.candidates],
+            depot=request.depot.model_dump(), max_route_minutes=request.max_route_minutes,
+            vehicle_capacity=request.vehicle_capacity, max_stops=request.max_stops,
+            service_minutes=request.service_minutes, travel_time_matrix=matrix,
+            average_speed_mph=request.average_speed_mph, travel_time_source=source,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except TravelTimeProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 async def _run_evidence(write_brief_fn, tract: RankedTract) -> EvidenceResponse:
@@ -176,6 +229,12 @@ def flagged_tracts(status: str = Query(default="pending")):
 @app.get("/api/impact-metrics", response_model=ImpactMetrics)
 def impact_metrics() -> ImpactMetrics:
     return compute_impact_metrics()
+
+
+@app.get("/api/watchdog/changes")
+def watchdog_changes(limit: int = Query(default=100, ge=1, le=1000), source_id: str | None = None):
+    """Return the auditable snapshot-diff and source-health feed."""
+    return read_changes(limit=limit, source_id=source_id)
 
 
 @app.post("/api/flagged-tracts/verify")

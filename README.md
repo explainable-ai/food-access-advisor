@@ -155,6 +155,25 @@ selected product, source file, thresholds, region, and preparation time in
 its `metadata` table. Tool responses label fallback records as
 `data_mode=sample` and prepared records as `data_mode=real`.
 
+4. **ACS poverty and vehicle access.** After preparing the Atlas database,
+   run `python data/prep_acs.py --year 2024 --regions all`. This calls the
+   official ACS 5-year API and persists poverty-universe, below-poverty,
+   total-household, and no-vehicle-household values by exact tract GEOID.
+   Set `CENSUS_API_KEY` for higher API limits; the public API can also run
+   without a key at lower limits. Direct enrichment requires matching tract
+   boundaries: SRAM and current ACS both use 2020 tract geography. LRAM uses
+   2010 tracts, so the prep command fails closed unless an explicit Census
+   tract crosswalk is added; it never joins incompatible polygons by GEOID
+   alone. An incomplete ACS response also rolls back without relabeling old
+   values as the new vintage.
+
+The ranked-tract endpoints accept non-negative query weights named
+`food_access_gap`, `poverty`, `no_vehicle`, `population_served`,
+`transit_burden`, and `existing_coverage`. Weights are normalized to sum to
+one. Every result returns the normalized components, their point
+contributions, missing-evidence disclosures, a plain-language explanation,
+and a ±20% one-weight-at-a-time score/rank sensitivity range.
+
 To point the Site Advisor at a different city, or the Route Advisor at a
 different rural county, edit `config.py` (county FIPS + bounding box) and
 re-run `data/prep_atlas.py`. Nothing else in the project hardcodes a
@@ -247,7 +266,20 @@ new routing logic, which stays exactly the plain `if` it always was.
 `GET /api/flagged-tracts` and `GET /api/impact-metrics` wrap
 `tools/flagged_tracts.py` and `tools/impact_metrics.py` directly;
 `GET /api/tract-boundaries` serves the GeoJSON `data/prep_tract_boundaries.py`
-produces. Run it with:
+produces. `POST /api/route-advisor/optimize` runs an exact constrained
+orienteering model for up to 15 candidate stops. It maximizes
+priority-weighted demand while enforcing depot return, maximum route time,
+service time per stop, vehicle capacity, maximum stops, and required
+existing stops. The response reports selected stop order, communities that
+gain or lose coverage, capacity use, and infeasibility. Supply a
+depot-plus-candidates road-network travel-time matrix when available; if it
+is omitted, the response is explicitly labelled
+`haversine_drive_time_estimate` rather than presented as road-network truth.
+Amazon Location calls are server-side through the Routes V2 `geo-routes`
+client. Grant the API/AgentCore execution role only
+`geo-routes:CalculateRouteMatrix` on the regional default provider; see
+[`deploy/AMAZON_LOCATION_SETUP.md`](deploy/AMAZON_LOCATION_SETUP.md).
+Run the API with:
 
 ```bash
 uvicorn api.main:app --reload
@@ -416,6 +448,11 @@ above, this needs your own AWS credentials to actually run.
   here is public, tract- or retailer-level, not individual-level.
 
 ## Roadmap
+
+Supplemental source adapters and the Watchdog snapshot/diff contract are now
+implemented. See [`docs/ADDITIONAL_DATA_AND_WATCHDOG.md`](docs/ADDITIONAL_DATA_AND_WATCHDOG.md)
+for the exact official sources, freshness rules, change semantics, and the
+production persistence boundary.
 
 - **Watchdog on a real recurring schedule.** `watchdog_agentcore_entry.py`
   is deployable today; [`deploy/EVENTBRIDGE_SETUP.md`](deploy/EVENTBRIDGE_SETUP.md)

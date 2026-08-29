@@ -104,6 +104,21 @@ def test_site_ranked_tracts_returns_scored_list(monkeypatch):
     assert "need_score" in body[0]
 
 
+def test_site_ranked_tracts_accepts_adjustable_weights(monkeypatch):
+    monkeypatch.setattr(api_main, "get_existing_resources", lambda: [])
+    response = client.get("/api/site-advisor/ranked-tracts", params={"poverty": 1, "food_access_gap": 0})
+    assert response.status_code == 200
+    assert response.json()[0]["weights_used"]["poverty"] > 0
+
+
+def test_site_ranked_tracts_rejects_all_zero_weights(monkeypatch):
+    response = client.get("/api/site-advisor/ranked-tracts", params={
+        "food_access_gap": 0, "poverty": 0, "no_vehicle": 0,
+        "population_served": 0, "transit_burden": 0, "existing_coverage": 0})
+    assert response.status_code == 422
+    assert "greater than zero" in response.json()["detail"]
+
+
 def test_route_ranked_tracts_returns_scored_list(monkeypatch):
     monkeypatch.setattr(api_main, "get_rural_existing_resources", lambda: [])
 
@@ -145,6 +160,52 @@ def test_route_resources_surfaces_overpass_failure_as_502(monkeypatch):
 
     response = client.get("/api/route-advisor/resources")
 
+    assert response.status_code == 502
+
+
+def test_route_optimization_endpoint_returns_constrained_plan():
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1, "service_minutes": 10,
+        "candidates": [
+            {"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90},
+            {"stop_id": "B", "lat": 37.02, "lon": -89.2, "demand": 5, "need_score": 40}],
+        "travel_time_matrix": [[0, 5, 6], [5, 0, 2], [6, 2, 0]],
+    })
+    assert response.status_code == 200
+    assert response.json()["selected_stops"][0]["stop_id"] == "A"
+
+
+def test_route_optimization_endpoint_rejects_bad_matrix():
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1,
+        "candidates": [{"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90}],
+        "travel_time_matrix": [[0]],
+    })
+    assert response.status_code == 422
+
+
+def test_route_optimization_endpoint_uses_amazon_location(monkeypatch):
+    monkeypatch.setattr(api_main, "get_amazon_location_matrix", lambda points: [[0, 5], [5, 0]])
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1,
+        "candidates": [{"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90}],
+    })
+    assert response.status_code == 200
+    assert response.json()["travel_time_source"] == "amazon_location_routes_v2"
+
+
+def test_route_optimization_endpoint_surfaces_amazon_location_failure(monkeypatch):
+    def fail(_points):
+        raise api_main.TravelTimeProviderError("routing unavailable")
+    monkeypatch.setattr(api_main, "get_amazon_location_matrix", fail)
+    response = client.post("/api/route-advisor/optimize", json={
+        "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
+        "vehicle_capacity": 10, "max_stops": 1,
+        "candidates": [{"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90}],
+    })
     assert response.status_code == 502
 
 

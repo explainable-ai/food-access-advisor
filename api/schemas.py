@@ -6,9 +6,9 @@ tools/gap_scorer.py's score_gaps output) rather than inventing a new
 API-specific shape -- one less thing to keep in sync as those tools evolve.
 """
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 FlaggedTractStatus = Literal["pending", "possible_change", "still_needed", "resource_found"]
 
@@ -64,6 +64,17 @@ class RankedTract(BaseModel):
     centroid_lat: Optional[float] = None
     centroid_lon: Optional[float] = None
     need_score: float
+    rank: Optional[int] = None
+    poverty_universe: Optional[float] = None
+    population_below_poverty: Optional[float] = None
+    households_total: Optional[float] = None
+    households_no_vehicle: Optional[float] = None
+    score_components: dict[str, Optional[float]] = Field(default_factory=dict)
+    score_contributions: dict[str, float] = Field(default_factory=dict)
+    weights_used: dict[str, float] = Field(default_factory=dict)
+    missing_components: list[str] = Field(default_factory=list)
+    score_explanation: str = ""
+    sensitivity: dict[str, Any] = Field(default_factory=dict)
     nearest_resource_kind: Optional[str] = None
     nearest_resource_miles: Optional[float] = None
     nearest_resource_minutes: Optional[float] = None
@@ -85,6 +96,50 @@ class EvidenceRequest(BaseModel):
 
 class EvidenceResponse(BaseModel):
     brief: str
+
+
+class RoutePoint(BaseModel):
+    lat: float
+    lon: float
+
+
+class RouteCandidate(RoutePoint):
+    stop_id: str = Field(min_length=1)
+    demand: float = Field(ge=0)
+    need_score: float = Field(ge=0, le=100)
+    population: Optional[int] = Field(default=None, ge=0)
+    tract_fips: Optional[str] = None
+    currently_served: bool = False
+    required: bool = False
+
+
+class RouteOptimizationRequest(BaseModel):
+    candidates: list[RouteCandidate] = Field(min_length=1, max_length=15)
+    depot: RoutePoint
+    max_route_minutes: float = Field(gt=0)
+    vehicle_capacity: float = Field(gt=0)
+    max_stops: int = Field(gt=0, le=15)
+    service_minutes: float = Field(default=20, ge=0)
+    travel_time_matrix: Optional[list[list[float]]] = None
+    average_speed_mph: float = Field(default=35, gt=0)
+    travel_time_provider: Literal["amazon_location", "estimate"] = "amazon_location"
+
+
+class RouteOptimizationResponse(BaseModel):
+    status: Literal["optimal", "infeasible"]
+    reason: Optional[str] = None
+    objective: Optional[str] = None
+    travel_time_source: str
+    route_minutes: Optional[float] = None
+    travel_minutes: Optional[float] = None
+    service_minutes: Optional[float] = None
+    capacity_used: Optional[float] = None
+    capacity_remaining: Optional[float] = None
+    priority_benefit: Optional[float] = None
+    selected_stops: list[dict[str, Any]]
+    unselected_stops: list[Any]
+    coverage_change: Optional[dict[str, list[str]]] = None
+    constraints: Optional[dict[str, float]] = None
 
 
 class VerifyRequest(BaseModel):
