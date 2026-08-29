@@ -43,9 +43,17 @@ def _connect(db_path: Path = DB_PATH):
     return connection
 
 
+def _without_retrieval_times(value: Any) -> Any:
+    """Remove volatile retrieval timestamps without discarding provenance."""
+    if isinstance(value, dict):
+        return {key: _without_retrieval_times(value[key]) for key in sorted(value) if key != "retrieved_at"}
+    if isinstance(value, list):
+        return [_without_retrieval_times(item) for item in value]
+    return value
+
+
 def _canonical_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    ignored = {"retrieved_at", "source_citation"}
-    normalized = [{key: row[key] for key in sorted(row) if key not in ignored} for row in records]
+    normalized = [_without_retrieval_times(row) for row in records]
     return sorted(normalized, key=_entity_id)
 
 
