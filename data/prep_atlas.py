@@ -54,6 +54,20 @@ def _normalize_tract_fips(value):
     return digits.zfill(11) if digits else ""
 
 
+def _numeric_or_default(value, default=0.0):
+    """Convert a populated Atlas cell; treat pandas NA/NaN as missing."""
+    if pd.isna(value):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _binary_flag(value):
+    return int(_numeric_or_default(value) != 0)
+
+
 def _load_centroids(path=CENTROID_PATH):
     if not path.exists():
         return {}
@@ -96,11 +110,12 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
     for _, row in data.iterrows():
         fips = row["_fips"]
         try:
-            coordinates = (float(row[lat]), float(row[lon])) if lat and lon else centroids.get(fips, (None, None))
+            has_coordinates = lat and lon and pd.notna(row[lat]) and pd.notna(row[lon])
+            coordinates = (float(row[lat]), float(row[lon])) if has_coordinates else centroids.get(fips, (None, None))
         except (TypeError, ValueError):
             coordinates = centroids.get(fips, (None, None))
-        rows.append((fips, int(float(row[population] or 0)), int(float(row[tight] or 0) != 0),
-                     int(float(row[wide] or 0) != 0), *coordinates))
+        rows.append((fips, int(_numeric_or_default(row[population])), _binary_flag(row[tight]),
+                     _binary_flag(row[wide]), *coordinates))
     target = region["db_path"]
     fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
     os.close(fd)
