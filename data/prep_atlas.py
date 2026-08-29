@@ -7,7 +7,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-
+from contextlib import closing
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -87,54 +87,140 @@ def _load_centroids(path=CENTROID_PATH):
     return result
 
 
-def prepare_region_database(frame, region_name, product, source_path, centroids=None):
+def prepare_region_database(
+    frame,
+    region_name,
+    product,
+    source_path,
+    centroids=None,
+):
     """Filter one configured region and atomically replace its database."""
     region = REGIONS[region_name]
+
     tract = _find_col(frame.columns, TRACT_COL_MATCH)
     population = _find_col(frame.columns, POP_COL_MATCH)
     tight = _find_col(frame.columns, region["tight"])
     wide = _find_col(frame.columns, region["wide"])
-    missing = [name for name, value in {"tract": tract, "population": population,
-               "tight threshold": tight, "wide threshold": wide}.items() if value is None]
+
+    missing = [
+        name
+        for name, value in {
+            "tract": tract,
+            "population": population,
+            "tight threshold": tight,
+            "wide threshold": wide,
+        }.items()
+        if value is None
+    ]
+
     if missing:
-        raise ValueError(f"{region_name}: could not match {', '.join(missing)}")
+        raise ValueError(
+            f"{region_name}: could not match {', '.join(missing)}"
+        )
+
     lat = _find_col(frame.columns, LAT_COL_MATCH)
     lon = _find_col(frame.columns, LON_COL_MATCH)
+
     data = frame.copy()
     data["_fips"] = data[tract].map(_normalize_tract_fips)
+
     prefixes = tuple(region["config"]["county_fips"])
     data = data[data["_fips"].str.startswith(prefixes)]
+
     if data.empty:
-        raise ValueError(f"{region_name}: no tracts matched county FIPS {prefixes}")
+        raise ValueError(
+            f"{region_name}: no tracts matched county FIPS {prefixes}"
+        )
+
     centroids = centroids or {}
     rows = []
+
     for _, row in data.iterrows():
         fips = row["_fips"]
+
         try:
-            has_coordinates = lat and lon and pd.notna(row[lat]) and pd.notna(row[lon])
-            coordinates = (float(row[lat]), float(row[lon])) if has_coordinates else centroids.get(fips, (None, None))
+            has_coordinates = (
+                lat
+                and lon
+                and pd.notna(row[lat])
+                and pd.notna(row[lon])
+            )
+            coordinates = (
+                (float(row[lat]), float(row[lon]))
+                if has_coordinates
+                else centroids.get(fips, (None, None))
+            )
         except (TypeError, ValueError):
             coordinates = centroids.get(fips, (None, None))
-        rows.append((fips, int(_numeric_or_default(row[population])), _binary_flag(row[tight]),
-                     _binary_flag(row[wide]), *coordinates))
+
+        rows.append(
+            (
+                fips,
+                int(_numeric_or_default(row[population])),
+                _binary_flag(row[tight]),
+                _binary_flag(row[wide]),
+                *coordinates,
+            )
+        )
+
     target = region["db_path"]
-    fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+    fd, temporary = tempfile.mkstemp(
+        prefix=f".{target.name}.",
+        dir=target.parent,
+    )
     os.close(fd)
+
     try:
-        with sqlite3.connect(temporary) as connection:
-            connection.execute("CREATE TABLE tracts (tract_fips TEXT PRIMARY KEY, population INTEGER, low_access_half_mile INTEGER, low_access_one_mile INTEGER, centroid_lat REAL, centroid_lon REAL)")
-            connection.executemany("INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)", rows)
-            connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-            connection.executemany("INSERT INTO metadata VALUES (?, ?)", {
-                "data_mode": "real", "product": product, "region": region_name,
-                "region_name": region["config"]["name"], "thresholds": region["thresholds"],
-                "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[product],
-                "source_file": str(source_path), "prepared_at": datetime.now(timezone.utc).isoformat(),
-            }.items())
+        # `closing` explicitly releases the SQLite file handle before
+        # Windows attempts to replace the destination database.
+        with closing(sqlite3.connect(temporary)) as connection:
+            with connection:
+                connection.execute(
+                    "CREATE TABLE tracts ("
+                    "tract_fips TEXT PRIMARY KEY, "
+                    "population INTEGER, "
+                    "low_access_half_mile INTEGER, "
+                    "low_access_one_mile INTEGER, "
+                    "centroid_lat REAL, "
+                    "centroid_lon REAL)"
+                )
+
+                connection.executemany(
+                    "INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)",
+                    rows,
+                )
+
+                connection.execute(
+                    "CREATE TABLE metadata ("
+                    "key TEXT PRIMARY KEY, "
+                    "value TEXT NOT NULL)"
+                )
+
+                connection.executemany(
+                    "INSERT INTO metadata VALUES (?, ?)",
+                    {
+                        "data_mode": "real",
+                        "product": product,
+                        "region": region_name,
+                        "region_name": region["config"]["name"],
+                        "thresholds": region["thresholds"],
+                        "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[
+                            product
+                        ],
+                        "source_file": str(source_path),
+                        "prepared_at": datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+                    }.items(),
+                )
+
+        # The SQLite connection is closed before this Windows file operation.
         os.replace(temporary, target)
+
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
     return len(rows), target
 
 
