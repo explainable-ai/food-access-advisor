@@ -98,7 +98,10 @@ def test_adjustable_weights_can_change_ranking():
     high_population["poverty_rate"] = 0.1
     weights = {"food_access_gap": 0, "poverty": 1, "no_vehicle": 0,
                "population_served": 0, "transit_burden": 0, "existing_coverage": 0}
-    assert score_gaps([high_population, high_poverty], [], top_n=2, weights=weights)[0]["tract_fips"] == "A"
+    result = score_gaps([high_population, high_poverty], [], top_n=2, weights=weights)
+    assert result[0]["tract_fips"] == "A"
+    assert "poverty" in result[0]["score_explanation"]
+    assert "food-access gap" not in result[0]["score_explanation"]
 
 
 def test_weights_are_normalized_and_invalid_weights_fail():
