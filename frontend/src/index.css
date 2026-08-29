@@ -1,0 +1,377 @@
+/* Palette matches the project's existing dashboard.html / project-tracker
+   artifacts, so the new UI reads as the same product, not a bolted-on
+   redesign. */
+:root {
+  --paper: #f5f7f6;
+  --paper-raised: #ffffff;
+  --ink: #17212b;
+  --ink-soft: #52606d;
+  --line: #c9d2dc;
+  --blueprint: #1d5fa8;
+  --blueprint-soft: #e4edf7;
+  --teal: #2a7d68;
+  --teal-soft: #deefea;
+  --amber: #a85b12;
+  --amber-soft: #f5e6d3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 24px;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--line);
+}
+
+.top-nav .brand {
+  font-weight: 700;
+  margin-right: 12px;
+}
+
+.top-nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.92rem;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+}
+
+.top-nav a.active {
+  color: var(--blueprint);
+  border-bottom-color: var(--blueprint);
+}
+
+main {
+  flex: 1;
+  padding: 24px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 6px;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 24px 0 10px;
+}
+
+.page-sub {
+  color: var(--ink-soft);
+  max-width: 68ch;
+  margin: 0 0 20px;
+}
+
+/* Home map page */
+.region-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.region-toggle button {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  background: var(--paper-raised);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.region-toggle button.active {
+  background: var(--blueprint-soft);
+  border-color: var(--blueprint);
+  color: var(--blueprint);
+}
+
+.map-and-stats {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 16px;
+}
+
+.map-container {
+  height: 520px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.stat-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stat-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.stat-card .n {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card .l {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.legend {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 0.82rem;
+}
+
+.legend-title {
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.legend p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+@media (max-width: 800px) {
+  .map-and-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Advisor workspaces / chat bar */
+.chat-bar-wrapper {
+  margin-bottom: 8px;
+}
+
+.chat-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-bar input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.chat-bar button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 6px;
+  background: var(--blueprint);
+  color: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.chat-bar button:disabled {
+  background: var(--line);
+  cursor: default;
+}
+
+.chat-status {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0 0 10px;
+}
+
+.chat-error {
+  color: #a83c12;
+  background: var(--amber-soft);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin: 0 0 10px;
+}
+
+.evidence-panel {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin: 0 0 16px;
+}
+
+.evidence-panel-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  margin: 0 0 8px;
+}
+
+.evidence-panel-text {
+  white-space: pre-wrap;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Shared tables */
+.tract-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tract-table th,
+.tract-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tract-table th {
+  background: var(--paper);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+}
+
+.tract-table .fips {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.status-pill {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-pending {
+  background: var(--blueprint-soft);
+  color: var(--blueprint);
+}
+
+.status-still_needed {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.status-resource_found {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+/* Follow-up page */
+.regions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 700px) {
+  .regions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.card h2 {
+  margin: 0 0 4px;
+  text-transform: capitalize;
+}
+
+.region-note {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  margin: 0 0 14px;
+}
+
+.stat-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.stat .n {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.stat .l {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+.stat.unclosed .n {
+  color: var(--amber);
+}
+
+.stat.resolved .n {
+  color: var(--teal);
+}
+
+.median {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-bottom: 14px;
+}
