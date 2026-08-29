@@ -21,8 +21,8 @@ def test_get_low_access_rural_tracts_has_no_region_argument():
 
 
 def test_sample_fallback_returns_alexander_county_shaped_rows():
-    """Without a real RURAL_DB_PATH on disk (data/prep_atlas.py doesn't
-    build it yet), this must return illustrative sample rows rather than
+    """Without a prepared RURAL_DB_PATH on disk, this must return
+    illustrative sample rows rather than
     an empty list or an error — same fallback behavior as
     get_low_access_tracts before real Atlas data is prepped."""
     rows = get_low_access_rural_tracts()
@@ -35,6 +35,7 @@ def test_sample_fallback_returns_alexander_county_shaped_rows():
         assert "low_access_one_mile" in row
         assert "centroid_lat" in row
         assert "centroid_lon" in row
+        assert row["data_mode"] == "sample"
 
 
 def test_limit_is_respected():
