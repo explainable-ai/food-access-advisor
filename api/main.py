@@ -22,15 +22,26 @@ sub-second REST call.
 """
 
 import asyncio
+import json
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.schemas import AdvisorRequest, AdvisorResponse, ImpactMetrics
+from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from orchestration import route_request
 from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts
 from tools.impact_metrics import compute_impact_metrics
+
+DATA_DIR = Path(__file__).parent.parent / "data"
+# Produced by data/prep_tract_boundaries.py -- see that script for why
+# these are separate one-time-generated files rather than computed here.
+BOUNDARY_FILES_BY_COUNTY_FIPS = {
+    PILOT_CITY["county_fips"][0]: DATA_DIR / "tract_boundaries_pilot_city.geojson",
+    PILOT_RURAL_COUNTY["county_fips"][0]: DATA_DIR / "tract_boundaries_rural_county.geojson",
+}
 
 app = FastAPI(title="Food-Access Advisor API")
 
@@ -88,3 +99,25 @@ def flagged_tracts(status: str = Query(default="pending")):
 @app.get("/api/impact-metrics", response_model=ImpactMetrics)
 def impact_metrics() -> ImpactMetrics:
     return compute_impact_metrics()
+
+
+@app.get("/api/tract-boundaries")
+def tract_boundaries(county: str = Query(..., description="County FIPS, e.g. 17031 or 17003")):
+    """Serves the GeoJSON FeatureCollection built by
+    data/prep_tract_boundaries.py -- one file per pilot region, keyed by
+    tract_fips. Returns 404 with a clear message (not a bare file-not-found
+    crash) if that prep script hasn't been run yet."""
+    boundary_path = BOUNDARY_FILES_BY_COUNTY_FIPS.get(county)
+    if boundary_path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No tract boundaries configured for county {county!r}; "
+            f"expected one of {list(BOUNDARY_FILES_BY_COUNTY_FIPS)}",
+        )
+    if not boundary_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"{boundary_path.name} doesn't exist yet -- run "
+            "`python data/prep_tract_boundaries.py` first.",
+        )
+    return json.loads(boundary_path.read_text())
