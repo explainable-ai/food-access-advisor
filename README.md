@@ -160,7 +160,12 @@ its `metadata` table. Tool responses label fallback records as
    official ACS 5-year API and persists poverty-universe, below-poverty,
    total-household, and no-vehicle-household values by exact tract GEOID.
    Set `CENSUS_API_KEY` for higher API limits; the public API can also run
-   without a key at lower limits.
+   without a key at lower limits. Direct enrichment requires matching tract
+   boundaries: SRAM and current ACS both use 2020 tract geography. LRAM uses
+   2010 tracts, so the prep command fails closed unless an explicit Census
+   tract crosswalk is added; it never joins incompatible polygons by GEOID
+   alone. An incomplete ACS response also rolls back without relabeling old
+   values as the new vintage.
 
 The ranked-tract endpoints accept non-negative query weights named
 `food_access_gap`, `poverty`, `no_vehicle`, `population_served`,
