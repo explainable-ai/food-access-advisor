@@ -28,11 +28,23 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.schemas import AdvisorRequest, AdvisorResponse, ImpactMetrics
+from api.schemas import (
+    AdvisorRequest,
+    AdvisorResponse,
+    EvidenceRequest,
+    EvidenceResponse,
+    ExistingResource,
+    ImpactMetrics,
+    RankedTract,
+    VerifyRequest,
+)
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from orchestration import route_request
-from tools.existing_resources import OverpassQueryError
-from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts
+from tools.access_data import get_low_access_rural_tracts, get_low_access_tracts
+from tools.evidence_brief import write_evidence_brief, write_route_brief
+from tools.existing_resources import OverpassQueryError, get_existing_resources, get_rural_existing_resources
+from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
+from tools.gap_scorer import score_gaps
 from tools.impact_metrics import compute_impact_metrics
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -86,6 +98,71 @@ async def route_advisor_endpoint(request: AdvisorRequest) -> AdvisorResponse:
     return await _run_advisor("route", "route_advisor", request.question)
 
 
+def _ranked_tracts(get_tracts, get_resources, top_n: int) -> list:
+    """Deterministic ranking -- the same three calls the corresponding
+    Advisor agent makes (get_*_tracts -> get_*_resources -> score_gaps),
+    just without the LLM step. No Bedrock call, no added latency; only
+    get_*_resources touches the network (live Overpass), so this can still
+    raise OverpassQueryError."""
+    tracts = get_tracts()
+    resources = get_resources()
+    return score_gaps(tracts, resources, top_n=top_n)
+
+
+@app.get("/api/site-advisor/ranked-tracts", response_model=list[RankedTract])
+def site_ranked_tracts(top_n: int = Query(default=3)):
+    try:
+        return _ranked_tracts(get_low_access_tracts, get_existing_resources, top_n)
+    except OverpassQueryError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+
+
+@app.get("/api/route-advisor/ranked-tracts", response_model=list[RankedTract])
+def route_ranked_tracts(top_n: int = Query(default=3)):
+    try:
+        return _ranked_tracts(get_low_access_rural_tracts, get_rural_existing_resources, top_n)
+    except OverpassQueryError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+
+
+@app.get("/api/site-advisor/resources", response_model=list[ExistingResource])
+def site_resources():
+    try:
+        return get_existing_resources()
+    except OverpassQueryError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+
+
+@app.get("/api/route-advisor/resources", response_model=list[ExistingResource])
+def route_resources():
+    try:
+        return get_rural_existing_resources()
+    except OverpassQueryError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+
+
+async def _run_evidence(write_brief_fn, tract: RankedTract) -> EvidenceResponse:
+    """A single Bedrock call (one tiny sub-agent, see tools/evidence_brief.py)
+    -- not the multi-tool agent loop POST /api/*-advisor runs. Fast enough
+    that a frontend can call it when a user clicks one ranked-table row,
+    distinct from the slower free-text "Ask the Advisor" box."""
+    try:
+        brief = await asyncio.to_thread(write_brief_fn, tract.model_dump())
+    except Exception as exc:  # Bedrock/model errors -- surface a real message, not a bare 500
+        raise HTTPException(status_code=502, detail=f"evidence brief failed: {exc}") from exc
+    return EvidenceResponse(brief=brief)
+
+
+@app.post("/api/site-advisor/evidence", response_model=EvidenceResponse)
+async def site_evidence(request: EvidenceRequest) -> EvidenceResponse:
+    return await _run_evidence(write_evidence_brief, request.tract)
+
+
+@app.post("/api/route-advisor/evidence", response_model=EvidenceResponse)
+async def route_evidence(request: EvidenceRequest) -> EvidenceResponse:
+    return await _run_evidence(write_route_brief, request.tract)
+
+
 @app.get("/api/flagged-tracts")
 def flagged_tracts(status: str = Query(default="pending")):
     if status not in ALLOWED_STATUSES:
@@ -99,6 +176,19 @@ def flagged_tracts(status: str = Query(default="pending")):
 @app.get("/api/impact-metrics", response_model=ImpactMetrics)
 def impact_metrics() -> ImpactMetrics:
     return compute_impact_metrics()
+
+
+@app.post("/api/flagged-tracts/verify")
+def verify_tract(request: VerifyRequest):
+    """A human's verification of a Watchdog-observed 'possible_change' --
+    see tools/flagged_tracts.py's verify_flagged_tract for the four
+    verification choices and what each maps to."""
+    result = verify_flagged_tract(
+        request.tract_fips, request.recommendation_type, request.verification, note=request.note or ""
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
 
 
 @app.get("/api/tract-boundaries")
