@@ -33,9 +33,9 @@ class _FakeResponse:
 
 def test_successful_query_parses_elements(monkeypatch):
     elements = [
-        {"lat": 41.80, "lon": -87.63, "tags": {"shop": "supermarket", "name": "Big Grocery"}},
-        {"lat": 41.81, "lon": -87.64, "tags": {"shop": "convenience", "name": "Corner Shop"}},
-        {"center": {"lat": 41.82, "lon": -87.65}, "tags": {"leisure": "garden", "name": "Community Garden"}},
+        {"type": "node", "id": 10, "lat": 41.80, "lon": -87.63, "tags": {"shop": "supermarket", "name": "Big Grocery"}},
+        {"type": "node", "id": 11, "lat": 41.81, "lon": -87.64, "tags": {"shop": "convenience", "name": "Corner Shop"}},
+        {"type": "way", "id": 12, "center": {"lat": 41.82, "lon": -87.65}, "tags": {"leisure": "garden", "name": "Community Garden"}},
     ]
     monkeypatch.setattr(
         existing_resources.requests, "post", lambda *a, **k: _FakeResponse(elements)
@@ -47,6 +47,7 @@ def test_successful_query_parses_elements(monkeypatch):
     assert kinds["Big Grocery"] == "grocery"
     assert kinds["Corner Shop"] == "convenience"
     assert kinds["Community Garden"] == "garden"
+    assert result[0]["entity_id"] == "osm:node/10"
 
 
 def test_transient_failure_then_success_recovers(monkeypatch):
@@ -146,8 +147,8 @@ def test_urban_query_does_not_include_rural_only_tags(monkeypatch):
 
 def test_rural_kind_classification(monkeypatch):
     elements = [
-        {"lat": 37.01, "lon": -89.18, "tags": {"social_facility": "food_bank", "name": "Rural Food Bank"}},
-        {"lat": 37.02, "lon": -89.19, "tags": {"amenity": "marketplace", "name": "Mobile Market"}},
+        {"type": "node", "id": 20, "lat": 37.01, "lon": -89.18, "tags": {"social_facility": "food_bank", "name": "Rural Food Bank"}},
+        {"type": "node", "id": 21, "lat": 37.02, "lon": -89.19, "tags": {"amenity": "marketplace", "name": "Mobile Market"}},
     ]
     monkeypatch.setattr(
         existing_resources.requests, "post", lambda *a, **k: _FakeResponse(elements)

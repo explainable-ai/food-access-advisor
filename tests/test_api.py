@@ -19,6 +19,12 @@ from tools.existing_resources import OverpassQueryError  # noqa: E402
 client = TestClient(api_main.app)
 
 
+def test_health_endpoint_has_no_dependencies():
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def use_temp_db(tmp_path, monkeypatch):
     db_path = tmp_path / "flagged_tracts_test.db"
     monkeypatch.setattr(flagged_tracts, "DB_PATH", db_path)

@@ -23,6 +23,8 @@ import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 
+from storage.aws_persistence import AwsFlaggedTractStore, aws_storage_enabled
+
 try:
     from strands import tool
 except ImportError:  # pragma: no cover - optional runtime dependency in local tests.
@@ -46,6 +48,10 @@ VERIFICATION_STATUS_MAP = {
     "incorrect_record": "still_needed",
     "unrelated": "still_needed",
 }
+
+
+def _aws_store() -> AwsFlaggedTractStore:
+    return AwsFlaggedTractStore()
 
 
 def _connect():
@@ -105,6 +111,10 @@ def flag_tract_for_recheck(
     Returns:
         The written row as a dict, with status set to "pending".
     """
+    if aws_storage_enabled():
+        return _aws_store().flag(tract_fips, recommendation_type, source_agent, population,
+                                 centroid_lat, centroid_lon, note)
+
     conn = _connect()
     try:
         conn.execute(
@@ -171,6 +181,9 @@ def read_flagged_tracts(status: str = "pending") -> list:
     if status not in ALLOWED_STATUSES:
         return [{"error": f"Unknown status '{status}'. Use one of: {ALLOWED_STATUSES}"}]
 
+    if aws_storage_enabled():
+        return _aws_store().read(status)
+
     if not DB_PATH.exists():
         return [r for r in _sample_flagged_tracts() if r["status"] == status]
 
@@ -208,6 +221,9 @@ def update_flagged_tract(tract_fips: str, recommendation_type: str, status: str,
     """
     if status not in ALLOWED_STATUSES:
         return {"error": f"Unknown status '{status}'. Use one of: {ALLOWED_STATUSES}"}
+
+    if aws_storage_enabled():
+        return _aws_store().update(tract_fips, recommendation_type, status, note)
 
     conn = _connect()
     try:

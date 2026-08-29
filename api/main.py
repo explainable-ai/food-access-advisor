@@ -73,6 +73,12 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+def health():
+    """Load-balancer health check; deliberately performs no paid/network calls."""
+    return {"status": "ok"}
+
+
 def _answer_text(graph_result, node_id: str) -> str:
     """Pull the underlying agent's plain-text answer out of a GraphResult.
 

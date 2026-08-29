@@ -17,6 +17,13 @@ class Session:
         return Response(self.payload)
 
 
+class PagedSession:
+    def __init__(self, pages): self.pages, self.calls = pages, []
+    def get(self, url, params, headers, timeout):
+        self.calls.append((url, params, headers, timeout))
+        return Response(self.pages[len(self.calls) - 1])
+
+
 def client(payload):
     return ChicagoSocrataClient(app_token="token", session=Session(payload),
         clock=lambda: datetime(2026, 8, 29, tzinfo=timezone.utc))
@@ -47,3 +54,17 @@ def test_legacy_market_dataset_is_never_labeled_current():
     batch = client([{"id": "m1", "market_name": "Neighborhood Market", "latitude": "41.8", "longitude": "-87.6"}]).fetch_farmers_markets()
     assert batch.quality.status == EvidenceStatus.STALE_CACHE
     assert batch.records[0].status == "legacy_directory_record"
+
+
+def test_socrata_fetches_every_page_in_stable_order():
+    pages = [
+        [{"inspection_id": "1", "dba_name": "A"}, {"inspection_id": "2", "dba_name": "B"}],
+        [{"inspection_id": "3", "dba_name": "C"}],
+    ]
+    session = PagedSession(pages)
+    adapter = ChicagoSocrataClient(session=session,
+        clock=lambda: datetime(2026, 8, 29, tzinfo=timezone.utc))
+    batch = adapter.fetch_food_inspections(limit=2)
+    assert [record.entity_id for record in batch.records] == ["1", "2", "3"]
+    assert [call[1]["$offset"] for call in session.calls] == [0, 2]
+    assert all(call[1]["$order"] == ":id ASC" for call in session.calls)
