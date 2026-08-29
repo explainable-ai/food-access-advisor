@@ -29,6 +29,7 @@ REGIONS = {
               "tight": re.compile(r"lilatracts.*1and10", re.I),
               "wide": re.compile(r"lilatracts.*1and20", re.I), "thresholds": "10/20 miles"},
 }
+ATLAS_GEOGRAPHY_VINTAGE = {"LRAM": "2010", "SRAM": "2020"}
 
 
 def _find_col(columns, pattern):
@@ -127,6 +128,7 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
             connection.executemany("INSERT INTO metadata VALUES (?, ?)", {
                 "data_mode": "real", "product": product, "region": region_name,
                 "region_name": region["config"]["name"], "thresholds": region["thresholds"],
+                "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[product],
                 "source_file": str(source_path), "prepared_at": datetime.now(timezone.utc).isoformat(),
             }.items())
         os.replace(temporary, target)
