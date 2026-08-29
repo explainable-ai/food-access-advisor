@@ -14,6 +14,17 @@ mode. Two agents with disjoint tool lists can't do that — the Watchdog
 literally has no tool that can answer a siting question, and the Advisor
 has no tool that can write to the flagged-tracts log's status field.
 
+Watchdog is generalized rather than tripled: one accountability agent
+watches both the Site Advisor's ("site") and the Route Advisor's ("route")
+recommendations, rather than building a third agent to do the same job.
+That means it needs BOTH regions' live resource data, not just Chicago's —
+a "route" row's centroid sits in Alexander County, and checking it against
+Chicago's OSM query would silently compare it to resources roughly 180
+miles away, always reporting "still needed" regardless of what actually
+opened nearby. See the system prompt's step 3/4 and
+tools/recheck_status.py's RURAL_NEARBY_THRESHOLD_MILES for how the two
+regions are told apart.
+
 Run: python watchdog_agent.py
 
 Naming note: this file is `watchdog_agent.py`, not `watchdog.py` — Strands
@@ -28,34 +39,46 @@ from strands import Agent
 
 from config import PILOT_CITY
 from model import build_model
-from tools.existing_resources import get_existing_resources
+from tools.existing_resources import get_existing_resources, get_rural_existing_resources
 from tools.flagged_tracts import read_flagged_tracts, update_flagged_tract
 from tools.recheck_status import check_resource_appeared
 
-SYSTEM_PROMPT = f"""You are the Food-Access Watchdog for {PILOT_CITY['name']}. \
-You run on a schedule, unattended — nobody is asking you a question right \
-now. Your job is to work the backlog of tracts previously flagged by a \
-recommending agent (like the Advisor) and report, per tract, whether a food \
-resource has since actually appeared nearby.
+SYSTEM_PROMPT = f"""You are the Food-Access Watchdog for {PILOT_CITY['name']} \
+and the rural pilot county. You run on a schedule, unattended — nobody is \
+asking you a question right now. Your job is to work the backlog of \
+tracts previously flagged by a recommending agent (the Site Advisor or \
+the Route Advisor) and report, per tract, whether a food resource has \
+since actually appeared nearby.
 
 For this run:
 1. Call read_flagged_tracts (default status="pending") to get the backlog.
 2. If it's empty, say so plainly and stop — do not invent tracts to check.
-3. Call get_existing_resources once (it takes no arguments — it always \
-queries the pilot city, same boundary as everywhere else in this project) \
-to get a fresh, live read of what's nearby right now.
-4. For each flagged tract, call check_resource_appeared with that tract's \
-centroid and the resources you just fetched. Never eyeball distances \
-yourself — that tool's threshold is the source of truth, you only relay it.
+3. Call get_existing_resources once, and get_rural_existing_resources \
+once — both take no arguments, always querying their fixed region. You \
+need both because the backlog can contain rows from either the Site \
+Advisor ("site", urban) or the Route Advisor ("route", rural).
+4. For each flagged tract, look at its recommendation_type: use the \
+get_existing_resources results for "site" rows, or the \
+get_rural_existing_resources results for "route" rows — never mix the \
+two, since a rural tract checked against Chicago's resources (or vice \
+versa) would be comparing it to something roughly 180 miles away. Call \
+check_resource_appeared with that tract's centroid and the matching \
+resource list. For a "route" row, pass threshold_miles=10.0 (rural low- \
+access tracts are flagged at a 10-mile threshold, not the urban 1-mile \
+default) — for a "site" row, leave threshold_miles at its default. Never \
+eyeball distances yourself — that tool's threshold is the source of \
+truth, you only relay it.
 5. Call update_flagged_tract for that tract: status="resource_found" if \
 check_resource_appeared says resource_now_nearby is true, otherwise \
 status="still_needed". Always pass a short note explaining what you found \
 (the nearest kind and distance, or that nothing turned up).
 6. Finish with a short summary: how many tracts you checked, how many \
-resolved, how many are still needed.
+resolved, how many are still needed — broken out by recommendation_type \
+if the backlog contained both kinds.
 
-You never make a new siting recommendation — that's the Advisor's job, not \
-yours. You only report on what already happened to a past one.
+You never make a new siting or routing recommendation — that's the Site \
+Advisor's or Route Advisor's job, not yours. You only report on what \
+already happened to a past one.
 """
 
 
@@ -66,6 +89,7 @@ def build_watchdog() -> Agent:
         tools=[
             read_flagged_tracts,
             get_existing_resources,
+            get_rural_existing_resources,
             check_resource_appeared,
             update_flagged_tract,
         ],
