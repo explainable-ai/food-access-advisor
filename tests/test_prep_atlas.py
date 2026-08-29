@@ -30,3 +30,16 @@ def test_region_fails_when_required_threshold_is_missing(tmp_path, monkeypatch):
         assert "tight threshold" in str(error)
     else:
         raise AssertionError("missing Atlas columns should fail closed")
+
+
+def test_nan_cells_use_safe_defaults_and_centroid_fallback(tmp_path, monkeypatch):
+    target = tmp_path / "urban.db"
+    monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", target)
+    frame = pd.DataFrame({"CensusTract": ["17031010100"], "POP2010": [float("nan")],
+                          "LILATracts_half": [float("nan")], "LILATracts_1And10": [float("nan")],
+                          "Latitude": [float("nan")], "Longitude": [float("nan")]})
+    prep_atlas.prepare_region_database(frame, "urban", "LRAM", "atlas.csv",
+                                       {"17031010100": (41.9, -87.7)})
+    with sqlite3.connect(target) as connection:
+        row = connection.execute("SELECT population, low_access_half_mile, low_access_one_mile, centroid_lat, centroid_lon FROM tracts").fetchone()
+    assert row == (0, 0, 0, 41.9, -87.7)
