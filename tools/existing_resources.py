@@ -90,8 +90,9 @@ def get_existing_resources() -> list:
     different area, change the config, not a tool argument.
 
     Returns:
-        A list of dicts with `kind` ("garden" | "grocery" | "farm" |
-        "convenience"), `name`, `lat`, `lon`. "convenience" is kept separate
+        A list of dicts with stable `entity_id`, `kind` ("garden" |
+        "grocery" | "farm" | "convenience"), `name`, `lat`, `lon`.
+        "convenience" is kept separate
         from "grocery" deliberately — a corner store or dollar store is a
         weaker food-access signal than a real grocery store (the "food
         swamp" pattern), and `score_gaps` should be free to weight them
@@ -197,6 +198,7 @@ def _query_overpass(south, west, north, east, node_filters) -> list:
             kind = "farm"
         out.append(
             {
+                "entity_id": f"osm:{el.get('type', 'element')}/{el['id']}",
                 "kind": kind,
                 "name": tags.get("name", "(unnamed)"),
                 "lat": lat,
