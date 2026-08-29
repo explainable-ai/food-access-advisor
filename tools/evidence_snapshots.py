@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover
         return (lambda f: f) if func is None else func
 
 from tools.geo import haversine_miles
+from storage.aws_persistence import AwsEvidenceStore, aws_storage_enabled
 
 DB_PATH = Path(__file__).parent.parent / "data" / "evidence_snapshots.db"
 SUCCESS_STATUSES = {"complete", "partial", "stale"}
@@ -78,6 +79,34 @@ def _nearby_tracts(record: dict[str, Any] | None, tracts: list[dict[str, Any]], 
     return sorted(set(affected))
 
 
+def _build_changes(status: str, canonical: list[dict[str, Any]], previous_records: list[dict[str, Any]] | None,
+                   tracts: list[dict[str, Any]], radius_miles: float, error: str | None) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    if status == "failed":
+        changes.append({"change_type": "unavailable", "entity_id": None, "before": None,
+                        "after": {"error": error or "source unavailable"}, "affected_tracts": []})
+    elif status == "stale":
+        changes.append({"change_type": "stale", "entity_id": None, "before": None,
+                        "after": {"record_count": len(canonical)}, "affected_tracts": []})
+    if status not in SUCCESS_STATUSES or previous_records is None:
+        return changes
+    old = {_entity_id(row): row for row in previous_records}
+    new = {_entity_id(row): row for row in canonical}
+    for entity_id in sorted(new.keys() - old.keys()):
+        changes.append({"change_type": "added", "entity_id": entity_id, "before": None,
+            "after": new[entity_id], "affected_tracts": _nearby_tracts(new[entity_id], tracts, radius_miles)})
+    for entity_id in sorted(old.keys() - new.keys()):
+        changes.append({"change_type": "removed", "entity_id": entity_id, "before": old[entity_id],
+            "after": None, "affected_tracts": _nearby_tracts(old[entity_id], tracts, radius_miles)})
+    for entity_id in sorted(old.keys() & new.keys()):
+        if old[entity_id] != new[entity_id]:
+            nearby = set(_nearby_tracts(old[entity_id], tracts, radius_miles))
+            nearby.update(_nearby_tracts(new[entity_id], tracts, radius_miles))
+            changes.append({"change_type": "modified", "entity_id": entity_id, "before": old[entity_id],
+                            "after": new[entity_id], "affected_tracts": sorted(nearby)})
+    return changes
+
+
 def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str,
                     status: str = "complete", error: str | None = None,
                     captured_at: datetime | None = None, affected_tracts: list[dict[str, Any]] | None = None,
@@ -98,6 +127,20 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
     payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
     checksum = hashlib.sha256(payload.encode()).hexdigest() if status in SUCCESS_STATUSES else None
     tracts = affected_tracts or []
+    if aws_storage_enabled() and db_path == DB_PATH:
+        store = AwsEvidenceStore()
+        previous = store.load_previous_success(source_id, scope)
+        previous_id = previous["snapshot_id"] if previous else None
+        changes = _build_changes(status, canonical, previous["records"] if previous else None,
+                                 tracts, radius_miles, error)
+        snapshot_id = store.save_snapshot(source_id=source_id, scope=scope,
+            captured_at=captured.isoformat(), status=status, checksum=checksum, payload=payload,
+            error=error, previous_snapshot_id=previous_id)
+        store.save_changes(snapshot_id=snapshot_id, previous_snapshot_id=previous_id,
+            source_id=source_id, scope=scope, detected_at=captured.isoformat(), changes=changes)
+        return {"snapshot_id": snapshot_id, "source_id": source_id, "scope": scope, "status": status,
+                "record_count": len(canonical), "checksum": checksum, "changes": changes}
+
     connection = _connect(db_path)
     try:
         previous = connection.execute(
@@ -109,28 +152,9 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
             (source_id, scope, captured.isoformat(), status, checksum, payload, error),
         )
         snapshot_id = cursor.lastrowid
-        changes: list[dict[str, Any]] = []
-        if status == "failed":
-            changes.append({"change_type": "unavailable", "entity_id": None, "before": None,
-                            "after": {"error": error or "source unavailable"}, "affected_tracts": []})
-        elif status == "stale":
-            changes.append({"change_type": "stale", "entity_id": None, "before": None,
-                            "after": {"record_count": len(canonical)}, "affected_tracts": []})
-        if status in SUCCESS_STATUSES and previous is not None:
-            old = {_entity_id(row): row for row in json.loads(previous["records_json"])}
-            new = {_entity_id(row): row for row in canonical}
-            for entity_id in sorted(new.keys() - old.keys()):
-                changes.append({"change_type": "added", "entity_id": entity_id, "before": None,
-                    "after": new[entity_id], "affected_tracts": _nearby_tracts(new[entity_id], tracts, radius_miles)})
-            for entity_id in sorted(old.keys() - new.keys()):
-                changes.append({"change_type": "removed", "entity_id": entity_id, "before": old[entity_id],
-                    "after": None, "affected_tracts": _nearby_tracts(old[entity_id], tracts, radius_miles)})
-            for entity_id in sorted(old.keys() & new.keys()):
-                if old[entity_id] != new[entity_id]:
-                    nearby = set(_nearby_tracts(old[entity_id], tracts, radius_miles))
-                    nearby.update(_nearby_tracts(new[entity_id], tracts, radius_miles))
-                    changes.append({"change_type": "modified", "entity_id": entity_id, "before": old[entity_id],
-                                    "after": new[entity_id], "affected_tracts": sorted(nearby)})
+        changes = _build_changes(status, canonical,
+            json.loads(previous["records_json"]) if previous is not None else None,
+            tracts, radius_miles, error)
         for change in changes:
             connection.execute(
                 "INSERT INTO evidence_changes(snapshot_id,previous_snapshot_id,source_id,scope,detected_at,change_type,entity_id,before_json,after_json,affected_tracts_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -155,6 +179,8 @@ def record_resource_snapshot(source_id: str, scope: str, resources: list,
 def read_changes(*, limit: int = 100, source_id: str | None = None, db_path: Path = DB_PATH) -> list[dict[str, Any]]:
     if limit < 1 or limit > 1000:
         raise ValueError("limit must be between 1 and 1000")
+    if aws_storage_enabled() and db_path == DB_PATH:
+        return AwsEvidenceStore().read_changes(limit=limit, source_id=source_id)
     if not db_path.exists():
         return []
     connection = _connect(db_path)
