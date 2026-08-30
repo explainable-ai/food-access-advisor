@@ -57,3 +57,43 @@ def test_stable_osm_id_turns_rename_into_modification(tmp_path):
     result = record_snapshot("osm", [{"entity_id": "osm:node/7", "name": "New", "lat": 41.81, "lon": -87.61}],
                              scope="urban", captured_at=NOW, db_path=db)
     assert [change["change_type"] for change in result["changes"]] == ["modified"]
+
+
+def test_completeness_guard_suppresses_mass_removals_and_preserves_complete_baseline(tmp_path):
+    db = tmp_path / "snapshots.db"
+    baseline = [{"entity_id": str(index)} for index in range(20)]
+    record_snapshot("osm_resources", baseline, scope="urban", captured_at=NOW, db_path=db)
+
+    partial = record_snapshot(
+        "osm_resources", baseline[:10], scope="urban", captured_at=NOW, db_path=db,
+        min_retained_fraction=0.75, min_baseline_records=10,
+    )
+    assert partial["status"] == "partial"
+    assert partial["baseline_record_count"] == 20
+    assert partial["retained_fraction"] == 0.5
+    assert [change["change_type"] for change in partial["changes"]] == ["partial"]
+
+    still_partial = record_snapshot(
+        "osm_resources", baseline[:12], scope="urban", captured_at=NOW, db_path=db,
+        min_retained_fraction=0.75, min_baseline_records=10,
+    )
+    assert still_partial["status"] == "partial"
+    assert still_partial["baseline_record_count"] == 20
+
+    recovered = record_snapshot(
+        "osm_resources", baseline[:16], scope="urban", captured_at=NOW, db_path=db,
+        min_retained_fraction=0.75, min_baseline_records=10,
+    )
+    assert recovered["status"] == "complete"
+    assert [change["change_type"] for change in recovered["changes"]] == ["removed"] * 4
+
+
+def test_explicit_partial_snapshot_never_emits_entity_changes(tmp_path):
+    db = tmp_path / "snapshots.db"
+    record_snapshot("source", [{"entity_id": "a"}], scope="urban", captured_at=NOW, db_path=db)
+    result = record_snapshot(
+        "source", [], scope="urban", status="partial", error="page incomplete",
+        captured_at=NOW, db_path=db,
+    )
+    assert [change["change_type"] for change in result["changes"]] == ["partial"]
+    assert result["changes"][0]["after"]["error"] == "page incomplete"

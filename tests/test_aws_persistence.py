@@ -22,7 +22,7 @@ class FakeEvidenceTable:
     def put_item(self, Item): self.items.append(Item)
     def query(self, **kwargs):
         successes = [item for item in self.items if item["record_key"].startswith("SNAPSHOT_SUCCESS#")]
-        return {"Items": sorted(successes, key=lambda item: item["record_key"], reverse=True)[:1]}
+        return {"Items": sorted(successes, key=lambda item: item["record_key"], reverse=True)}
     def scan(self, **kwargs):
         return {"Items": [item for item in self.items if item.get("item_type") == "change"]}
 
@@ -55,6 +55,20 @@ def test_evidence_payload_lives_in_s3_and_metadata_in_dynamodb():
     assert metadata["record_count"] == 1
     assert s3.objects[("bucket", metadata["records_s3_key"])] == b'[{"entity_id":"1"}]'
     assert store.load_previous_success("licenses", "urban")["records"] == [{"entity_id": "1"}]
+
+
+def test_partial_aws_snapshot_does_not_replace_complete_baseline():
+    table, s3 = FakeEvidenceTable(), FakeS3()
+    store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
+    store.save_snapshot(source_id="osm", scope="urban",
+        captured_at="2026-08-29T00:00:00+00:00", status="complete", checksum="complete",
+        payload='[{"entity_id":"complete"}]', error=None, previous_snapshot_id=None)
+    store.save_snapshot(source_id="osm", scope="urban",
+        captured_at="2026-08-30T00:00:00+00:00", status="partial", checksum="partial",
+        payload='[{"entity_id":"partial"}]', error="incomplete", previous_snapshot_id=None)
+    assert store.load_previous_success("osm", "urban")["records"] == [
+        {"entity_id": "complete"}
+    ]
 
 
 def test_change_records_preserve_numeric_values_and_are_readable():

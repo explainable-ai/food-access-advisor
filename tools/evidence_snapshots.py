@@ -18,6 +18,8 @@ from storage.aws_persistence import AwsEvidenceStore, aws_storage_enabled
 
 DB_PATH = Path(__file__).parent.parent / "data" / "evidence_snapshots.db"
 SUCCESS_STATUSES = {"complete", "partial", "stale"}
+OSM_MIN_RETAINED_FRACTION = 0.75
+OSM_MIN_BASELINE_RECORDS = 10
 
 
 def _connect(db_path: Path = DB_PATH):
@@ -85,10 +87,13 @@ def _build_changes(status: str, canonical: list[dict[str, Any]], previous_record
     if status == "failed":
         changes.append({"change_type": "unavailable", "entity_id": None, "before": None,
                         "after": {"error": error or "source unavailable"}, "affected_tracts": []})
+    elif status == "partial":
+        changes.append({"change_type": "partial", "entity_id": None, "before": None,
+                        "after": {"record_count": len(canonical), "error": error}, "affected_tracts": []})
     elif status == "stale":
         changes.append({"change_type": "stale", "entity_id": None, "before": None,
                         "after": {"record_count": len(canonical)}, "affected_tracts": []})
-    if status not in SUCCESS_STATUSES or previous_records is None:
+    if status != "complete" or previous_records is None:
         return changes
     old = {_entity_id(row): row for row in previous_records}
     new = {_entity_id(row): row for row in canonical}
@@ -107,10 +112,52 @@ def _build_changes(status: str, canonical: list[dict[str, Any]], previous_record
     return changes
 
 
+def _apply_completeness_guard(
+    status: str,
+    current_count: int,
+    previous_records: list[dict[str, Any]] | None,
+    error: str | None,
+    min_retained_fraction: float | None,
+    min_baseline_records: int,
+) -> tuple[str, str | None, dict[str, Any]]:
+    """Downgrade an implausibly small successful response to partial.
+
+    The last complete snapshot remains the baseline, so repeated incomplete
+    responses cannot ratchet the baseline downward and later appear healthy.
+    """
+    if min_retained_fraction is None:
+        return status, error, {}
+    if not 0 < min_retained_fraction <= 1:
+        raise ValueError("min_retained_fraction must be between 0 and 1")
+    if min_baseline_records < 1:
+        raise ValueError("min_baseline_records must be positive")
+    if status != "complete" or previous_records is None:
+        return status, error, {}
+    baseline_count = len(previous_records)
+    if baseline_count < min_baseline_records:
+        return status, error, {}
+    retained_fraction = current_count / baseline_count
+    if retained_fraction >= min_retained_fraction:
+        return status, error, {}
+    guard_error = (
+        f"Completeness guard: retained {current_count}/{baseline_count} records "
+        f"({retained_fraction:.1%}), below the {min_retained_fraction:.0%} threshold."
+    )
+    if error:
+        guard_error = f"{error}; {guard_error}"
+    return "partial", guard_error, {
+        "baseline_record_count": baseline_count,
+        "retained_fraction": round(retained_fraction, 4),
+        "minimum_retained_fraction": min_retained_fraction,
+    }
+
+
 def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str,
                     status: str = "complete", error: str | None = None,
                     captured_at: datetime | None = None, affected_tracts: list[dict[str, Any]] | None = None,
-                    radius_miles: float = 10.0, db_path: Path = DB_PATH) -> dict[str, Any]:
+                    radius_miles: float = 10.0, db_path: Path = DB_PATH,
+                    min_retained_fraction: float | None = None,
+                    min_baseline_records: int = 1) -> dict[str, Any]:
     """Persist a source observation and compare it to the last successful one.
 
     A failed fetch emits ``unavailable`` and never emits removals. Only a
@@ -131,6 +178,10 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
         store = AwsEvidenceStore()
         previous = store.load_previous_success(source_id, scope)
         previous_id = previous["snapshot_id"] if previous else None
+        status, error, guard = _apply_completeness_guard(
+            status, len(canonical), previous["records"] if previous else None,
+            error, min_retained_fraction, min_baseline_records,
+        )
         changes = _build_changes(status, canonical, previous["records"] if previous else None,
                                  tracts, radius_miles, error)
         snapshot_id = store.save_snapshot(source_id=source_id, scope=scope,
@@ -139,22 +190,26 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
         store.save_changes(snapshot_id=snapshot_id, previous_snapshot_id=previous_id,
             source_id=source_id, scope=scope, detected_at=captured.isoformat(), changes=changes)
         return {"snapshot_id": snapshot_id, "source_id": source_id, "scope": scope, "status": status,
-                "record_count": len(canonical), "checksum": checksum, "changes": changes}
+                "record_count": len(canonical), "checksum": checksum, "changes": changes,
+                "error": error, **guard}
 
     connection = _connect(db_path)
     try:
         previous = connection.execute(
-            "SELECT * FROM evidence_snapshots WHERE source_id=? AND scope=? AND status IN ('complete','partial','stale') ORDER BY id DESC LIMIT 1",
+            "SELECT * FROM evidence_snapshots WHERE source_id=? AND scope=? AND status='complete' ORDER BY id DESC LIMIT 1",
             (source_id, scope),
         ).fetchone()
+        previous_records = json.loads(previous["records_json"]) if previous is not None else None
+        status, error, guard = _apply_completeness_guard(
+            status, len(canonical), previous_records, error,
+            min_retained_fraction, min_baseline_records,
+        )
         cursor = connection.execute(
             "INSERT INTO evidence_snapshots(source_id,scope,captured_at,status,checksum,records_json,error) VALUES(?,?,?,?,?,?,?)",
             (source_id, scope, captured.isoformat(), status, checksum, payload, error),
         )
         snapshot_id = cursor.lastrowid
-        changes = _build_changes(status, canonical,
-            json.loads(previous["records_json"]) if previous is not None else None,
-            tracts, radius_miles, error)
+        changes = _build_changes(status, canonical, previous_records, tracts, radius_miles, error)
         for change in changes:
             connection.execute(
                 "INSERT INTO evidence_changes(snapshot_id,previous_snapshot_id,source_id,scope,detected_at,change_type,entity_id,before_json,after_json,affected_tracts_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -164,7 +219,8 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
             )
         connection.commit()
         return {"snapshot_id": snapshot_id, "source_id": source_id, "scope": scope, "status": status,
-                "record_count": len(canonical), "checksum": checksum, "changes": changes}
+                "record_count": len(canonical), "checksum": checksum, "changes": changes,
+                "error": error, **guard}
     finally:
         connection.close()
 
@@ -173,7 +229,11 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
 def record_resource_snapshot(source_id: str, scope: str, resources: list,
                              status: str = "complete", error: str = "") -> dict:
     """Record a Watchdog source result and report resource/source-health changes."""
-    return record_snapshot(source_id, resources, scope=scope, status=status, error=error or None)
+    return record_snapshot(
+        source_id, resources, scope=scope, status=status, error=error or None,
+        min_retained_fraction=OSM_MIN_RETAINED_FRACTION,
+        min_baseline_records=OSM_MIN_BASELINE_RECORDS,
+    )
 
 
 def read_changes(*, limit: int = 100, source_id: str | None = None, db_path: Path = DB_PATH) -> list[dict[str, Any]]:
