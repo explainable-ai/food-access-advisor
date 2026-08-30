@@ -115,3 +115,31 @@ def test_missing_centroid_leaves_row_pending_and_reports_partial_run():
     assert updates == []
     assert result["status"] == "partial"
     assert result["errors"][0]["stage"] == "validate_row"
+
+
+def test_partial_source_quality_leaves_tract_pending():
+    updates = []
+    result = run_watchdog_pass(
+        read_fn=lambda status: [{
+            "tract_fips": "17031000100",
+            "recommendation_type": "site",
+            "centroid_lat": 41.8,
+            "centroid_lon": -87.6,
+        }],
+        urban_fetch_fn=lambda: [{"entity_id": "one", "kind": "grocery"}],
+        snapshot_fn=lambda **kwargs: {
+            "status": "partial",
+            "record_count": 1,
+            "changes": [{"change_type": "partial"}],
+            "error": "Completeness guard triggered.",
+            "baseline_record_count": 100,
+            "retained_fraction": 0.01,
+        },
+        update_fn=lambda **kwargs: updates.append(kwargs),
+    )
+
+    assert updates == []
+    assert result["status"] == "partial"
+    assert result["checked"] == 0
+    assert result["errors"][0]["stage"] == "source_quality"
+    assert result["source_health"][0]["baseline_record_count"] == 100
