@@ -93,17 +93,33 @@ def main():
 
     applied_at = datetime.now(timezone.utc).isoformat()
     reason = "Suppressed known false removals from incomplete OSM response (769 vs 1201 baseline)."
-    backup_key = f"maintenance-backups/osm-false-removals-{applied_at.replace(':', '-')}.json"
-    boto3.client("s3", region_name=args.region).put_object(
-        Bucket=args.bucket,
-        Key=backup_key,
-        Body=json.dumps(
-            {"snapshot": snapshot, "changes": changes},
-            default=_json_default,
-            sort_keys=True,
-        ).encode(),
-        ContentType="application/json",
-        ServerSideEncryption="AES256",
+    backup_key = (
+        "maintenance-backups/osm-false-removals-"
+        f"{snapshot_id.replace(':', '-').replace('#', '-')}.json"
+    )
+    s3 = boto3.client("s3", region_name=args.region)
+    try:
+        s3.head_object(Bucket=args.bucket, Key=backup_key)
+        print(f"Reusing existing pristine backup: s3://{args.bucket}/{backup_key}")
+    except s3.exceptions.ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+            raise
+        s3.put_object(
+            Bucket=args.bucket,
+            Key=backup_key,
+            Body=json.dumps(
+                {"snapshot": snapshot, "changes": changes},
+                default=_json_default,
+                sort_keys=True,
+            ).encode(),
+            ContentType="application/json",
+            ServerSideEncryption="AES256",
+            IfNoneMatch="*",
+        )
+    table.update_item(
+        Key={"source_scope": snapshot["source_scope"], "record_key": snapshot_id},
+        UpdateExpression="SET cleanup_backup_s3_key=:backup",
+        ExpressionAttributeValues={":backup": backup_key},
     )
 
     for item in changes:
