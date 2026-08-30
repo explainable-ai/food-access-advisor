@@ -44,8 +44,8 @@ def main():
     parser.add_argument("--bucket", required=True)
     parser.add_argument("--region", default="us-east-1")
     parser.add_argument("--source-scope", default="osm_resources#urban")
-    parser.add_argument("--record-count", type=int, default=769)
-    parser.add_argument("--expected-change-count", type=int, default=432)
+    parser.add_argument("--record-count", type=int, default=20)
+    parser.add_argument("--expected-change-count", type=int, default=575)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
 
@@ -70,6 +70,23 @@ def main():
         )
     snapshot = candidates[0]
     snapshot_id = snapshot["record_key"]
+    previous_snapshot_id = snapshot.get("previous_snapshot_id")
+    previous_matches = [
+        item for item in snapshots
+        if item.get("record_key") == previous_snapshot_id
+        and item.get("status") == "complete"
+    ]
+    if len(previous_matches) != 1:
+        raise SystemExit(
+            "Refusing cleanup: could not resolve exactly one prior complete snapshot."
+        )
+    previous_record_count = int(previous_matches[0].get("record_count", -1))
+    expected_removals = previous_record_count - int(snapshot["record_count"])
+    if expected_removals != args.expected_change_count:
+        raise SystemExit(
+            f"Refusing cleanup: baseline/current counts imply {expected_removals} removals, "
+            f"not the required {args.expected_change_count}."
+        )
     changes = _all_scan(
         table,
         FilterExpression=Attr("item_type").eq("change") & Attr("snapshot_id").eq(snapshot_id),
@@ -86,6 +103,7 @@ def main():
         "snapshot_id": snapshot_id,
         "source_scope": snapshot["source_scope"],
         "record_count": int(snapshot["record_count"]),
+        "previous_record_count": previous_record_count,
         "linked_removed_changes": len(changes),
     }, indent=2))
     if not args.apply:
@@ -93,7 +111,10 @@ def main():
         return
 
     applied_at = datetime.now(timezone.utc).isoformat()
-    reason = "Suppressed known false removals from incomplete OSM response (769 vs 1201 baseline)."
+    reason = (
+        f"Suppressed {len(changes)} false removals from incomplete OSM response "
+        f"({int(snapshot['record_count'])} records vs {previous_record_count} baseline)."
+    )
     backup_key = (
         "maintenance-backups/osm-false-removals-"
         f"{snapshot_id.replace(':', '-').replace('#', '-')}.json"
