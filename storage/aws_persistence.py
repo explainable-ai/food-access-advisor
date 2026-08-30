@@ -136,7 +136,9 @@ class AwsEvidenceStore:
             self.table.put_item(Item=_decimalize(item))
 
     def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
-        expression = Attr("item_type").eq("change") & Attr("suppressed").not_exists()
+        expression = Attr("item_type").eq("change") & (
+            Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
+        )
         if source_id:
             expression = expression & Attr("source_id").eq(source_id)
         items = _scan_all(self.table, FilterExpression=expression)
