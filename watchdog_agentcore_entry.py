@@ -53,9 +53,16 @@ async def handler(payload: dict):
     through by AgentCore Runtime unchanged — see the module docstring for
     where that's confirmed against the framework's own source.
     """
+    if not isinstance(payload, dict):
+        raise ValueError("AgentCore payload must be a JSON object.")
+
     prompt = payload.get(
         "prompt", "Run today's recheck pass over every pending flagged tract."
     )
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("AgentCore payload field 'prompt' must be a non-empty string.")
+    prompt = prompt.strip()
+
     if payload.get("refresh_additional_sources", True):
         refresh = await asyncio.to_thread(refresh_additional_sources)
         source_summary = ", ".join(f"{item['source_id']}={item['status']}" for item in refresh)
