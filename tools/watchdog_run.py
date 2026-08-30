@@ -46,13 +46,19 @@ def _empty_result(status: str) -> dict[str, Any]:
 
 def _snapshot_health(snapshot: dict, scope: str, fallback_count: int) -> dict:
     changes = snapshot.get("changes") or []
-    return {
+    health = {
         "source_id": "osm_resources",
         "scope": scope,
         "status": snapshot.get("status", "complete"),
         "record_count": snapshot.get("record_count", fallback_count),
         "change_count": len(changes),
     }
+    if snapshot.get("error"):
+        health["error"] = str(snapshot["error"])[:300]
+    if snapshot.get("baseline_record_count") is not None:
+        health["baseline_record_count"] = snapshot["baseline_record_count"]
+        health["retained_fraction"] = snapshot.get("retained_fraction")
+    return health
 
 
 def _note_for_check(check: dict, threshold: float) -> str:
@@ -127,8 +133,16 @@ def run_watchdog_pass(
                 resources=resources,
                 status="complete",
             )
+            health = _snapshot_health(snapshot, scope, len(resources))
+            source_health.append(health)
+            if snapshot.get("status") != "complete":
+                errors.append({
+                    "stage": "source_quality",
+                    "scope": scope,
+                    "error": health.get("error", "Source snapshot was not complete."),
+                })
+                continue
             resources_by_type[recommendation_type] = resources
-            source_health.append(_snapshot_health(snapshot, scope, len(resources)))
         except Exception as exc:
             error = _short_error(exc)
             try:
