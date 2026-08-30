@@ -75,18 +75,26 @@ class AwsEvidenceStore:
         return f"{source_id}#{scope}"
 
     def load_previous_success(self, source_id: str, scope: str) -> dict[str, Any] | None:
-        response = self.table.query(
-            KeyConditionExpression=(Key("source_scope").eq(self.source_scope(source_id, scope))
-                                    & Key("record_key").begins_with("SNAPSHOT_SUCCESS#")),
-            ScanIndexForward=False,
-            Limit=1,
-        )
-        items = response.get("Items", [])
-        if not items:
-            return None
-        item = items[0]
-        payload = self.s3.get_object(Bucket=self.bucket, Key=item["records_s3_key"])["Body"].read()
-        return {"snapshot_id": item["record_key"], "records": json.loads(payload)}
+        kwargs = {
+            "KeyConditionExpression": (
+                Key("source_scope").eq(self.source_scope(source_id, scope))
+                & Key("record_key").begins_with("SNAPSHOT_SUCCESS#")
+            ),
+            "ScanIndexForward": False,
+        }
+        while True:
+            response = self.table.query(**kwargs)
+            for item in response.get("Items", []):
+                if item.get("status") != "complete":
+                    continue
+                payload = self.s3.get_object(
+                    Bucket=self.bucket, Key=item["records_s3_key"]
+                )["Body"].read()
+                return {"snapshot_id": item["record_key"], "records": json.loads(payload)}
+            key = response.get("LastEvaluatedKey")
+            if not key:
+                return None
+            kwargs["ExclusiveStartKey"] = key
 
     def save_snapshot(self, *, source_id: str, scope: str, captured_at: str, status: str,
                       checksum: str | None, payload: str, error: str | None,
