@@ -116,6 +116,10 @@ def test_suppressed_changes_are_hidden_from_normal_reads():
          "source_id": "osm", "suppressed": True},
         {"item_type": "change", "record_key": "CHANGE#2", "detected_at": "2026-08-30T00:00:00+00:00",
          "source_id": "osm"},
+        {"item_type": "change", "record_key": "CHANGE#3", "detected_at": "2026-08-31T00:00:00+00:00",
+         "source_id": "osm", "suppressed": False},
     ])
 
-    assert [item["record_key"] for item in store.read_changes(limit=10)] == ["CHANGE#2"]
+    assert [item["record_key"] for item in store.read_changes(limit=10)] == [
+        "CHANGE#3", "CHANGE#2"
+    ]
