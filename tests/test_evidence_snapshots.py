@@ -97,3 +97,23 @@ def test_explicit_partial_snapshot_never_emits_entity_changes(tmp_path):
     )
     assert [change["change_type"] for change in result["changes"]] == ["partial"]
     assert result["changes"][0]["after"]["error"] == "page incomplete"
+
+
+def test_completeness_guard_uses_entity_overlap_not_response_size(tmp_path):
+    db = tmp_path / "snapshots.db"
+    baseline = [{"entity_id": f"old-{index}"} for index in range(20)]
+    record_snapshot("osm_resources", baseline, scope="urban", captured_at=NOW, db_path=db)
+
+    unrelated = [{"entity_id": f"new-{index}"} for index in range(18)]
+    result = record_snapshot(
+        "osm_resources", unrelated, scope="urban", captured_at=NOW, db_path=db,
+        min_retained_fraction=0.75, min_baseline_records=10,
+    )
+
+    assert result["status"] == "partial"
+    assert result["baseline_entity_count"] == 20
+    assert result["current_record_count"] == 18
+    assert result["retained_entity_count"] == 0
+    assert result["new_entity_count"] == 18
+    assert result["retained_fraction"] == 0
+    assert [change["change_type"] for change in result["changes"]] == ["partial"]
