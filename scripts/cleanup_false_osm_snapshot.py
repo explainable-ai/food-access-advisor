@@ -7,6 +7,7 @@ from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
+from botocore.exceptions import ClientError
 
 
 def _all_query(table, **kwargs):
@@ -101,7 +102,7 @@ def main():
     try:
         s3.head_object(Bucket=args.bucket, Key=backup_key)
         print(f"Reusing existing pristine backup: s3://{args.bucket}/{backup_key}")
-    except s3.exceptions.ClientError as exc:
+    except ClientError as exc:
         if exc.response.get("Error", {}).get("Code") not in {"404", "NoSuchKey", "NotFound"}:
             raise
         s3.put_object(
