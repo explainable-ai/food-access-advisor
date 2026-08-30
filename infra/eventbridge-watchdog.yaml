@@ -72,10 +72,19 @@ Resources:
           import os
 
           import boto3
+          from botocore.config import Config
 
           log = logging.getLogger()
           log.setLevel(logging.INFO)
-          agentcore = boto3.client("bedrock-agentcore")
+          agentcore = boto3.client(
+              "bedrock-agentcore",
+              config=Config(
+                  connect_timeout=30,
+                  read_timeout=840,
+                  tcp_keepalive=True,
+                  retries={"total_max_attempts": 1, "mode": "standard"},
+              ),
+          )
 
           DEFAULT_PROMPT = "Run today's recheck pass over every pending flagged tract."
 
