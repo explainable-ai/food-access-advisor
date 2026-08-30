@@ -48,7 +48,7 @@ Resources:
               - Sid: InvokeWatchdogRuntime
                 Effect: Allow
                 Action: bedrock-agentcore:InvokeAgentRuntime
-                Resource: !Ref AgentRuntimeArn
+                Resource: !Sub "${AgentRuntimeArn}/runtime-endpoint/DEFAULT"
 
   WatchdogInvokerFunction:
     Type: AWS::Lambda::Function
