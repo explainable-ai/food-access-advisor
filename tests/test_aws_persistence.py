@@ -106,3 +106,16 @@ def test_paginated_scan_reads_all_pages():
                 return {"Items": [{"id": 1}], "LastEvaluatedKey": {"id": 1}}
             return {"Items": [{"id": 2}]}
     assert _scan_all(Table()) == [{"id": 1}, {"id": 2}]
+
+
+def test_suppressed_changes_are_hidden_from_normal_reads():
+    table, s3 = FakeEvidenceTable(), FakeS3()
+    store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
+    table.items.extend([
+        {"item_type": "change", "record_key": "CHANGE#1", "detected_at": "2026-08-29T00:00:00+00:00",
+         "source_id": "osm", "suppressed": True},
+        {"item_type": "change", "record_key": "CHANGE#2", "detected_at": "2026-08-30T00:00:00+00:00",
+         "source_id": "osm"},
+    ])
+
+    assert [item["record_key"] for item in store.read_changes(limit=10)] == ["CHANGE#2"]
