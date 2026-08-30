@@ -123,7 +123,7 @@ def build_watchdog() -> Agent:
 def build_watchdog_reporter() -> Agent:
     """Build a single-turn, tool-free reporter with a hard output cap."""
     return Agent(
-        model=build_model(max_tokens=600),
+        model=build_model(max_tokens=350),
         system_prompt=REPORTER_SYSTEM_PROMPT,
         tools=[],
     )
