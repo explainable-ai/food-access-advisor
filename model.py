@@ -45,7 +45,7 @@ BOTO_CLIENT_CONFIG = Config(
 )
 
 
-def build_model() -> BedrockModel:
+def build_model(*, max_tokens: int | None = None) -> BedrockModel:
     """Build the Bedrock model both agents share.
 
     Reads STRANDS_MODEL_ID from the environment (falls back to
@@ -71,6 +71,10 @@ def build_model() -> BedrockModel:
         "boto_client_config": BOTO_CLIENT_CONFIG,
         "streaming": False,
     }
+    if max_tokens is not None:
+        if max_tokens < 1:
+            raise ValueError("max_tokens must be positive")
+        kwargs["max_tokens"] = max_tokens
     if region:
         kwargs["region_name"] = region
     return BedrockModel(**kwargs)
