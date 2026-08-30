@@ -1,0 +1,176 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Scheduled, observable invocation bridge for the Food Access Advisor Watchdog.
+
+Parameters:
+  AgentRuntimeArn:
+    Type: String
+    Description: ARN of the deployed Amazon Bedrock AgentCore Watchdog runtime.
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 6 * * ? *)"
+    Description: EventBridge Scheduler expression. Default is daily at 6:00 AM in the configured timezone.
+  ScheduleExpressionTimezone:
+    Type: String
+    Default: America/Chicago
+  ScheduleState:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+
+Resources:
+  WatchdogSchedulerDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: food-access-watchdog-scheduler-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  WatchdogInvokerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: FoodAccessWatchdogInvokerRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: InvokeOnlyFoodAccessWatchdog
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InvokeWatchdogRuntime
+                Effect: Allow
+                Action: bedrock-agentcore:InvokeAgentRuntime
+                Resource: !Ref AgentRuntimeArn
+
+  WatchdogInvokerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: food-access-watchdog-scheduler
+      Description: Invokes the Food Access Advisor Watchdog and drains its streaming response.
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt WatchdogInvokerRole.Arn
+      Timeout: 900
+      MemorySize: 256
+      Environment:
+        Variables:
+          AGENT_RUNTIME_ARN: !Ref AgentRuntimeArn
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+
+          import boto3
+
+          log = logging.getLogger()
+          log.setLevel(logging.INFO)
+          agentcore = boto3.client("bedrock-agentcore")
+
+          DEFAULT_PROMPT = "Run today's recheck pass over every pending flagged tract."
+
+          def handler(event, context):
+              event = event or {}
+              prompt = event.get("prompt", DEFAULT_PROMPT)
+              if not isinstance(prompt, str) or not prompt.strip():
+                  raise ValueError("prompt must be a non-empty string")
+
+              payload = {
+                  "prompt": prompt,
+                  "refresh_additional_sources": bool(
+                      event.get("refresh_additional_sources", True)
+                  ),
+              }
+              response = agentcore.invoke_agent_runtime(
+                  agentRuntimeArn=os.environ["AGENT_RUNTIME_ARN"],
+                  runtimeSessionId=f"scheduler-{context.aws_request_id}",
+                  payload=json.dumps(payload).encode("utf-8"),
+                  contentType="application/json",
+                  accept="application/json",
+              )
+              body = response["response"].read().decode("utf-8")
+              log.info(
+                  "Watchdog completed: status_code=%s session_id=%s response=%s",
+                  response.get("statusCode"),
+                  response.get("runtimeSessionId"),
+                  body[:12000],
+              )
+              if response.get("statusCode") != 200:
+                  raise RuntimeError(
+                      f"Watchdog returned status {response.get('statusCode')}"
+                  )
+              return {
+                  "statusCode": response.get("statusCode"),
+                  "runtimeSessionId": response.get("runtimeSessionId"),
+                  "responseLength": len(body),
+              }
+
+  WatchdogSchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: FoodAccessWatchdogSchedulerRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: InvokeWatchdogBridgeAndDlq
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InvokeWatchdogBridge
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt WatchdogInvokerFunction.Arn
+              - Sid: SendFailedInvocationToDlq
+                Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt WatchdogSchedulerDlq.Arn
+
+  WatchdogDailySchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: food-access-watchdog-daily
+      Description: Daily Food Access Advisor evidence recheck.
+      ScheduleExpression: !Ref ScheduleExpression
+      ScheduleExpressionTimezone: !Ref ScheduleExpressionTimezone
+      State: !Ref ScheduleState
+      FlexibleTimeWindow:
+        Mode: OFF
+      Target:
+        Arn: !GetAtt WatchdogInvokerFunction.Arn
+        RoleArn: !GetAtt WatchdogSchedulerRole.Arn
+        Input: '{"prompt":"Run today''s recheck pass over every pending flagged tract.","refresh_additional_sources":true}'
+        DeadLetterConfig:
+          Arn: !GetAtt WatchdogSchedulerDlq.Arn
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 1
+
+Outputs:
+  FunctionName:
+    Value: !Ref WatchdogInvokerFunction
+  FunctionArn:
+    Value: !GetAtt WatchdogInvokerFunction.Arn
+  ScheduleName:
+    Value: !Ref WatchdogDailySchedule
+  ScheduleState:
+    Value: !Ref ScheduleState
+  DeadLetterQueueArn:
+    Value: !GetAtt WatchdogSchedulerDlq.Arn
+  DeadLetterQueueUrl:
+    Value: !Ref WatchdogSchedulerDlq
