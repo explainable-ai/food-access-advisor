@@ -136,11 +136,17 @@ class AwsEvidenceStore:
             self.table.put_item(Item=_decimalize(item))
 
     def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
-        expression = Attr("item_type").eq("change")
+        expression = Attr("item_type").eq("change") & (
+            Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
+        )
         if source_id:
             expression = expression & Attr("source_id").eq(source_id)
         items = _scan_all(self.table, FilterExpression=expression)
-        ordered = sorted((_native(item) for item in items), key=lambda item: item["detected_at"], reverse=True)
+        ordered = sorted(
+            (_native(item) for item in items if not item.get("suppressed", False)),
+            key=lambda item: item["detected_at"],
+            reverse=True,
+        )
         return ordered[:limit]
 
 

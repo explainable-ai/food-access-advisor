@@ -114,7 +114,7 @@ def _build_changes(status: str, canonical: list[dict[str, Any]], previous_record
 
 def _apply_completeness_guard(
     status: str,
-    current_count: int,
+    current_records: list[dict[str, Any]],
     previous_records: list[dict[str, Any]] | None,
     error: str | None,
     min_retained_fraction: float | None,
@@ -136,17 +136,24 @@ def _apply_completeness_guard(
     baseline_count = len(previous_records)
     if baseline_count < min_baseline_records:
         return status, error, {}
-    retained_fraction = current_count / baseline_count
+    baseline_ids = {_entity_id(record) for record in previous_records}
+    current_ids = {_entity_id(record) for record in current_records}
+    retained_count = len(baseline_ids & current_ids)
+    retained_fraction = retained_count / len(baseline_ids)
     if retained_fraction >= min_retained_fraction:
         return status, error, {}
     guard_error = (
-        f"Completeness guard: retained {current_count}/{baseline_count} records "
+        f"Completeness guard: retained {retained_count}/{len(baseline_ids)} baseline entities "
         f"({retained_fraction:.1%}), below the {min_retained_fraction:.0%} threshold."
     )
     if error:
         guard_error = f"{error}; {guard_error}"
     return "partial", guard_error, {
         "baseline_record_count": baseline_count,
+        "baseline_entity_count": len(baseline_ids),
+        "current_record_count": len(current_records),
+        "retained_entity_count": retained_count,
+        "new_entity_count": len(current_ids - baseline_ids),
         "retained_fraction": round(retained_fraction, 4),
         "minimum_retained_fraction": min_retained_fraction,
     }
@@ -179,7 +186,7 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
         previous = store.load_previous_success(source_id, scope)
         previous_id = previous["snapshot_id"] if previous else None
         status, error, guard = _apply_completeness_guard(
-            status, len(canonical), previous["records"] if previous else None,
+            status, canonical, previous["records"] if previous else None,
             error, min_retained_fraction, min_baseline_records,
         )
         changes = _build_changes(status, canonical, previous["records"] if previous else None,
@@ -201,7 +208,7 @@ def record_snapshot(source_id: str, records: list[dict[str, Any]], *, scope: str
         ).fetchone()
         previous_records = json.loads(previous["records_json"]) if previous is not None else None
         status, error, guard = _apply_completeness_guard(
-            status, len(canonical), previous_records, error,
+            status, canonical, previous_records, error,
             min_retained_fraction, min_baseline_records,
         )
         cursor = connection.execute(
