@@ -102,4 +102,5 @@ def test_reporting_failure_does_not_erase_completed_state_updates(monkeypatch):
 
     assert result["reporting_status"] == "failed"
     assert "Checked 1 of 1" in result["summary"]
-    assert result["watchdog_run"]["errors"][-1]["stage"] == "reporting"
+    assert result["reporting_error"] == "RuntimeError: Bedrock unavailable"
+    assert result["watchdog_run"]["error_count"] == 0
