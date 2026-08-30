@@ -14,3 +14,8 @@ docs/Food_Access_Advisor_Dataset_Integration_Prompt.md
 .gitignore
 docs/Geospatial_Prioritization_and_Route_Optimization_Requirements.md
 .env.local
+
+# Local AgentCore scaffolds and packaged deployment artifacts
+agentcore-staging-*/
+agentcore-preview/
+agentcore-preview-*/
