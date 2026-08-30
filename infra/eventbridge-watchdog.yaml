@@ -150,7 +150,7 @@ Resources:
       ScheduleExpressionTimezone: !Ref ScheduleExpressionTimezone
       State: !Ref ScheduleState
       FlexibleTimeWindow:
-        Mode: OFF
+        Mode: "OFF"
       Target:
         Arn: !GetAtt WatchdogInvokerFunction.Arn
         RoleArn: !GetAtt WatchdogSchedulerRole.Arn
