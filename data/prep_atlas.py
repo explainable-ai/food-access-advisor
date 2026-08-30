@@ -1,5 +1,6 @@
 """Build urban and rural SQLite databases from an official USDA Atlas file."""
 import argparse
+from contextlib import closing
 import os
 import re
 import sqlite3
@@ -121,16 +122,17 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
     fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
     os.close(fd)
     try:
-        with sqlite3.connect(temporary) as connection:
-            connection.execute("CREATE TABLE tracts (tract_fips TEXT PRIMARY KEY, population INTEGER, low_access_half_mile INTEGER, low_access_one_mile INTEGER, centroid_lat REAL, centroid_lon REAL)")
-            connection.executemany("INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)", rows)
-            connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-            connection.executemany("INSERT INTO metadata VALUES (?, ?)", {
-                "data_mode": "real", "product": product, "region": region_name,
-                "region_name": region["config"]["name"], "thresholds": region["thresholds"],
-                "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[product],
-                "source_file": str(source_path), "prepared_at": datetime.now(timezone.utc).isoformat(),
-            }.items())
+        with closing(sqlite3.connect(temporary)) as connection:
+            with connection:
+                connection.execute("CREATE TABLE tracts (tract_fips TEXT PRIMARY KEY, population INTEGER, low_access_half_mile INTEGER, low_access_one_mile INTEGER, centroid_lat REAL, centroid_lon REAL)")
+                connection.executemany("INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)", rows)
+                connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                connection.executemany("INSERT INTO metadata VALUES (?, ?)", {
+                    "data_mode": "real", "product": product, "region": region_name,
+                    "region_name": region["config"]["name"], "thresholds": region["thresholds"],
+                    "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[product],
+                    "source_file": str(source_path), "prepared_at": datetime.now(timezone.utc).isoformat(),
+                }.items())
         os.replace(temporary, target)
     finally:
         if os.path.exists(temporary):
