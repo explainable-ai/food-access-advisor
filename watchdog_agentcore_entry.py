@@ -74,7 +74,10 @@ def _extract_text(agent_result: Any) -> str:
 
 def _deterministic_summary(run: dict) -> str:
     if run.get("status") == "no_pending":
-        return "No pending flagged tracts were found. No source queries or status updates were needed."
+        return (
+            "No pending flagged tracts were found. No OSM recheck queries or tract status "
+            "updates were needed."
+        )
     summary = (
         f"Checked {run.get('checked', 0)} of {run.get('pending', 0)} pending tracts: "
         f"{run.get('possible_change', 0)} possible changes require human verification and "
@@ -106,6 +109,7 @@ async def handler(payload: dict):
     run = await asyncio.to_thread(run_watchdog_pass)
     summary = _deterministic_summary(run)
     reporting_status = "skipped_no_pending"
+    reporting_error = None
 
     if run.get("status") != "no_pending":
         compact = _report_payload(run, supplemental)
@@ -124,15 +128,13 @@ async def handler(payload: dict):
                 reporting_status = "empty_response"
         except Exception as exc:
             reporting_status = "failed"
-            run.setdefault("errors", []).append({
-                "stage": "reporting",
-                "error": f"{type(exc).__name__}: {exc}"[:300],
-            })
+            reporting_error = f"{type(exc).__name__}: {exc}"[:300]
 
     return {
         "request": prompt,
         "summary": summary,
         "reporting_status": reporting_status,
+        "reporting_error": reporting_error,
         "watchdog_run": run,
         "supplemental_sources": supplemental,
     }
