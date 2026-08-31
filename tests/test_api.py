@@ -25,6 +25,19 @@ def test_health_endpoint_has_no_dependencies():
     assert response.json() == {"status": "ok"}
 
 
+def test_cors_allows_local_frontend_but_not_unknown_origin():
+    allowed = client.options(
+        "/api/watchdog/changes",
+        headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"},
+    )
+    blocked = client.options(
+        "/api/watchdog/changes",
+        headers={"Origin": "https://untrusted.example", "Access-Control-Request-Method": "GET"},
+    )
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "access-control-allow-origin" not in blocked.headers
+
+
 def use_temp_db(tmp_path, monkeypatch):
     db_path = tmp_path / "flagged_tracts_test.db"
     monkeypatch.setattr(flagged_tracts, "DB_PATH", db_path)
@@ -242,6 +255,7 @@ def test_route_evidence_surfaces_failure_as_502(monkeypatch):
 
 
 def test_verify_updates_status(tmp_path, monkeypatch):
+    monkeypatch.setenv("FOOD_ACCESS_AUTH_MODE", "disabled")
     use_temp_db(tmp_path, monkeypatch)
     flagged_tracts.flag_tract_for_recheck(
         tract_fips="17031840000", recommendation_type="site", source_agent="advisor"
@@ -258,6 +272,7 @@ def test_verify_updates_status(tmp_path, monkeypatch):
 
 
 def test_verify_rejects_unknown_verification_at_schema_level(tmp_path, monkeypatch):
+    monkeypatch.setenv("FOOD_ACCESS_AUTH_MODE", "disabled")
     use_temp_db(tmp_path, monkeypatch)
     flagged_tracts.flag_tract_for_recheck(
         tract_fips="17031840000", recommendation_type="site", source_agent="advisor"
@@ -272,6 +287,7 @@ def test_verify_rejects_unknown_verification_at_schema_level(tmp_path, monkeypat
 
 
 def test_verify_missing_tract_returns_400(tmp_path, monkeypatch):
+    monkeypatch.setenv("FOOD_ACCESS_AUTH_MODE", "disabled")
     use_temp_db(tmp_path, monkeypatch)
 
     response = client.post(
@@ -280,6 +296,33 @@ def test_verify_missing_tract_returns_400(tmp_path, monkeypatch):
     )
 
     assert response.status_code == 400
+
+
+def test_verify_requires_staff_sign_in(tmp_path, monkeypatch):
+    monkeypatch.setenv("FOOD_ACCESS_AUTH_MODE", "required")
+    response = client.post(
+        "/api/flagged-tracts/verify",
+        json={"tract_fips": "17031840000", "recommendation_type": "site", "verification": "verified_open"},
+    )
+    assert response.status_code == 401
+    assert "staff account" in response.json()["detail"]
+
+
+def test_evidence_review_records_human_action(monkeypatch):
+    monkeypatch.setenv("FOOD_ACCESS_AUTH_MODE", "disabled")
+    monkeypatch.setattr(api_main, "review_change", lambda **kwargs: {
+        **kwargs, "source_id": "markets", "scope": "urban", "review_status": kwargs["action"],
+    })
+    response = client.post(
+        "/api/watchdog/changes/review",
+        json={
+            "source_scope": "markets#urban", "record_key": "CHANGE#1",
+            "action": "acknowledged", "note": "Reviewed the source outage",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "review_recorded"
+    assert "No site ranking or route" in response.json()["message"]
 
 
 def test_impact_metrics_returns_both_regions(tmp_path, monkeypatch):

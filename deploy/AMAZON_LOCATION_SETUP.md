@@ -56,3 +56,27 @@ from the Route Advisor workspace using **Amazon Location road network**.
 The result should report `amazon_location_routes_v2` as its travel-time
 source. An access-denied response means the runtime identity is missing the
 IAM statement above or is using a different Region.
+
+## Hybrid web map
+
+The browser uses MapLibre GL with Amazon Location's dynamic `Hybrid` style.
+This is separate from the backend route-matrix permission. It uses a
+browser-visible Amazon Location API key restricted to map rendering and the
+final website referrer; it never uses an AWS access key.
+
+Wait until the final Lovable/custom URL is known, then create the key in the
+Amazon Location console:
+
+1. Open **Amazon Location Service → API keys → Create API key**.
+2. Name it `FoodAccessAdvisorWebMap`.
+3. Allow only map-rendering actions (`geo:GetMap*` or the equivalent current
+   `geo-maps` map actions shown by the console).
+4. Add the exact final HTTPS domain as the allowed web referrer.
+5. Set an expiration date and calendar a rotation before it expires.
+6. Put the returned value in Lovable's `VITE_AWS_LOCATION_API_KEY` deployment
+   variable and set `VITE_AWS_LOCATION_REGION=us-east-1`.
+
+Do not grant Places, Routes, trackers, geofences, or resource-management
+actions to this browser key. Backend route calculations continue to use the
+ECS task role. When the map key is absent or rejected, the UI retains its
+explicitly labelled illustrative map rather than hiding the failure.

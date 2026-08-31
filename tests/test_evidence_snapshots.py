@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from tools.evidence_snapshots import read_changes, record_snapshot
+from tools.evidence_snapshots import read_change_page, read_changes, record_snapshot, review_change
 
 
 NOW = datetime(2026, 8, 29, tzinfo=timezone.utc)
@@ -33,6 +33,67 @@ def test_stale_source_is_explicit_and_change_feed_is_filterable(tmp_path):
     assert result["changes"][0]["change_type"] == "stale"
     assert read_changes(source_id="other", db_path=db) == []
     assert read_changes(source_id="markets", db_path=db)[0]["after"] == {"record_count": 0}
+
+
+def test_change_page_groups_repeated_source_health_and_paginates(tmp_path):
+    db = tmp_path / "snapshots.db"
+    record_snapshot("markets", [], scope="urban", status="stale", captured_at=NOW, db_path=db)
+    record_snapshot(
+        "markets", [], scope="urban", status="stale",
+        captured_at=NOW + timedelta(minutes=5), db_path=db,
+    )
+    record_snapshot(
+        "licenses", [], scope="urban", status="failed", error="timeout",
+        captured_at=NOW + timedelta(minutes=10), db_path=db,
+    )
+
+    first = read_change_page(limit=1, db_path=db)
+    assert first["page_size"] == 1
+    assert first["open_finding_count"] == 2
+    assert first["source_count"] == 2
+    assert first["next_cursor"]
+
+    second = read_change_page(limit=1, cursor=first["next_cursor"], db_path=db)
+    assert second["page_size"] == 1
+    markets = second["items"][0]
+    assert markets["source_id"] == "markets"
+    assert markets["occurrence_count"] == 2
+
+
+def test_acknowledging_latest_source_health_finding_closes_group(tmp_path):
+    db = tmp_path / "snapshots.db"
+    record_snapshot("markets", [], scope="urban", status="stale", captured_at=NOW, db_path=db)
+    record_snapshot(
+        "markets", [], scope="urban", status="stale",
+        captured_at=NOW + timedelta(minutes=5), db_path=db,
+    )
+    finding = read_change_page(db_path=db)["items"][0]
+
+    reviewed = review_change(
+        source_scope=finding["source_scope"], record_key=finding["record_key"],
+        action="acknowledged", reviewed_by="reviewer@example.org", db_path=db,
+    )
+
+    assert reviewed["review_status"] == "acknowledged"
+    assert read_change_page(db_path=db)["open_finding_count"] == 0
+    all_findings = read_change_page(status="all", db_path=db)
+    assert all_findings["items"][0]["occurrence_count"] == 2
+
+
+def test_record_changes_remain_individually_auditable(tmp_path):
+    db = tmp_path / "snapshots.db"
+    record_snapshot("licenses", [{"entity_id": "a", "status": "open"}], scope="urban", captured_at=NOW, db_path=db)
+    record_snapshot(
+        "licenses", [{"entity_id": "a", "status": "closed"}], scope="urban",
+        captured_at=NOW + timedelta(minutes=5), db_path=db,
+    )
+    record_snapshot(
+        "licenses", [{"entity_id": "a", "status": "open"}], scope="urban",
+        captured_at=NOW + timedelta(minutes=10), db_path=db,
+    )
+    page = read_change_page(db_path=db)
+    assert page["open_finding_count"] == 2
+    assert all(item["occurrence_count"] == 1 for item in page["items"])
 
 
 def test_canonicalization_keeps_citation_but_ignores_retrieval_time(tmp_path):

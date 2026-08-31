@@ -135,7 +135,7 @@ class AwsEvidenceStore:
                 item["previous_snapshot_id"] = previous_snapshot_id
             self.table.put_item(Item=_decimalize(item))
 
-    def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
+    def read_all_changes(self, *, source_id: str | None = None) -> list[dict[str, Any]]:
         expression = Attr("item_type").eq("change") & (
             Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
         )
@@ -147,7 +147,38 @@ class AwsEvidenceStore:
             key=lambda item: item["detected_at"],
             reverse=True,
         )
-        return ordered[:limit]
+        return ordered
+
+    def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
+        return self.read_all_changes(source_id=source_id)[:limit]
+
+    def review_change(self, *, source_scope: str, record_key: str, action: str,
+                      reviewed_by: str, note: str = "") -> dict[str, Any]:
+        names = {"#review_status": "review_status"}
+        values = {
+            ":review_status": action,
+            ":reviewed_at": datetime.now(timezone.utc).isoformat(),
+            ":reviewed_by": reviewed_by,
+            ":change_type": "change",
+        }
+        update = "SET #review_status=:review_status, reviewed_at=:reviewed_at, reviewed_by=:reviewed_by"
+        if note:
+            values[":review_note"] = note
+            update += ", review_note=:review_note"
+        try:
+            response = self.table.update_item(
+                Key={"source_scope": source_scope, "record_key": record_key},
+                UpdateExpression=update,
+                ExpressionAttributeNames=names,
+                ExpressionAttributeValues=values,
+                ConditionExpression="item_type=:change_type",
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return {"error": "Evidence finding was not found"}
+            raise
+        return _native(response["Attributes"])
 
 
 class AwsFlaggedTractStore:

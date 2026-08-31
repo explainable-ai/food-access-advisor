@@ -13,3 +13,4 @@ uvicorn[standard]>=0.29.0
 httpx>=0.27.0
 pyshp>=2.3.0
 shapely>=2.0.0
+PyJWT[crypto]>=2.8.0
