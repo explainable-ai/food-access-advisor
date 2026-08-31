@@ -80,6 +80,22 @@ def test_acknowledging_latest_source_health_finding_closes_group(tmp_path):
     assert all_findings["items"][0]["occurrence_count"] == 2
 
 
+def test_record_changes_remain_individually_auditable(tmp_path):
+    db = tmp_path / "snapshots.db"
+    record_snapshot("licenses", [{"entity_id": "a", "status": "open"}], scope="urban", captured_at=NOW, db_path=db)
+    record_snapshot(
+        "licenses", [{"entity_id": "a", "status": "closed"}], scope="urban",
+        captured_at=NOW + timedelta(minutes=5), db_path=db,
+    )
+    record_snapshot(
+        "licenses", [{"entity_id": "a", "status": "open"}], scope="urban",
+        captured_at=NOW + timedelta(minutes=10), db_path=db,
+    )
+    page = read_change_page(db_path=db)
+    assert page["open_finding_count"] == 2
+    assert all(item["occurrence_count"] == 1 for item in page["items"])
+
+
 def test_canonicalization_keeps_citation_but_ignores_retrieval_time(tmp_path):
     db = tmp_path / "snapshots.db"
     first = {"entity_id": "a", "name": "A", "source_citation": {

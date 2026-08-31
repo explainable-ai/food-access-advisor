@@ -284,8 +284,10 @@ def _all_changes(*, source_id: str | None, db_path: Path) -> list[dict[str, Any]
 
 def _finding_key(change: dict[str, Any]) -> str:
     if change["change_type"] in SOURCE_HEALTH_CHANGE_TYPES:
-        return f"source-health:{change['source_id']}:{change['scope']}:{change['change_type']}"
-    identity = change.get("entity_id") or change.get("record_key") or change.get("id")
+        return f"source-health:{change['source_id']}:{change['scope']}"
+    # Record-level changes are individually auditable events. Only repeated
+    # source-health observations are consolidated.
+    identity = change.get("record_key") or change.get("id") or change.get("entity_id")
     return f"record:{change['source_id']}:{change['scope']}:{change['change_type']}:{identity}"
 
 
