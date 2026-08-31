@@ -3,6 +3,8 @@ import { HomeMap } from "./pages/HomeMap";
 import { SiteAdvisorWorkspace } from "./pages/SiteAdvisorWorkspace";
 import { RouteAdvisorWorkspace } from "./pages/RouteAdvisorWorkspace";
 import { FollowUpPage } from "./pages/FollowUpPage";
+import { AuthCallbackPage } from "./pages/AuthCallbackPage";
+import { StaffAuthControls } from "./components/StaffAuthControls";
 
 function App() {
   return (
@@ -23,6 +25,7 @@ function App() {
             Follow-up
           </NavLink>
         </div>
+        <StaffAuthControls />
       </nav>
       <main>
         <Routes>
@@ -30,6 +33,7 @@ function App() {
           <Route path="/site-advisor" element={<SiteAdvisorWorkspace />} />
           <Route path="/route-advisor" element={<RouteAdvisorWorkspace />} />
           <Route path="/follow-up" element={<FollowUpPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
         </Routes>
       </main>
     </div>

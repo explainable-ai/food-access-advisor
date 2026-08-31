@@ -56,6 +56,38 @@ body {
 .nav-tabs {
   display: flex;
   gap: 2px;
+  flex: 1;
+}
+
+.staff-auth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+
+.staff-auth button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  color: var(--blueprint);
+  cursor: pointer;
+  padding: 6px 12px;
+}
+
+.staff-auth-note,
+.staff-auth-error {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.staff-auth-error {
+  color: #9b2c2c;
+}
+
+.auth-callback {
+  max-width: 36rem;
+  margin: 5rem auto;
 }
 
 .nav-tab {
