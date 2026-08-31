@@ -2,6 +2,8 @@
 // hand-mirrored against api/schemas.py -- not generated from the OpenAPI
 // schema, since that's a nice-to-have, not required for a first version.
 
+import { getStaffAccessToken } from "./auth";
+
 export type AdvisorResponse = {
   answer: string;
 };
@@ -118,14 +120,22 @@ const EVIDENCE_TIMEOUT_MS = 30_000;
 
 class ApiError extends Error {}
 
-async function request<T>(path: string, init: RequestInit, timeoutMs: number): Promise<T> {
+async function request<T>(path: string, init: RequestInit, timeoutMs: number, staffAuth = false): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, { ...init, signal: controller.signal });
+    const headers = new Headers(init.headers);
+    if (staffAuth) headers.set("Authorization", `Bearer ${await getStaffAccessToken()}`);
+    const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, signal: controller.signal });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}) as Record<string, unknown>);
-      const detail = typeof body.detail === "string" ? body.detail : `${response.status} ${response.statusText}`;
+      const detail = response.status === 401
+        ? "Staff sign-in required."
+        : response.status === 403
+          ? "Your account does not have staff access."
+          : typeof body.detail === "string"
+            ? body.detail
+            : `${response.status} ${response.statusText}`;
       throw new ApiError(detail);
     }
     return (await response.json()) as T;
@@ -240,5 +250,6 @@ export function verifyFlaggedTract(
       }),
     },
     READ_TIMEOUT_MS,
+    true,
   );
 }
