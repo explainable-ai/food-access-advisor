@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Staff authentication for Food Access Advisor using Cognito managed login and PKCE.
+
+Parameters:
+  DomainPrefix:
+    Type: String
+    Description: Globally unique Cognito managed-login domain prefix.
+    AllowedPattern: "^[a-z0-9-]{1,63}$"
+  CallbackUrl:
+    Type: String
+    Description: Final HTTPS Lovable/custom URL ending in /auth/callback.
+    AllowedPattern: "^https://.+/auth/callback$"
+  LogoutUrl:
+    Type: String
+    Description: Final HTTPS Lovable/custom site URL.
+    AllowedPattern: "^https://.+$"
+
+Resources:
+  StaffUserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: food-access-advisor-staff
+      DeletionProtection: ACTIVE
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+          TemporaryPasswordValidityDays: 7
+
+  StaffGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: staff
+      Description: May record evidence reviews and other staff-only actions.
+      UserPoolId: !Ref StaffUserPool
+
+  BrowserClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: food-access-advisor-lovable
+      UserPoolId: !Ref StaffUserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - !Ref CallbackUrl
+      LogoutURLs:
+        - !Ref LogoutUrl
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 1
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  ManagedLoginDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref DomainPrefix
+      UserPoolId: !Ref StaffUserPool
+
+Outputs:
+  UserPoolId:
+    Value: !Ref StaffUserPool
+  AppClientId:
+    Value: !Ref BrowserClient
+  Authority:
+    Value: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${StaffUserPool}"
+  ManagedLoginDomain:
+    Value: !Sub "https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com"
+  StaffGroupName:
+    Value: !Ref StaffGroup
