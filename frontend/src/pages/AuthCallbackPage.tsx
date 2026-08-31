@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { completeStaffSignIn } from "../lib/auth";
 
 export function AuthCallbackPage() {
-  const navigate = useNavigate();
+  const started = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     completeStaffSignIn()
-      .then(() => navigate("/follow-up", { replace: true }))
+      // Reload after the callback so the header reads the newly stored user.
+      .then(() => window.location.replace("/follow-up"))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, [navigate]);
+  }, []);
 
   return (
     <section className="auth-callback" aria-live="polite">
