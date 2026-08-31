@@ -23,15 +23,18 @@ sub-second REST call.
 
 import asyncio
 import json
+import os
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.schemas import (
     AdvisorRequest,
     AdvisorResponse,
     EvidenceRequest,
+    EvidenceReviewRequest,
     EvidenceResponse,
     ExistingResource,
     ImpactMetrics,
@@ -40,11 +43,12 @@ from api.schemas import (
     RouteOptimizationResponse,
     VerifyRequest,
 )
+from api.auth import require_staff_user
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from orchestration import route_request
 from tools.access_data import get_low_access_rural_tracts, get_low_access_tracts
 from tools.evidence_brief import write_evidence_brief, write_route_brief
-from tools.evidence_snapshots import read_changes
+from tools.evidence_snapshots import read_change_page, review_change
 from tools.existing_resources import OverpassQueryError, get_existing_resources, get_rural_existing_resources
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import score_gaps
@@ -62,14 +66,22 @@ BOUNDARY_FILES_BY_COUNTY_FIPS = {
 
 app = FastAPI(title="Food-Access Advisor API")
 
-# Wide open for local development against a separately-run React dev
-# server (different origin/port). Narrow this to the frontend's real
-# origin before deploying anywhere reachable from the public internet.
+
+def _cors_origins() -> list[str]:
+    """Return explicit origins only; a wildcard is never accepted."""
+    raw = os.getenv("FOOD_ACCESS_CORS_ORIGINS", "http://localhost:5173")
+    origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+    if "*" in origins:
+        raise RuntimeError("FOOD_ACCESS_CORS_ORIGINS must contain explicit origins, never '*'")
+    return origins
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins(),
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=False,
 )
 
 
@@ -238,13 +250,42 @@ def impact_metrics() -> ImpactMetrics:
 
 
 @app.get("/api/watchdog/changes")
-def watchdog_changes(limit: int = Query(default=100, ge=1, le=1000), source_id: str | None = None):
-    """Return the auditable snapshot-diff and source-health feed."""
-    return read_changes(limit=limit, source_id=source_id)
+def watchdog_changes(limit: int = Query(default=10, ge=1, le=100), cursor: str | None = None,
+                     source_id: str | None = None, status: str = Query(default="open")):
+    """Return deduplicated, cursor-paginated findings for human review."""
+    try:
+        return read_change_page(limit=limit, cursor=cursor, source_id=source_id, status=status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/watchdog/changes/review")
+def review_watchdog_change(request: EvidenceReviewRequest,
+                           staff_user: dict[str, Any] = Depends(require_staff_user)):
+    """Record a staff review without silently changing a ranking or route."""
+    reviewed_by = str(
+        staff_user.get("email") or staff_user.get("username")
+        or staff_user.get("cognito:username") or staff_user.get("sub")
+    )
+    result = review_change(
+        source_scope=request.source_scope,
+        record_key=request.record_key,
+        action=request.action,
+        reviewed_by=reviewed_by,
+        note=request.note or "",
+    )
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return {
+        "status": "review_recorded",
+        "message": "Review recorded. No site ranking or route was changed automatically.",
+        "finding": result,
+    }
 
 
 @app.post("/api/flagged-tracts/verify")
-def verify_tract(request: VerifyRequest):
+def verify_tract(request: VerifyRequest,
+                 _staff_user: dict[str, Any] = Depends(require_staff_user)):
     """A human's verification of a Watchdog-observed 'possible_change' --
     see tools/flagged_tracts.py's verify_flagged_tract for the four
     verification choices and what each maps to."""

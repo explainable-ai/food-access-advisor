@@ -15,6 +15,7 @@ FlaggedTractStatus = Literal["pending", "possible_change", "still_needed", "reso
 # The planning-workspace Follow-up page's four human verification actions --
 # see tools/flagged_tracts.py's VERIFICATION_STATUS_MAP for what each maps to.
 VerificationChoice = Literal["verified_open", "planned_not_open", "incorrect_record", "unrelated"]
+EvidenceReviewAction = Literal["acknowledged", "verification_requested", "no_decision_impact"]
 
 
 class AdvisorRequest(BaseModel):
@@ -147,3 +148,10 @@ class VerifyRequest(BaseModel):
     recommendation_type: str
     verification: VerificationChoice
     note: Optional[str] = ""
+
+
+class EvidenceReviewRequest(BaseModel):
+    source_scope: str = Field(min_length=3)
+    record_key: str = Field(min_length=3)
+    action: EvidenceReviewAction
+    note: Optional[str] = Field(default="", max_length=2000)
