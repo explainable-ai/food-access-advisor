@@ -123,12 +123,11 @@ def get_existing_resources() -> list:
 
 @tool
 def get_rural_existing_resources() -> list:
-    """Find existing food resources near the rural pilot county via
-    OpenStreetMap (see config.PILOT_RURAL_COUNTY — currently Alexander
-    County, IL).
+    """Find existing food resources in the configured rural planning bands.
 
-    Same boundary discipline as `get_existing_resources`: no arguments,
-    always resolves to `config.PILOT_RURAL_COUNTY["bbox"]`. Extends the
+    Same boundary discipline as `get_existing_resources`: no arguments.
+    Bounds always come from `config.PILOT_RURAL_COUNTY["resource_areas"]`
+    (or its single `bbox` fallback). Extends the
     urban tag set with `social_facility=food_bank` and
     `amenity=marketplace` — see RURAL_NODE_FILTERS.
 
@@ -136,8 +135,17 @@ def get_rural_existing_resources() -> list:
         Same shape as `get_existing_resources`, with two additional
         possible `kind` values: "food_bank" and "market".
     """
-    south, west, north, east = PILOT_RURAL_COUNTY["bbox"]
-    return _query_overpass(south, west, north, east, RURAL_NODE_FILTERS)
+    areas = PILOT_RURAL_COUNTY.get("resource_areas") or [
+        {"name": "rural", "bbox": PILOT_RURAL_COUNTY["bbox"]}
+    ]
+    resources_by_id = {}
+    for area in areas:
+        south, west, north, east = area["bbox"]
+        for resource in _query_overpass(
+            south, west, north, east, RURAL_NODE_FILTERS
+        ):
+            resources_by_id[resource["entity_id"]] = resource
+    return list(resources_by_id.values())
 
 
 def _query_overpass(south, west, north, east, node_filters) -> list:
