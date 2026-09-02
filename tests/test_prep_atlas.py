@@ -38,6 +38,8 @@ def test_prepares_only_rural_tracts_from_all_configured_counties(tmp_path, monke
     assert metadata["thresholds"] == "10/20 miles"
     assert metadata["rural_only"] == "true"
     assert metadata["rural_indicator"] == "Urban=0"
+    assert metadata["atlas_excluded_tract_fips"] == ""
+    assert metadata["atlas_exclusion_reason"] == "not_applicable"
 
 
 def test_rural_prep_requires_usda_classification(tmp_path, monkeypatch):
