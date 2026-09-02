@@ -113,12 +113,14 @@ def main():
         for county in config["county_fips"]:
             evidence.extend(client.fetch_tracts(state_fips=county[:2], county_fips=county[2:],
                                                 variables=PRIORITIZATION_VARIABLES))
-        print(
-            f"Enriched {enrich_database(path, evidence, args.year, "
-            f"allow_extra_evidence=bool(config.get('rural_only')), "
-            f"allowed_extra_geoids=config.get('atlas_excluded_tract_fips', ())) } "
-            f"{region} tracts with ACS {args.year}"
+        matched = enrich_database(
+            path,
+            evidence,
+            args.year,
+            allow_extra_evidence=bool(config.get("rural_only")),
+            allowed_extra_geoids=config.get("atlas_excluded_tract_fips", ()),
         )
+        print(f"Enriched {matched} {region} tracts with ACS {args.year}")
 
 
 if __name__ == "__main__":
