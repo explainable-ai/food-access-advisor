@@ -65,3 +65,16 @@ def test_geography_vintage_mismatch_fails_before_join(tmp_path):
         assert "geography mismatch" in str(error)
     else:
         raise AssertionError("incompatible tract vintages must not be joined")
+
+
+def test_rural_subset_allows_extra_county_acs_rows(tmp_path):
+    path = tmp_path / "rural.db"
+    make_database(path, ("17089960100",))
+    evidence = [
+        make_evidence("17089960100"),
+        make_evidence("17089010100"),
+    ]
+
+    assert enrich_database(
+        path, evidence, 2024, allow_extra_evidence=True
+    ) == 1
