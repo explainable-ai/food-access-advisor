@@ -160,7 +160,9 @@ def _validate_complete_heatmap_database(path):
             tract_count = connection.execute("SELECT COUNT(*) FROM tracts").fetchone()[0]
             tract_rows = (
                 connection.execute(
-                    "SELECT tract_fips, population, centroid_lat, centroid_lon FROM tracts"
+                    """SELECT tract_fips, population, low_access_half_mile,
+                              low_access_one_mile, centroid_lat, centroid_lon
+                       FROM tracts"""
                 ).fetchall()
                 if not (set(CORE_COLUMNS) - available)
                 else []
@@ -204,9 +206,11 @@ def _validate_complete_heatmap_database(path):
     if metadata_count != tract_count:
         problems.append("tract row count does not match the prepared evidence manifest")
     if tract_rows and any(
-        row[1] is None or row[2] is None or row[3] is None for row in tract_rows
+        row[1] is None or row[4] is None or row[5] is None for row in tract_rows
     ):
         problems.append("one or more tracts are missing population or centroid values")
+    if tract_rows and any(row[2] not in (0, 1) or row[3] not in (0, 1) for row in tract_rows):
+        problems.append("one or more tracts have null or non-binary low-access flags")
     if problems:
         raise PreparedTractDataError(
             "prepared Cook County tract database is incomplete (" + "; ".join(problems) + "); "
