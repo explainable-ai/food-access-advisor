@@ -53,6 +53,8 @@ HEATMAP_METADATA = (
     "acs_geography_vintage",
     "tract_count",
     "tract_fips_sha256",
+    "atlas_excluded_tract_fips",
+    "atlas_exclusion_reason",
 )
 
 
@@ -204,9 +206,13 @@ def _validate_complete_heatmap_database(path):
         problems.append(f"missing preparation metadata: {', '.join(missing_metadata)}")
     if tract_count == 0:
         problems.append("tract table is empty")
-    expected_count = int(PILOT_CITY["expected_tract_count"])
+    expected_count = int(
+        PILOT_CITY.get("expected_atlas_tract_count", PILOT_CITY["expected_tract_count"])
+    )
     if tract_count != expected_count:
-        problems.append(f"expected {expected_count} Cook County tracts, found {tract_count}")
+        problems.append(
+            f"expected {expected_count} SRAM-covered Cook County tracts, found {tract_count}"
+        )
     if metadata.get("region") != "urban" or metadata.get("region_name") != PILOT_CITY["name"]:
         problems.append("database metadata does not identify the Cook County urban study area")
     expected_vintage = str(PILOT_CITY["tract_geography_vintage"])
@@ -220,10 +226,20 @@ def _validate_complete_heatmap_database(path):
                            for fips in actual_fips):
         problems.append("tract table contains a GEOID outside the configured Cook County FIPS")
     actual_digest = hashlib.sha256("\n".join(sorted(actual_fips)).encode()).hexdigest()
-    if actual_digest != PILOT_CITY["expected_tract_fips_sha256"]:
-        problems.append("tract GEOID set does not match the authoritative Cook County manifest")
+    expected_atlas_digest = PILOT_CITY.get(
+        "expected_atlas_tract_fips_sha256", PILOT_CITY["expected_tract_fips_sha256"]
+    )
+    if actual_digest != expected_atlas_digest:
+        problems.append("tract GEOID set does not match the authoritative SRAM manifest")
     if metadata.get("tract_fips_sha256") != actual_digest:
         problems.append("tract GEOID set does not match the prepared evidence manifest")
+    expected_excluded = ",".join(PILOT_CITY.get("atlas_excluded_tract_fips", []))
+    if metadata.get("atlas_excluded_tract_fips") != expected_excluded:
+        problems.append("Atlas exclusion metadata does not match the configured tract universe")
+    if metadata.get("atlas_exclusion_reason") != PILOT_CITY.get(
+        "atlas_exclusion_reason", "not_applicable"
+    ):
+        problems.append("Atlas exclusion reason is missing or unexpected")
     try:
         metadata_count = int(metadata.get("tract_count", ""))
     except ValueError:
