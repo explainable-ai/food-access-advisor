@@ -147,6 +147,54 @@ def test_get_all_tracts_rejects_malformed_database_as_prepared_data_failure(
         raise AssertionError("Malformed data must return a prepared-data failure")
 
 
+def test_get_all_tracts_materializes_prepared_database_from_s3(tmp_path, monkeypatch):
+    source = tmp_path / "prepared.db"
+    with sqlite3.connect(source) as connection:
+        connection.execute(
+            """CREATE TABLE tracts (
+                tract_fips TEXT PRIMARY KEY,
+                population INTEGER,
+                low_access_half_mile INTEGER,
+                low_access_one_mile INTEGER,
+                centroid_lat REAL,
+                centroid_lon REAL,
+                poverty_universe REAL,
+                population_below_poverty REAL,
+                households_total REAL,
+                households_no_vehicle REAL
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO tracts VALUES ('A', 1000, 1, 1, 41.8, -87.6, 100, 20, 100, 10)"
+        )
+        connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.executemany(
+            "INSERT INTO metadata VALUES (?, ?)",
+            [
+                ("acs_vintage", "2024"),
+                ("acs_dataset", "2024/acs/acs5"),
+                ("acs_geography_vintage", "2020"),
+            ],
+        )
+
+    class FakeS3:
+        def download_fileobj(self, bucket, key, destination):
+            assert bucket == "evidence-bucket"
+            assert key == access_data.DEFAULT_DATABASE_KEY
+            destination.write(source.read_bytes())
+
+    target = tmp_path / "cache" / "atlas_pilot_city.db"
+    monkeypatch.setattr(access_data, "DB_PATH", tmp_path / "not-packaged.db")
+    monkeypatch.setenv("EVIDENCE_BUCKET", "evidence-bucket")
+    monkeypatch.setenv("TRACT_DATA_CACHE_PATH", str(target))
+    monkeypatch.setattr(access_data.boto3, "client", lambda service: FakeS3())
+
+    result = access_data.get_all_tracts()
+
+    assert [row["tract_fips"] for row in result] == ["A"]
+    assert target.exists()
+
+
 def test_complete_resource_cache_requires_county_coverage(tmp_path, monkeypatch):
     payload = {
         "scope": "urban",
