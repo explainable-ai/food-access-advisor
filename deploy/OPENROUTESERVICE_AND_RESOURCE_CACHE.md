@@ -18,6 +18,7 @@ Chicago database:
 ```powershell
 python data/prep_atlas.py --input .\data\raw\food_access_atlas.xlsx --product SRAM --regions rural
 python data/prep_acs.py --year 2024 --regions rural
+python data/prep_tract_boundaries.py
 
 aws s3 cp .\data\atlas_rural_county.db `
   s3://food-access-evidence-576951331959-us-east-1/prepared-data/atlas_rural_fringe.db `
@@ -27,7 +28,10 @@ aws s3 cp .\data\atlas_rural_county.db `
 
 The deployed API reads that object through `RURAL_TRACT_DATA_KEY` (default
 `prepared-data/atlas_rural_fringe.db`). It fails closed if the object is
-missing; it never substitutes Alexander County or illustrative tracts.
+missing; it never substitutes Alexander County or illustrative tracts. The
+boundary command regenerates `data/tract_boundaries_rural_county.geojson`
+for every configured county; package that generated file with the API image
+before enabling rural tract-boundary requests.
 
 ## Resource-cache bootstrap
 
