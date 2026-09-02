@@ -1,38 +1,46 @@
 import pytest
 
-from tools.travel_time_provider import AmazonLocationTravelTimeProvider, TravelTimeProviderError
+from tools.travel_time_provider import OpenRouteServiceProvider, TravelTimeProviderError
 
 
-class FakeClient:
-    def __init__(self, response):
-        self.response = response
-        self.request = None
-
-    def calculate_route_matrix(self, **kwargs):
-        self.request = kwargs
-        return self.response
-
-
-def test_amazon_location_matrix_uses_lon_lat_and_converts_seconds():
-    client = FakeClient({"RouteMatrix": [[{"Duration": 0}, {"Duration": 600}],
-                                                   [{"Duration": 720}, {"Duration": 0}]]})
-    provider = AmazonLocationTravelTimeProvider(client=client)
-    matrix = provider.calculate_matrix([{"lat": 37, "lon": -89}, {"lat": 38, "lon": -88}])
-    assert matrix == [[0, 10], [12, 0]]
-    assert client.request["Origins"][0]["Position"] == [-89.0, 37.0]
-    assert client.request["TravelMode"] == "Car"
-    assert client.request["Traffic"]["Usage"] == "IgnoreTrafficData"
+class Response:
+    def __init__(self, payload):
+        self.payload = payload
+    def raise_for_status(self):
+        return None
+    def json(self):
+        return self.payload
 
 
-def test_amazon_location_matrix_fails_closed_on_cell_error():
-    response = {"RouteMatrix": [[{"Duration": 0}, {"Error": "NoRoute"}],
-                                [{"Duration": 1}, {"Duration": 0}]]}
-    with pytest.raises(TravelTimeProviderError, match="NoRoute"):
-        AmazonLocationTravelTimeProvider(client=FakeClient(response)).calculate_matrix(
-            [{"lat": 37, "lon": -89}, {"lat": 38, "lon": -88}])
+class Session:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+    def post(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        return Response(self.payload)
 
 
-def test_amazon_location_matrix_rejects_incomplete_response():
-    with pytest.raises(TravelTimeProviderError, match="incomplete"):
-        AmazonLocationTravelTimeProvider(client=FakeClient({"RouteMatrix": []})).calculate_matrix(
-            [{"lat": 37, "lon": -89}, {"lat": 38, "lon": -88}])
+def test_matrix_converts_seconds_to_minutes():
+    session = Session({"durations": [[0, 120], [180, 0]]})
+    provider = OpenRouteServiceProvider(api_key="test", session=session)
+    matrix = provider.calculate_matrix([{"lat": 1, "lon": 2}, {"lat": 3, "lon": 4}])
+    assert matrix == [[0, 2], [3, 0]]
+    assert session.calls[0][0].endswith("/v2/matrix/driving-car")
+
+
+def test_directions_parses_geojson_and_alternatives():
+    feature = {
+        "geometry": {"coordinates": [[-89.2, 37.0], [-89.1, 37.1]]},
+        "properties": {"summary": {"distance": 8.5, "duration": 600}, "segments": []},
+    }
+    provider = OpenRouteServiceProvider(api_key="test", session=Session({"features": [feature, feature]}))
+    routes = provider.directions([{"lat": 37, "lon": -89.2}, {"lat": 37.1, "lon": -89.1}])
+    assert len(routes) == 2
+    assert routes[0]["durationMinutes"] == 10
+
+
+def test_missing_key_is_explicit(monkeypatch):
+    monkeypatch.delenv("OPENROUTESERVICE_API_KEY", raising=False)
+    with pytest.raises(TravelTimeProviderError):
+        OpenRouteServiceProvider()
