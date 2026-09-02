@@ -1,5 +1,6 @@
 """Tests for the complete, prepared Cook County heatmap score surface."""
 
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import api.main as api_main  # noqa: E402
 import tools.access_data as access_data  # noqa: E402
+import tools.resource_cache as resource_cache  # noqa: E402
 from tools.gap_scorer import PriorityWeights, score_all_gaps  # noqa: E402
 
 
@@ -41,14 +43,27 @@ def test_get_all_tracts_includes_non_low_access_rows(tmp_path, monkeypatch):
                 low_access_half_mile INTEGER,
                 low_access_one_mile INTEGER,
                 centroid_lat REAL,
-                centroid_lon REAL
+                centroid_lon REAL,
+                poverty_universe REAL,
+                population_below_poverty REAL,
+                households_total REAL,
+                households_no_vehicle REAL
             )"""
         )
         connection.executemany(
-            "INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                ("A", 2000, 1, 1, 41.8, -87.6),
-                ("B", 1000, 0, 0, 41.9, -87.7),
+                ("A", 2000, 1, 1, 41.8, -87.6, 100, 20, 100, 10),
+                ("B", 1000, 0, 0, 41.9, -87.7, 100, 15, 100, 8),
+            ],
+        )
+        connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.executemany(
+            "INSERT INTO metadata VALUES (?, ?)",
+            [
+                ("acs_vintage", "2024"),
+                ("acs_dataset", "2024/acs/acs5"),
+                ("acs_geography_vintage", "2020"),
             ],
         )
     monkeypatch.setattr(access_data, "DB_PATH", database)
@@ -81,7 +96,7 @@ def test_default_weights_match_the_approved_user_scenario():
 def test_site_tract_scores_returns_complete_prepared_surface(monkeypatch):
     prepared = [_tract("A", 2000, low_access=1), _tract("B", 1000), _tract("C", 500)]
     monkeypatch.setattr(api_main, "get_all_tracts", lambda: prepared)
-    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope: [])
+    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope, **kwargs: [])
 
     response = client.get("/api/site-advisor/tract-scores")
 
@@ -91,6 +106,49 @@ def test_site_tract_scores_returns_complete_prepared_surface(monkeypatch):
     assert {row["tract_fips"] for row in body} == {"A", "B", "C"}
     assert body[0]["weights_used"]["population_served"] == 0.2
     assert body[0]["sensitivity"] == {}
+
+
+def test_get_all_tracts_rejects_atlas_database_without_acs(tmp_path, monkeypatch):
+    database = tmp_path / "atlas_only.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE tracts (
+                tract_fips TEXT PRIMARY KEY,
+                population INTEGER,
+                low_access_half_mile INTEGER,
+                low_access_one_mile INTEGER,
+                centroid_lat REAL,
+                centroid_lon REAL
+            )"""
+        )
+        connection.execute("INSERT INTO tracts VALUES ('A', 1000, 1, 1, 41.8, -87.6)")
+    monkeypatch.setattr(access_data, "DB_PATH", database)
+
+    try:
+        access_data.get_all_tracts()
+    except access_data.PreparedTractDataError as error:
+        assert "missing ACS columns" in str(error)
+    else:
+        raise AssertionError("Atlas-only data must not power the heatmap")
+
+
+def test_complete_resource_cache_requires_county_coverage(tmp_path, monkeypatch):
+    payload = {
+        "scope": "urban",
+        "coverage_bbox": [41.60, -87.85, 42.05, -87.52],
+        "resources": [],
+    }
+    (tmp_path / "urban.json").write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setenv("RESOURCE_CACHE_DIR", str(tmp_path))
+    monkeypatch.delenv("RESOURCE_CACHE_BUCKET", raising=False)
+    monkeypatch.delenv("EVIDENCE_BUCKET", raising=False)
+
+    try:
+        resource_cache.load_resource_cache("urban", require_complete_coverage=True)
+    except resource_cache.ResourceCacheError as error:
+        assert "does not cover required urban bounds" in str(error)
+    else:
+        raise AssertionError("partial resource coverage must not power the heatmap")
 
 
 def test_site_tract_scores_never_falls_back_to_sample_rows(monkeypatch):
