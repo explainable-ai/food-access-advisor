@@ -47,6 +47,11 @@ PILOT_RURAL_COUNTY = {
     "rural_only": True,
     "rural_indicator_column": "Urban",
     "rural_indicator_value": 0,
+    "tract_geography_vintage": "2020",
+    # The official 2025 SRAM driving-distance extract contains 72 USDA-
+    # classified rural tracts across the seven approved counties.
+    "expected_atlas_tract_count": 72,
+    "expected_atlas_tract_fips_sha256": "08ae8afb3b16d8923f4e7c0726b0b70f9d9aa140a05af956a0c2f390c1f35883",
     # Overall map/data extent. Resource refreshes use the three smaller
     # planning bands below to avoid one oversized Overpass request.
     "bbox": (40.80, -89.05, 42.55, -87.45),
