@@ -1,0 +1,113 @@
+{
+  "registry_version": "1.0.0",
+  "master_geography": "2020 census tract",
+  "sources": [
+    {
+      "source_id": "census_tiger_tract_2020",
+      "authority": "U.S. Census Bureau",
+      "product": "TIGER/Line census tract geography",
+      "acquisition": "bulk_download",
+      "cadence": "on_release",
+      "required_phase": "phase_1",
+      "scoring_use": ["master_geography", "urban_rural_classification"],
+      "official_url": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html"
+    },
+    {
+      "source_id": "census_acs5_2024",
+      "authority": "U.S. Census Bureau",
+      "product": "American Community Survey 5-Year Data",
+      "acquisition": "api",
+      "cadence": "annual_on_release",
+      "required_phase": "phase_1",
+      "scoring_use": ["poverty", "no_vehicle", "potential_reach"],
+      "official_url": "https://api.census.gov/data/2024/acs/acs5"
+    },
+    {
+      "source_id": "usda_fara_sram_2025",
+      "authority": "USDA Economic Research Service",
+      "product": "Food Access Research Atlas — SRAM",
+      "acquisition": "bulk_download",
+      "cadence": "monthly_check_ingest_on_release",
+      "required_phase": "phase_1",
+      "scoring_use": ["food_access_gap"],
+      "official_url": "https://www.ers.usda.gov/data-products/food-access-research-atlas/download-the-data"
+    },
+    {
+      "source_id": "cnt_ht_2022_il",
+      "authority": "Center for Neighborhood Technology",
+      "product": "Housing + Transportation Index 2022 — Illinois block groups",
+      "acquisition": "controlled_upload",
+      "cadence": "on_release",
+      "required_phase": "phase_1",
+      "scoring_use": ["transportation_cost_burden"],
+      "official_url": "https://htaindex.cnt.org/download/data.php",
+      "canonical_filename": "htaindex2022_data_blkgrps_17.csv",
+      "canonical_upload_sha256": "c56734dae3ca4a84025d11409255e59323c623102c94f9741a347e0eeb36979e",
+      "expected_rows": 9896,
+      "geography_vintage_status": "must_be_verified_before_tract_publication"
+    },
+    {
+      "source_id": "chicago_food_inspections",
+      "authority": "City of Chicago",
+      "product": "Food Inspections",
+      "dataset_id": "4ijn-s7e5",
+      "acquisition": "socrata_api",
+      "cadence": "daily",
+      "required_phase": "phase_1",
+      "scoring_use": ["verified_resource_inventory"],
+      "official_url": "https://data.cityofchicago.org/resource/4ijn-s7e5.json"
+    },
+    {
+      "source_id": "chicago_grocery_inspections",
+      "authority": "City of Chicago",
+      "product": "Grocery Store Inspections",
+      "dataset_id": "uzxw-3yu8",
+      "acquisition": "socrata_api",
+      "cadence": "daily",
+      "required_phase": "phase_1",
+      "scoring_use": ["verified_resource_inventory"],
+      "official_url": "https://data.cityofchicago.org/resource/uzxw-3yu8.json"
+    },
+    {
+      "source_id": "partner_resource_inventory",
+      "authority": "Approved partner or food-bank staff",
+      "product": "Verified provider and mobile-market inventory",
+      "acquisition": "controlled_upload",
+      "cadence": "event_driven",
+      "required_phase": "phase_1",
+      "scoring_use": ["verified_resource_inventory", "route_candidates"],
+      "official_url": "internal://approved-partner-upload"
+    },
+    {
+      "source_id": "regional_gtfs",
+      "authority": "CTA, Pace and Metra",
+      "product": "Static GTFS schedules",
+      "acquisition": "bulk_download",
+      "cadence": "weekly",
+      "required_phase": "phase_2",
+      "scoring_use": ["scheduled_food_access_burden"],
+      "official_url": "https://www.transitchicago.com/developers/gtfs/"
+    },
+    {
+      "source_id": "openrouteservice",
+      "authority": "openrouteservice",
+      "product": "Driving directions and matrices",
+      "acquisition": "backend_api",
+      "cadence": "on_route_or_resource_change",
+      "required_phase": "phase_1",
+      "scoring_use": ["road_accessibility", "alternative_routes"],
+      "official_url": "https://openrouteservice.org/"
+    },
+    {
+      "source_id": "osm_overpass_supplemental",
+      "authority": "OpenStreetMap contributors",
+      "product": "Supplemental place and resource discovery",
+      "acquisition": "api",
+      "cadence": "optional",
+      "required_phase": "supplemental",
+      "scoring_use": ["candidate_discovery_only"],
+      "official_url": "https://www.openstreetmap.org/",
+      "restriction": "must_not_be_the_sole_proof_of_current_operation_or_coverage"
+    }
+  ]
+}
