@@ -30,6 +30,8 @@ def _complete_metadata(fipses):
         ("acs_dataset", "2024/acs/acs5"),
         ("acs_geography_vintage", "2020"),
         ("tract_count", str(len(fipses))),
+        ("atlas_excluded_tract_fips", "17031990000"),
+        ("atlas_exclusion_reason", "not_present_in_usda_sram_2025"),
         ("tract_fips_sha256", digest),
     ]
 
@@ -77,10 +79,10 @@ def test_get_all_tracts_includes_non_low_access_rows(tmp_path, monkeypatch):
         connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         connection.executemany("INSERT INTO metadata VALUES (?, ?)", _complete_metadata(fipses))
     monkeypatch.setattr(access_data, "DB_PATH", database)
-    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 2)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_atlas_tract_count", 2)
     monkeypatch.setitem(
         access_data.PILOT_CITY,
-        "expected_tract_fips_sha256",
+        "expected_atlas_tract_fips_sha256",
         _complete_metadata(fipses)[-1][1],
     )
 
@@ -201,10 +203,10 @@ def test_get_all_tracts_materializes_prepared_database_from_s3(tmp_path, monkeyp
     monkeypatch.setenv("EVIDENCE_BUCKET", "evidence-bucket")
     monkeypatch.setenv("TRACT_DATA_CACHE_PATH", str(target))
     monkeypatch.setattr(access_data.boto3, "client", lambda service: FakeS3())
-    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 1)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_atlas_tract_count", 1)
     monkeypatch.setitem(
         access_data.PILOT_CITY,
-        "expected_tract_fips_sha256",
+        "expected_atlas_tract_fips_sha256",
         _complete_metadata((fips,))[-1][1],
     )
 
@@ -236,12 +238,12 @@ def test_get_all_tracts_rejects_partial_cook_county_surface(tmp_path, monkeypatc
             "INSERT INTO metadata VALUES (?, ?)", _complete_metadata((fips,))
         )
     monkeypatch.setattr(access_data, "DB_PATH", database)
-    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 2)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_atlas_tract_count", 2)
 
     try:
         access_data.get_all_tracts()
     except access_data.PreparedTractDataError as error:
-        assert "expected 2 Cook County tracts, found 1" in str(error)
+        assert "expected 2 SRAM-covered Cook County tracts, found 1" in str(error)
     else:
         raise AssertionError("A partial Cook County artifact must fail closed")
 
@@ -268,7 +270,7 @@ def test_get_all_tracts_rejects_database_missing_core_columns(tmp_path, monkeypa
             "INSERT INTO metadata VALUES (?, ?)", _complete_metadata((fips,))
         )
     monkeypatch.setattr(access_data, "DB_PATH", database)
-    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 1)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_atlas_tract_count", 1)
 
     try:
         access_data.get_all_tracts()
@@ -300,10 +302,10 @@ def test_get_all_tracts_rejects_null_low_access_flags(tmp_path, monkeypatch):
             "INSERT INTO metadata VALUES (?, ?)", _complete_metadata((fips,))
         )
     monkeypatch.setattr(access_data, "DB_PATH", database)
-    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 1)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_atlas_tract_count", 1)
     monkeypatch.setitem(
         access_data.PILOT_CITY,
-        "expected_tract_fips_sha256",
+        "expected_atlas_tract_fips_sha256",
         _complete_metadata((fips,))[-1][1],
     )
 

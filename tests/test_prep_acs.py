@@ -78,3 +78,42 @@ def test_rural_subset_allows_extra_county_acs_rows(tmp_path):
     assert enrich_database(
         path, evidence, 2024, allow_extra_evidence=True
     ) == 1
+
+
+
+def test_urban_sram_subset_allows_only_documented_census_only_tract(tmp_path):
+    path = tmp_path / "urban.db"
+    make_database(path, ("17031010100",))
+    evidence = [
+        make_evidence("17031010100"),
+        make_evidence("17031990000"),
+    ]
+
+    assert enrich_database(
+        path,
+        evidence,
+        2024,
+        allowed_extra_geoids={"17031990000"},
+    ) == 1
+
+
+def test_urban_sram_subset_rejects_undocumented_extra_acs_tract(tmp_path):
+    path = tmp_path / "urban.db"
+    make_database(path, ("17031010100",))
+    evidence = [
+        make_evidence("17031010100"),
+        make_evidence("17031990000"),
+        make_evidence("17031010200"),
+    ]
+
+    try:
+        enrich_database(
+            path,
+            evidence,
+            2024,
+            allowed_extra_geoids={"17031990000"},
+        )
+    except ValueError as error:
+        assert "1 unexpected ACS tracts" in str(error)
+    else:
+        raise AssertionError("Undocumented ACS-only tracts must fail closed")

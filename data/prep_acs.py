@@ -20,7 +20,13 @@ def _tract_digest(geoids):
     return hashlib.sha256("\n".join(sorted(geoids)).encode()).hexdigest()
 
 
-def enrich_database(path, evidence, year, allow_extra_evidence=False):
+def enrich_database(
+    path,
+    evidence,
+    year,
+    allow_extra_evidence=False,
+    allowed_extra_geoids=(),
+):
     if not path.exists():
         raise FileNotFoundError(f"Prepare the Atlas database first: {path}")
     if not evidence:
@@ -51,14 +57,15 @@ def enrich_database(path, evidence, year, allow_extra_evidence=False):
         evidence_geoids = set(by_geoid)
         absent_from_acs = atlas_geoids - evidence_geoids
         extra_acs = evidence_geoids - atlas_geoids
-        if absent_from_acs or (extra_acs and not allow_extra_evidence):
+        unexpected_extra_acs = extra_acs - set(allowed_extra_geoids)
+        if absent_from_acs or (unexpected_extra_acs and not allow_extra_evidence):
             raise ValueError(
                 "ACS and Atlas tract sets do not match: "
                 f"{len(absent_from_acs)} Atlas tracts are absent from ACS and "
-                f"{len(extra_acs)} ACS tracts are outside the prepared Atlas set; "
-                "no changes were committed"
+                f"{len(unexpected_extra_acs)} unexpected ACS tracts are outside the "
+                "prepared Atlas set; no changes were committed"
             )
-        if allow_extra_evidence:
+        if extra_acs:
             by_geoid = {
                 geoid: item for geoid, item in by_geoid.items() if geoid in atlas_geoids
             }
@@ -106,10 +113,14 @@ def main():
         for county in config["county_fips"]:
             evidence.extend(client.fetch_tracts(state_fips=county[:2], county_fips=county[2:],
                                                 variables=PRIORITIZATION_VARIABLES))
-        print(
-            f"Enriched {enrich_database(path, evidence, args.year, allow_extra_evidence=bool(config.get('rural_only')))} "
-            f"{region} tracts with ACS {args.year}"
+        matched = enrich_database(
+            path,
+            evidence,
+            args.year,
+            allow_extra_evidence=bool(config.get("rural_only")),
+            allowed_extra_geoids=config.get("atlas_excluded_tract_fips", ()),
         )
+        print(f"Enriched {matched} {region} tracts with ACS {args.year}")
 
 
 if __name__ == "__main__":

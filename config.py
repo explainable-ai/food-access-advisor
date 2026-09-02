@@ -18,6 +18,13 @@ PILOT_CITY = {
     # SHA-256 of the sorted, newline-delimited authoritative 2020 Cook
     # County tract GEOIDs used by the tract-boundary preparation pipeline.
     "expected_tract_fips_sha256": "e8c642ba760be2ee7a5712fb27961a9bb7a1e7f2a6317f80599f4089aebb376e",
+    # The 2025 SRAM evidence universe has 1,331 Cook tracts. Census water
+    # tract 17031990000 has a map polygon but no SRAM evidence row, so it
+    # remains unshaded and must never be interpreted as a zero-need tract.
+    "expected_atlas_tract_count": 1331,
+    "expected_atlas_tract_fips_sha256": "aac4ceecdc0e4ea16437ad9a6ff592b863376a52a6b48ee3e07f97ebf874ed0f",
+    "atlas_excluded_tract_fips": ["17031990000"],
+    "atlas_exclusion_reason": "not_present_in_usda_sram_2025",
     # Cook County-wide resource coverage box (south, west, north, east),
     # with a small buffer so nearby cross-boundary stores count.
     "bbox": (41.45, -88.30, 42.20, -87.50),

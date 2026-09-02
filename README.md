@@ -141,7 +141,10 @@ data:
      --regions all
    ```
 
-   The urban output contains all Cook County tracts. The rural output contains
+   The Cook County boundary layer contains all 1,332 Census tracts, while the
+   SRAM scoring database contains the 1,331 tracts covered by USDA. Census
+   water tract `17031990000` has no SRAM row and remains explicitly unshaded;
+   it is never assigned a fabricated zero-need score. The rural output contains
    only USDA-classified rural tracts (`Urban=0`) in Cook, Kane, Kendall,
    Grundy, Will, Kankakee, and McHenry Counties. Each database records the
    access method, exact source files, geography vintage, tract count, tract

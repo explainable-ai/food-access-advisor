@@ -38,6 +38,8 @@ def test_prepares_only_rural_tracts_from_all_configured_counties(tmp_path, monke
     assert metadata["thresholds"] == "10/20 miles"
     assert metadata["rural_only"] == "true"
     assert metadata["rural_indicator"] == "Urban=0"
+    assert metadata["atlas_excluded_tract_fips"] == ""
+    assert metadata["atlas_exclusion_reason"] == "not_applicable"
 
 
 def test_rural_prep_requires_usda_classification(tmp_path, monkeypatch):
@@ -87,7 +89,7 @@ def test_current_urban_atlas_requires_expected_cook_county_tract_count(
 ):
     monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", tmp_path / "urban.db")
     monkeypatch.setitem(
-        prep_atlas.REGIONS["urban"]["config"], "expected_tract_count", 2
+        prep_atlas.REGIONS["urban"]["config"], "expected_atlas_tract_count", 2
     )
     frame = pd.DataFrame(
         {
@@ -111,11 +113,11 @@ def test_current_urban_atlas_requires_authoritative_tract_manifest(
 ):
     monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", tmp_path / "urban.db")
     monkeypatch.setitem(
-        prep_atlas.REGIONS["urban"]["config"], "expected_tract_count", 1
+        prep_atlas.REGIONS["urban"]["config"], "expected_atlas_tract_count", 1
     )
     monkeypatch.setitem(
         prep_atlas.REGIONS["urban"]["config"],
-        "expected_tract_fips_sha256",
+        "expected_atlas_tract_fips_sha256",
         "0" * 64,
     )
     frame = pd.DataFrame(
@@ -215,12 +217,12 @@ def test_sram_database_records_access_method_and_requires_coordinates(
     target = tmp_path / "urban.db"
     monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", target)
     monkeypatch.setitem(
-        prep_atlas.REGIONS["urban"]["config"], "expected_tract_count", 1
+        prep_atlas.REGIONS["urban"]["config"], "expected_atlas_tract_count", 1
     )
     expected_digest = prep_atlas.hashlib.sha256(b"17031010100").hexdigest()
     monkeypatch.setitem(
         prep_atlas.REGIONS["urban"]["config"],
-        "expected_tract_fips_sha256",
+        "expected_atlas_tract_fips_sha256",
         expected_digest,
     )
     frame = pd.DataFrame(
@@ -262,3 +264,16 @@ def test_sram_database_records_access_method_and_requires_coordinates(
     assert metadata["source_files"] == "general.csv|driving.csv"
     assert metadata["tract_count"] == "1"
     assert metadata["tract_fips_sha256"] == expected_digest
+
+
+
+def test_cook_boundary_and_sram_manifests_are_explicitly_distinct():
+    config = prep_atlas.REGIONS["urban"]["config"]
+
+    assert config["expected_tract_count"] == 1332
+    assert config["expected_atlas_tract_count"] == 1331
+    assert config["atlas_excluded_tract_fips"] == ["17031990000"]
+    assert (
+        config["expected_atlas_tract_fips_sha256"]
+        == "aac4ceecdc0e4ea16437ad9a6ff592b863376a52a6b48ee3e07f97ebf874ed0f"
+    )
