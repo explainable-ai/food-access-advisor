@@ -29,6 +29,8 @@ def collect_snapshot(client, county_fips_codes, variables=PRIORITIZATION_VARIABL
             county_fips=full_fips[2:],
             variables=variables,
         )
+        if retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None:
+            raise ValueError(f"ACS retrieval time must be timezone-aware for {full_fips}")
         counties.append(
             {
                 "county_fips": full_fips,
