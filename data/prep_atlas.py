@@ -266,7 +266,9 @@ def prepare_region_database(
             )
         )
 
-    expected_count = region["config"].get("expected_tract_count")
+    expected_count = region["config"].get(
+        "expected_atlas_tract_count", region["config"].get("expected_tract_count")
+    )
     expected_vintage = region["config"].get("tract_geography_vintage")
     if (
         expected_count
@@ -277,7 +279,10 @@ def prepare_region_database(
             f"{region_name}: expected {expected_count} {expected_vintage} tracts, "
             f"found {len(rows)}"
         )
-    expected_digest = region["config"].get("expected_tract_fips_sha256")
+    expected_digest = region["config"].get(
+        "expected_atlas_tract_fips_sha256",
+        region["config"].get("expected_tract_fips_sha256"),
+    )
     actual_digest = hashlib.sha256(
         "\n".join(sorted(row[0] for row in rows)).encode()
     ).hexdigest()
@@ -335,6 +340,12 @@ def prepare_region_database(
                             else "not_applied"
                         ),
                         "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[product],
+                        "atlas_excluded_tract_fips": ",".join(
+                            region["config"].get("atlas_excluded_tract_fips", [])
+                        ),
+                        "atlas_exclusion_reason": region["config"].get(
+                            "atlas_exclusion_reason", "not_applicable"
+                        ),
                         "access_method": access_method,
                         "source_file": str(source_path),
                         "source_files": "|".join(str(item) for item in source_files),
