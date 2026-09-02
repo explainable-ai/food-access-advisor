@@ -78,6 +78,11 @@ def test_get_all_tracts_includes_non_low_access_rows(tmp_path, monkeypatch):
         connection.executemany("INSERT INTO metadata VALUES (?, ?)", _complete_metadata(fipses))
     monkeypatch.setattr(access_data, "DB_PATH", database)
     monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 2)
+    monkeypatch.setitem(
+        access_data.PILOT_CITY,
+        "expected_tract_fips_sha256",
+        _complete_metadata(fipses)[-1][1],
+    )
 
     result = access_data.get_all_tracts()
 
@@ -197,6 +202,11 @@ def test_get_all_tracts_materializes_prepared_database_from_s3(tmp_path, monkeyp
     monkeypatch.setenv("TRACT_DATA_CACHE_PATH", str(target))
     monkeypatch.setattr(access_data.boto3, "client", lambda service: FakeS3())
     monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 1)
+    monkeypatch.setitem(
+        access_data.PILOT_CITY,
+        "expected_tract_fips_sha256",
+        _complete_metadata((fips,))[-1][1],
+    )
 
     result = access_data.get_all_tracts()
 
