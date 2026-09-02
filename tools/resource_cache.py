@@ -89,7 +89,12 @@ def load_resource_cache(scope, require_complete_coverage=False):
     if require_complete_coverage:
         _validate_coverage(scope, payload)
     resources = payload.get("resources") if isinstance(payload, dict) else payload
-    return _validate(resources)
+    validated = _validate(resources)
+    if require_complete_coverage and not validated:
+        raise ResourceCacheError(
+            f"prepared {scope} resource cache is empty; publish a verified county-wide snapshot"
+        )
+    return validated
 
 
 def refresh_resource_cache(scope):
