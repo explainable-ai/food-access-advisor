@@ -43,6 +43,11 @@ ACS_COLUMNS = (
     "households_total",
     "households_no_vehicle",
 )
+RURAL_CONTINUOUS_COLUMNS = (
+    "low_access_population_share",
+    "low_income_low_access_share",
+    "no_vehicle_low_access_share",
+)
 HEATMAP_COLUMNS = CORE_COLUMNS + ACS_COLUMNS
 HEATMAP_METADATA = (
     "region",
@@ -111,14 +116,32 @@ def _prepared_rural_database_path():
     )
 
 
-def _read_database(path, limit=None, low_access_only=True):
+def _read_database(path, limit=None, low_access_only=True, rural_gap_only=False):
     connection = None
     try:
         connection = sqlite3.connect(path)
         connection.row_factory = sqlite3.Row
         available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
-        optional = ", ".join(name if name in available else f"NULL AS {name}" for name in ACS_COLUMNS)
-        where_clause = "WHERE low_access_half_mile = 1 OR low_access_one_mile = 1" if low_access_only else ""
+        optional_columns = ACS_COLUMNS + RURAL_CONTINUOUS_COLUMNS
+        optional = ", ".join(
+            name if name in available else f"NULL AS {name}"
+            for name in optional_columns
+        )
+        if low_access_only and rural_gap_only:
+            raise PreparedTractDataError("conflicting tract filters were requested")
+        if rural_gap_only:
+            if "low_income_low_access_share" not in available:
+                raise PreparedTractDataError(
+                    "prepared rural tract database is missing continuous SRAM access evidence"
+                )
+            where_clause = (
+                "WHERE population > 0 AND low_income_low_access_share > 0"
+            )
+        else:
+            where_clause = (
+                "WHERE low_access_half_mile = 1 OR low_access_one_mile = 1"
+                if low_access_only else ""
+            )
         limit_clause = "LIMIT ?" if limit is not None else ""
         parameters = (limit,) if limit is not None else ()
         rows = connection.execute(
@@ -293,7 +316,56 @@ def get_low_access_rural_tracts(limit: int = 25) -> list:
             "run data/prep_atlas.py for the rural region, then upload it to "
             f"s3://$EVIDENCE_BUCKET/{DEFAULT_RURAL_DATABASE_KEY}"
         )
-    return _read_database(path, limit)
+    return _read_database(
+        path,
+        limit,
+        low_access_only=False,
+        rural_gap_only=True,
+    )
+
+
+def _validate_complete_rural_database(path):
+    try:
+        with sqlite3.connect(path) as connection:
+            available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
+            required = set(CORE_COLUMNS + ACS_COLUMNS + RURAL_CONTINUOUS_COLUMNS)
+            missing_columns = sorted(required - available)
+            has_metadata = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata'"
+            ).fetchone()
+            metadata = dict(connection.execute("SELECT key, value FROM metadata")) if has_metadata else {}
+            geoids = [row[0] for row in connection.execute("SELECT tract_fips FROM tracts")]
+    except sqlite3.Error as error:
+        raise PreparedTractDataError(
+            "prepared rural tract database is unreadable or has an invalid schema"
+        ) from error
+    problems = []
+    expected_count = int(PILOT_RURAL_COUNTY["expected_atlas_tract_count"])
+    if missing_columns:
+        problems.append(f"missing required columns: {', '.join(missing_columns)}")
+    if len(geoids) != expected_count:
+        problems.append(f"expected {expected_count} rural tracts, found {len(geoids)}")
+    actual_digest = hashlib.sha256("\n".join(sorted(geoids)).encode()).hexdigest()
+    if actual_digest != PILOT_RURAL_COUNTY["expected_atlas_tract_fips_sha256"]:
+        problems.append("rural tract GEOID set does not match the authoritative SRAM manifest")
+    if metadata.get("tract_fips_sha256") != actual_digest:
+        problems.append("rural database metadata does not match its tract GEOID set")
+    if metadata.get("rural_food_access_metric") != "low_income_low_access_share_10mi":
+        problems.append("rural database does not identify the approved continuous access metric")
+    if problems:
+        raise PreparedTractDataError(
+            "prepared rural tract database is incomplete (" + "; ".join(problems) + ")"
+        )
+
+
+def get_all_rural_tracts() -> list:
+    """Return all 72 prepared rural-fringe tracts for geometry and scoring."""
+    path = _prepared_rural_database_path()
+    if not path.exists():
+        raise PreparedTractDataError(f"prepared rural tract database is unavailable at {path}")
+    _validate_complete_rural_database(path)
+    return _read_database(path, low_access_only=False)
+
 
 def _sample_tracts() -> list:
     """Illustrative placeholder rows — NOT real Atlas data, and the FIPS
