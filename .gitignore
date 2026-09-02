@@ -8,6 +8,7 @@ venv/
 
 # Generated/downloaded data — regenerate with data/prep_atlas.py, don't commit
 data/raw/
+data/quality/
 data/*.db
 data/snap_retailers_pilot_city.csv
 docs/Food_Access_Advisor_Dataset_Integration_Prompt.md
