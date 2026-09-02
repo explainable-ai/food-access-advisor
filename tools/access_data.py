@@ -85,16 +85,22 @@ def get_low_access_tracts(limit: int = 25) -> list:
 
 
 def _validate_complete_heatmap_database(path):
-    with sqlite3.connect(path) as connection:
-        available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
-        missing_columns = sorted(set(ACS_COLUMNS) - available)
-        has_metadata = connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata'"
-        ).fetchone()
-        metadata = dict(connection.execute("SELECT key, value FROM metadata")) if has_metadata else {}
-        missing_metadata = [name for name in ("acs_vintage", "acs_dataset", "acs_geography_vintage")
-                            if not metadata.get(name)]
-        tract_count = connection.execute("SELECT COUNT(*) FROM tracts").fetchone()[0]
+    try:
+        with sqlite3.connect(path) as connection:
+            available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
+            missing_columns = sorted(set(ACS_COLUMNS) - available)
+            has_metadata = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata'"
+            ).fetchone()
+            metadata = dict(connection.execute("SELECT key, value FROM metadata")) if has_metadata else {}
+            missing_metadata = [name for name in ("acs_vintage", "acs_dataset", "acs_geography_vintage")
+                                if not metadata.get(name)]
+            tract_count = connection.execute("SELECT COUNT(*) FROM tracts").fetchone()[0]
+    except sqlite3.Error as error:
+        raise PreparedTractDataError(
+            "prepared Cook County tract database is unreadable or has an invalid schema; "
+            "run data/prep_atlas.py and data/prep_acs.py before deployment"
+        ) from error
     if missing_columns or missing_metadata or tract_count == 0:
         problems = []
         if missing_columns:
