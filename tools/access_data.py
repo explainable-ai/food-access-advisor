@@ -24,19 +24,26 @@ RURAL_DB_PATH = Path(__file__).parent.parent / "data" / "atlas_rural_county.db"
 ACS_COLUMNS = ("poverty_universe", "population_below_poverty", "households_total", "households_no_vehicle")
 
 
-def _read_database(path, limit):
+class PreparedTractDataError(RuntimeError):
+    """The all-tract heatmap dataset has not been prepared for this deployment."""
+
+
+def _read_database(path, limit=None, low_access_only=True):
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     try:
         available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
         optional = ", ".join(name if name in available else f"NULL AS {name}" for name in ACS_COLUMNS)
+        where_clause = "WHERE low_access_half_mile = 1 OR low_access_one_mile = 1" if low_access_only else ""
+        limit_clause = "LIMIT ?" if limit is not None else ""
+        parameters = (limit,) if limit is not None else ()
         rows = connection.execute(
             f"""SELECT tract_fips, population, low_access_half_mile,
                        low_access_one_mile, centroid_lat, centroid_lon, {optional}
                 FROM tracts
-                WHERE low_access_half_mile = 1 OR low_access_one_mile = 1
-                ORDER BY population DESC LIMIT ?""",
-            (limit,),
+                {where_clause}
+                ORDER BY population DESC {limit_clause}""",
+            parameters,
         ).fetchall()
         return [{**dict(row), "data_mode": "real"} for row in rows]
     finally:
@@ -75,6 +82,21 @@ def get_low_access_tracts(limit: int = 25) -> list:
         return _sample_tracts()[:limit]
 
     return _read_database(DB_PATH, limit)
+
+
+def get_all_tracts() -> list:
+    """Return every prepared Cook County tract for the evidence heatmap.
+
+    Unlike the Advisor candidate tool, this read does not filter to low-access
+    tracts and does not return sample rows. A complete county surface must
+    never be fabricated when the prepared Atlas/ACS database is missing.
+    """
+    if not DB_PATH.exists():
+        raise PreparedTractDataError(
+            f"prepared Cook County tract database is unavailable at {DB_PATH}; "
+            "run data/prep_atlas.py and data/prep_acs.py before deployment"
+        )
+    return _read_database(DB_PATH, low_access_only=False)
 
 
 @tool
