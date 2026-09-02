@@ -29,6 +29,11 @@ POP_COL_MATCH = re.compile(r"^pop2010$|^pop2020$|^pop$|^population$", re.I)
 LAT_COL_MATCH = re.compile(r"^lat(itude)?$|intptlat", re.I)
 LON_COL_MATCH = re.compile(r"^lon(gitude)?$|intptlon", re.I)
 URBAN_COL_MATCH = re.compile(r"^urban$", re.I)
+RURAL_CONTINUOUS_FIELDS = {
+    "low_access_population_share": re.compile(r"SRAM_lapop10share$", re.I),
+    "low_income_low_access_share": re.compile(r"SRAM_lalowi10share$", re.I),
+    "no_vehicle_low_access_share": re.compile(r"SRAM_lahunv10share$", re.I),
+}
 
 REGIONS = {
     "urban": {
@@ -125,7 +130,11 @@ def _load_sram_bundle(path, distance_method="driving"):
     access_columns = [
         column
         for column in access.columns
-        if column != "_sram_tract" and "lilatracts" in str(column).lower()
+        if column != "_sram_tract"
+        and (
+            "lilatracts" in str(column).lower()
+            or any(pattern.search(str(column)) for pattern in RURAL_CONTINUOUS_FIELDS.values())
+        )
     ]
     if not access_columns:
         raise ValueError(
@@ -164,6 +173,15 @@ def _numeric_or_default(value, default=0.0):
 
 def _binary_flag(value):
     return int(_numeric_or_default(value) != 0)
+
+
+def _share_or_none(value, field_name):
+    numeric = _numeric_or_default(value, default=None)
+    if numeric is None:
+        return None
+    if not 0 <= numeric <= 1:
+        raise ValueError(f"{field_name} must be between 0 and 1, found {numeric}")
+    return numeric
 
 
 def _load_centroids(path):
@@ -220,6 +238,12 @@ def prepare_region_database(
     }
     if region["config"].get("rural_only"):
         required["USDA urban/rural indicator"] = rural_indicator
+    continuous_columns = {
+        name: _find_col(frame.columns, pattern)
+        for name, pattern in RURAL_CONTINUOUS_FIELDS.items()
+    } if region_name == "rural" and product == "SRAM" else {}
+    for name, column in continuous_columns.items():
+        required[name] = column
     missing = [name for name, value in required.items() if value is None]
     if missing:
         raise ValueError(f"{region_name}: could not match {', '.join(missing)}")
@@ -256,6 +280,10 @@ def prepare_region_database(
             )
         except (TypeError, ValueError):
             coordinates = centroids.get(fips, (None, None))
+        continuous_values = tuple(
+            _share_or_none(row[column], name)
+            for name, column in continuous_columns.items()
+        ) if continuous_columns else (None, None, None)
         rows.append(
             (
                 fips,
@@ -263,6 +291,7 @@ def prepare_region_database(
                 _binary_flag(row[tight]),
                 _binary_flag(row[wide]),
                 *coordinates,
+                *continuous_values,
             )
         )
 
@@ -323,10 +352,12 @@ def prepare_region_database(
                 connection.execute(
                     "CREATE TABLE tracts (tract_fips TEXT PRIMARY KEY, "
                     "population INTEGER, low_access_half_mile INTEGER, "
-                    "low_access_one_mile INTEGER, centroid_lat REAL, centroid_lon REAL)"
+                    "low_access_one_mile INTEGER, centroid_lat REAL, centroid_lon REAL, "
+                    "low_access_population_share REAL, low_income_low_access_share REAL, "
+                    "no_vehicle_low_access_share REAL)"
                 )
                 connection.executemany(
-                    "INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)", rows
+                    "INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
                 )
                 connection.execute(
                     "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
@@ -355,6 +386,11 @@ def prepare_region_database(
                         ),
                         "atlas_exclusion_reason": atlas_exclusion_reason,
                         "access_method": access_method,
+                        "rural_food_access_metric": (
+                            "low_income_low_access_share_10mi"
+                            if region_name == "rural" and product == "SRAM"
+                            else "not_applicable"
+                        ),
                         "source_file": str(source_path),
                         "source_files": "|".join(str(item) for item in source_files),
                         "tract_count": str(len(rows)),

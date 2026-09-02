@@ -118,3 +118,24 @@ def test_sensitivity_range_contains_baseline_score():
     result = score_gaps([make_tract("A", 2000)], [], top_n=1)[0]
     assert result["sensitivity"]["score_min"] <= result["need_score"] <= result["sensitivity"]["score_max"]
     assert result["sensitivity"]["rank_stable"] is True
+
+
+def test_continuous_rural_gap_overrides_binary_severity():
+    high_gap = make_tract("A", population=1000, half=0, one=0)
+    high_gap["low_income_low_access_share"] = 0.60
+    lower_gap = make_tract("B", population=1000, half=1, one=1)
+    lower_gap["low_income_low_access_share"] = 0.19
+    weights = {
+        "food_access_gap": 1,
+        "poverty": 0,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 0,
+    }
+
+    result = score_gaps([lower_gap, high_gap], [], top_n=2, weights=weights)
+
+    assert [row["tract_fips"] for row in result] == ["A", "B"]
+    assert result[0]["score_components"]["food_access_gap"] == 60.0
+    assert result[1]["score_components"]["food_access_gap"] == 19.0
