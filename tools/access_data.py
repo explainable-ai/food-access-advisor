@@ -6,14 +6,19 @@ sample rows so `python agent.py` runs before you've done the real data-prep
 step — swap in the full download when you're ready (see README > Data setup).
 """
 
+import os
 import sqlite3
+import tempfile
 from pathlib import Path
 
+import boto3
 from strands import tool
 
 from config import PILOT_CITY
 
 DB_PATH = Path(__file__).parent.parent / "data" / "atlas_pilot_city.db"
+DEFAULT_DATABASE_KEY = "prepared-data/atlas_pilot_city.db"
+DEFAULT_CACHE_PATH = Path("/tmp/food-access-advisor/atlas_pilot_city.db")
 
 # Separate file, not a second table in the same DB: the urban and rural
 # databases come from different Atlas download runs (see
@@ -26,6 +31,33 @@ ACS_COLUMNS = ("poverty_universe", "population_below_poverty", "households_total
 
 class PreparedTractDataError(RuntimeError):
     """The all-tract heatmap dataset has not been prepared for this deployment."""
+
+
+def _prepared_database_path():
+    """Return the packaged database or materialize its prepared S3 artifact."""
+    if DB_PATH.exists():
+        return DB_PATH
+    bucket = os.getenv("TRACT_DATA_BUCKET") or os.getenv("EVIDENCE_BUCKET")
+    if not bucket:
+        return DB_PATH
+    key = os.getenv("TRACT_DATA_KEY", DEFAULT_DATABASE_KEY).strip("/")
+    target = Path(os.getenv("TRACT_DATA_CACHE_PATH", DEFAULT_CACHE_PATH))
+    if target.exists():
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            boto3.client("s3").download_fileobj(bucket, key, temporary)
+        temporary_path.replace(target)
+    except Exception as error:
+        if temporary_path:
+            temporary_path.unlink(missing_ok=True)
+        raise PreparedTractDataError(
+            f"prepared Cook County tract database is unavailable at s3://{bucket}/{key}: {error}"
+        ) from error
+    return target
 
 
 def _read_database(path, limit=None, low_access_only=True):
@@ -122,13 +154,15 @@ def get_all_tracts() -> list:
     tracts and does not return sample rows. A complete county surface must
     never be fabricated when the prepared Atlas/ACS database is missing.
     """
-    if not DB_PATH.exists():
+    path = _prepared_database_path()
+    if not path.exists():
         raise PreparedTractDataError(
-            f"prepared Cook County tract database is unavailable at {DB_PATH}; "
-            "run data/prep_atlas.py and data/prep_acs.py before deployment"
+            f"prepared Cook County tract database is unavailable at {path}; "
+            "run data/prep_atlas.py and data/prep_acs.py, then package it or upload it to "
+            f"s3://$EVIDENCE_BUCKET/{DEFAULT_DATABASE_KEY} before deployment"
         )
-    _validate_complete_heatmap_database(DB_PATH)
-    return _read_database(DB_PATH, low_access_only=False)
+    _validate_complete_heatmap_database(path)
+    return _read_database(path, low_access_only=False)
 
 
 @tool
