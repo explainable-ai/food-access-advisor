@@ -156,7 +156,7 @@ def test_site_tract_scores_never_falls_back_to_sample_rows(monkeypatch):
         raise api_main.PreparedTractDataError("prepared database missing")
 
     monkeypatch.setattr(api_main, "get_all_tracts", unavailable)
-    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope: [])
+    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope, **kwargs: [])
 
     response = client.get("/api/site-advisor/tract-scores")
 
