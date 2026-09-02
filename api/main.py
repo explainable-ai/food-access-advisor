@@ -39,6 +39,8 @@ from api.schemas import (
     ExistingResource,
     ImpactMetrics,
     RankedTract,
+    RoadRoute,
+    RouteDirectionsRequest,
     RouteOptimizationRequest,
     RouteOptimizationResponse,
     VerifyRequest,
@@ -49,12 +51,17 @@ from orchestration import route_request
 from tools.access_data import get_low_access_rural_tracts, get_low_access_tracts
 from tools.evidence_brief import write_evidence_brief, write_route_brief
 from tools.evidence_snapshots import read_change_page, review_change
-from tools.existing_resources import OverpassQueryError, get_existing_resources, get_rural_existing_resources
+from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import score_gaps
 from tools.impact_metrics import compute_impact_metrics
 from tools.route_optimizer import optimize_route
-from tools.travel_time_provider import TravelTimeProviderError, get_amazon_location_matrix
+from tools.resource_cache import ResourceCacheError, load_resource_cache
+from tools.travel_time_provider import (
+    TravelTimeProviderError,
+    get_openrouteservice_directions,
+    get_openrouteservice_matrix,
+)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 # Produced by data/prep_tract_boundaries.py -- see that script for why
@@ -151,9 +158,9 @@ def site_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
         weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
                            population_served=population_served, transit_burden=transit_burden,
                            existing_coverage=existing_coverage)
-        return _ranked_tracts(get_low_access_tracts, get_existing_resources, top_n, weights)
-    except OverpassQueryError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+        return _ranked_tracts(get_low_access_tracts, lambda: load_resource_cache("urban"), top_n, weights)
+    except ResourceCacheError as exc:
+        raise HTTPException(status_code=503, detail=f"Prepared resource data unavailable: {exc}") from exc
 
 
 @app.get("/api/route-advisor/ranked-tracts", response_model=list[RankedTract])
@@ -168,25 +175,25 @@ def route_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
         weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
                            population_served=population_served, transit_burden=transit_burden,
                            existing_coverage=existing_coverage)
-        return _ranked_tracts(get_low_access_rural_tracts, get_rural_existing_resources, top_n, weights)
-    except OverpassQueryError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+        return _ranked_tracts(get_low_access_rural_tracts, lambda: load_resource_cache("rural"), top_n, weights)
+    except ResourceCacheError as exc:
+        raise HTTPException(status_code=503, detail=f"Prepared resource data unavailable: {exc}") from exc
 
 
 @app.get("/api/site-advisor/resources", response_model=list[ExistingResource])
 def site_resources():
     try:
-        return get_existing_resources()
-    except OverpassQueryError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+        return load_resource_cache("urban")
+    except ResourceCacheError as exc:
+        raise HTTPException(status_code=503, detail=f"Prepared resource data unavailable: {exc}") from exc
 
 
 @app.get("/api/route-advisor/resources", response_model=list[ExistingResource])
 def route_resources():
     try:
-        return get_rural_existing_resources()
-    except OverpassQueryError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
+        return load_resource_cache("rural")
+    except ResourceCacheError as exc:
+        raise HTTPException(status_code=503, detail=f"Prepared resource data unavailable: {exc}") from exc
 
 
 @app.post("/api/route-advisor/optimize", response_model=RouteOptimizationResponse)
@@ -195,10 +202,10 @@ def optimize_route_scenario(request: RouteOptimizationRequest):
     try:
         matrix = request.travel_time_matrix
         source = None
-        if matrix is None and request.travel_time_provider == "amazon_location":
+        if matrix is None and request.travel_time_provider == "openrouteservice":
             points = [request.depot.model_dump(), *[candidate.model_dump() for candidate in request.candidates]]
-            matrix = get_amazon_location_matrix(points)
-            source = "amazon_location_routes_v2"
+            matrix = get_openrouteservice_matrix(points)
+            source = "openrouteservice_matrix"
         return optimize_route(
             candidates=[candidate.model_dump() for candidate in request.candidates],
             depot=request.depot.model_dump(), max_route_minutes=request.max_route_minutes,
@@ -209,6 +216,20 @@ def optimize_route_scenario(request: RouteOptimizationRequest):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except TravelTimeProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/route-advisor/directions", response_model=RoadRoute)
+def route_directions(request: RouteDirectionsRequest):
+    """Return road geometry and instructions without exposing the provider key."""
+    points = [
+        request.origin.model_dump(),
+        *[point.model_dump() for point in request.waypoints],
+        request.destination.model_dump(),
+    ]
+    try:
+        return get_openrouteservice_directions(points, alternatives=request.alternatives)
+    except (ValueError, TravelTimeProviderError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
