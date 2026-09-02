@@ -47,8 +47,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import PILOT_CITY, PILOT_RURAL_COUNTY  # noqa: E402
 from tools.access_data import get_low_access_rural_tracts, get_low_access_tracts  # noqa: E402
 
-# Both pilot counties are in Illinois (state FIPS 17) -- see config.py's
-# county_fips values (17031 = Cook County, 17003 = Alexander County).
+# Both configured regions are in Illinois (state FIPS 17). The rural
+# region spans several counties, so county membership is handled as a set.
 TIGER_YEAR = 2023
 STATE_FIPS = "17"
 TIGER_URL = (
@@ -94,15 +94,15 @@ def _download_and_extract_shapefile() -> Path:
     return shp_path
 
 
-def _tract_features_by_county(shp_path: Path, county_fips: str) -> dict:
-    """Read the statewide shapefile and return {tract_fips: geojson_feature}
-    for every tract whose GEOID starts with county_fips."""
+def _tract_features_by_counties(shp_path: Path, county_fips_values) -> dict:
+    """Return tract features for every configured county FIPS prefix."""
+    prefixes = tuple(county_fips_values)
     features = {}
     with shapefile.Reader(str(shp_path)) as reader:
         geoid_index = [f[0] for f in reader.fields[1:]].index("GEOID")
         for shape_record in reader.iterShapeRecords():
             geoid = shape_record.record[geoid_index]
-            if not geoid.startswith(county_fips):
+            if not geoid.startswith(prefixes):
                 continue
             geom = shape(shape_record.shape.__geo_interface__).simplify(SIMPLIFY_TOLERANCE_DEGREES)
             features[geoid] = {
@@ -125,10 +125,13 @@ def main():
     shp_path = _download_and_extract_shapefile()
 
     for region_config, out_path, get_tracts in REGIONS:
-        county_fips = region_config["county_fips"][0]
-        print(f"\n{region_config['name']} (county FIPS {county_fips}):")
+        county_fips_values = region_config["county_fips"]
+        print(
+            f"\n{region_config['name']} "
+            f"(county FIPS {', '.join(county_fips_values)}):"
+        )
 
-        features_by_fips = _tract_features_by_county(shp_path, county_fips)
+        features_by_fips = _tract_features_by_counties(shp_path, county_fips_values)
         _write_geojson(features_by_fips, out_path)
 
         # Explicit join-check: a tract with no matching boundary would
