@@ -307,6 +307,16 @@ def prepare_region_database(
     fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
     os.close(fd)
     source_files = tuple(source_files or (source_path,))
+    atlas_excluded_tract_fips = (
+        region["config"].get("atlas_excluded_tract_fips", [])
+        if product == "SRAM"
+        else []
+    )
+    atlas_exclusion_reason = (
+        region["config"].get("atlas_exclusion_reason", "not_applicable")
+        if product == "SRAM"
+        else "not_applicable"
+    )
     try:
         with closing(sqlite3.connect(temporary)) as connection:
             with connection:
@@ -341,11 +351,9 @@ def prepare_region_database(
                         ),
                         "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[product],
                         "atlas_excluded_tract_fips": ",".join(
-                            region["config"].get("atlas_excluded_tract_fips", [])
+                            atlas_excluded_tract_fips
                         ),
-                        "atlas_exclusion_reason": region["config"].get(
-                            "atlas_exclusion_reason", "not_applicable"
-                        ),
+                        "atlas_exclusion_reason": atlas_exclusion_reason,
                         "access_method": access_method,
                         "source_file": str(source_path),
                         "source_files": "|".join(str(item) for item in source_files),
