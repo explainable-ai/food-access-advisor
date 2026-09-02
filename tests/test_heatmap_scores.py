@@ -278,6 +278,43 @@ def test_get_all_tracts_rejects_database_missing_core_columns(tmp_path, monkeypa
         raise AssertionError("Missing core tract columns must fail as prepared data")
 
 
+def test_get_all_tracts_rejects_null_low_access_flags(tmp_path, monkeypatch):
+    database = tmp_path / "null_flags.db"
+    fips = "17031010100"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE tracts (
+                tract_fips TEXT PRIMARY KEY, population INTEGER,
+                low_access_half_mile INTEGER, low_access_one_mile INTEGER,
+                centroid_lat REAL, centroid_lon REAL, poverty_universe REAL,
+                population_below_poverty REAL, households_total REAL,
+                households_no_vehicle REAL
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO tracts VALUES (?, 1000, NULL, 1, 41.8, -87.6, 100, 20, 100, 10)",
+            (fips,),
+        )
+        connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.executemany(
+            "INSERT INTO metadata VALUES (?, ?)", _complete_metadata((fips,))
+        )
+    monkeypatch.setattr(access_data, "DB_PATH", database)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 1)
+    monkeypatch.setitem(
+        access_data.PILOT_CITY,
+        "expected_tract_fips_sha256",
+        _complete_metadata((fips,))[-1][1],
+    )
+
+    try:
+        access_data.get_all_tracts()
+    except access_data.PreparedTractDataError as error:
+        assert "null or non-binary low-access flags" in str(error)
+    else:
+        raise AssertionError("Null low-access evidence must fail closed")
+
+
 def test_complete_resource_cache_requires_county_coverage(tmp_path, monkeypatch):
     payload = {
         "scope": "urban",
