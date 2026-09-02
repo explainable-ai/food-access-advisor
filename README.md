@@ -177,7 +177,7 @@ its `metadata` table. Tool responses label fallback records as
    export EVIDENCE_BUCKET=food-access-evidence
    aws s3 cp data/atlas_pilot_city.db \
      "s3://$EVIDENCE_BUCKET/prepared-data/atlas_pilot_city.db"
-   python scripts/refresh_resource_cache.py
+   python -m scripts.refresh_resource_cache
    ```
 
    ECS reads the database from
