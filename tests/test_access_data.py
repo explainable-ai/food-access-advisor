@@ -83,8 +83,16 @@ def test_missing_rural_artifact_fails_closed(tmp_path, monkeypatch):
 
 def test_rural_candidates_use_continuous_low_income_access_share(tmp_path, monkeypatch):
     path = tmp_path / "rural.db"
-    _write_rural_db(path)
+    geoids = _write_rural_db(path)
     monkeypatch.setattr(access_data, "RURAL_DB_PATH", path)
+    monkeypatch.setitem(
+        access_data.PILOT_RURAL_COUNTY, "expected_atlas_tract_count", len(geoids)
+    )
+    monkeypatch.setitem(
+        access_data.PILOT_RURAL_COUNTY,
+        "expected_atlas_tract_fips_sha256",
+        _digest(geoids),
+    )
 
     rows = get_low_access_rural_tracts(limit=25)
 
@@ -95,6 +103,28 @@ def test_rural_candidates_use_continuous_low_income_access_share(tmp_path, monke
     assert rows[0]["low_income_low_access_share"] == 0.60
     assert all(row["population"] > 0 for row in rows)
     assert all(row["data_mode"] == "real" for row in rows)
+
+
+def test_rural_candidates_reject_unapproved_access_metric(tmp_path, monkeypatch):
+    path = tmp_path / "rural.db"
+    geoids = _write_rural_db(path)
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = ?",
+            ("not_applicable", "rural_food_access_metric"),
+        )
+    monkeypatch.setattr(access_data, "RURAL_DB_PATH", path)
+    monkeypatch.setitem(
+        access_data.PILOT_RURAL_COUNTY, "expected_atlas_tract_count", len(geoids)
+    )
+    monkeypatch.setitem(
+        access_data.PILOT_RURAL_COUNTY,
+        "expected_atlas_tract_fips_sha256",
+        _digest(geoids),
+    )
+
+    with pytest.raises(PreparedTractDataError, match="approved continuous access metric"):
+        get_low_access_rural_tracts()
 
 
 def test_get_all_rural_tracts_validates_complete_manifest(tmp_path, monkeypatch):
