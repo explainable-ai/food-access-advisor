@@ -1,5 +1,6 @@
 """Tests for the complete, prepared Cook County heatmap score surface."""
 
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient  # noqa: E402
 
 import api.main as api_main  # noqa: E402
+import tools.access_data as access_data  # noqa: E402
 from tools.gap_scorer import PriorityWeights, score_all_gaps  # noqa: E402
 
 
@@ -27,6 +29,33 @@ def _tract(fips, population, low_access=0):
         "households_total": 100,
         "households_no_vehicle": 10,
     }
+
+
+def test_get_all_tracts_includes_non_low_access_rows(tmp_path, monkeypatch):
+    database = tmp_path / "atlas.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE tracts (
+                tract_fips TEXT PRIMARY KEY,
+                population INTEGER,
+                low_access_half_mile INTEGER,
+                low_access_one_mile INTEGER,
+                centroid_lat REAL,
+                centroid_lon REAL
+            )"""
+        )
+        connection.executemany(
+            "INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                ("A", 2000, 1, 1, 41.8, -87.6),
+                ("B", 1000, 0, 0, 41.9, -87.7),
+            ],
+        )
+    monkeypatch.setattr(access_data, "DB_PATH", database)
+
+    result = access_data.get_all_tracts()
+
+    assert {row["tract_fips"] for row in result} == {"A", "B"}
 
 
 def test_score_all_gaps_returns_every_tract_without_sensitivity_sweep():
