@@ -1,5 +1,6 @@
 """Tests for the complete, prepared Cook County heatmap score surface."""
 
+import hashlib
 import json
 import sqlite3
 import sys
@@ -16,6 +17,21 @@ from tools.gap_scorer import PriorityWeights, score_all_gaps  # noqa: E402
 
 
 client = TestClient(api_main.app)
+
+
+def _complete_metadata(fipses):
+    digest = hashlib.sha256("\n".join(sorted(fipses)).encode()).hexdigest()
+    return [
+        ("data_mode", "real"),
+        ("region", "urban"),
+        ("region_name", "Chicago, IL"),
+        ("geography_vintage", "2020"),
+        ("acs_vintage", "2024"),
+        ("acs_dataset", "2024/acs/acs5"),
+        ("acs_geography_vintage", "2020"),
+        ("tract_count", str(len(fipses))),
+        ("tract_fips_sha256", digest),
+    ]
 
 
 def _tract(fips, population, low_access=0):
@@ -50,27 +66,22 @@ def test_get_all_tracts_includes_non_low_access_rows(tmp_path, monkeypatch):
                 households_no_vehicle REAL
             )"""
         )
+        fipses = ("17031010100", "17031010200")
         connection.executemany(
             "INSERT INTO tracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                ("A", 2000, 1, 1, 41.8, -87.6, 100, 20, 100, 10),
-                ("B", 1000, 0, 0, 41.9, -87.7, 100, 15, 100, 8),
+                (fipses[0], 2000, 1, 1, 41.8, -87.6, 100, 20, 100, 10),
+                (fipses[1], 1000, 0, 0, 41.9, -87.7, 100, 15, 100, 8),
             ],
         )
         connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        connection.executemany(
-            "INSERT INTO metadata VALUES (?, ?)",
-            [
-                ("acs_vintage", "2024"),
-                ("acs_dataset", "2024/acs/acs5"),
-                ("acs_geography_vintage", "2020"),
-            ],
-        )
+        connection.executemany("INSERT INTO metadata VALUES (?, ?)", _complete_metadata(fipses))
     monkeypatch.setattr(access_data, "DB_PATH", database)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 2)
 
     result = access_data.get_all_tracts()
 
-    assert {row["tract_fips"] for row in result} == {"A", "B"}
+    assert {row["tract_fips"] for row in result} == set(fipses)
 
 
 def test_score_all_gaps_returns_every_tract_without_sensitivity_sweep():
@@ -127,7 +138,7 @@ def test_get_all_tracts_rejects_atlas_database_without_acs(tmp_path, monkeypatch
     try:
         access_data.get_all_tracts()
     except access_data.PreparedTractDataError as error:
-        assert "missing ACS columns" in str(error)
+        assert "missing required columns" in str(error)
     else:
         raise AssertionError("Atlas-only data must not power the heatmap")
 
@@ -164,17 +175,14 @@ def test_get_all_tracts_materializes_prepared_database_from_s3(tmp_path, monkeyp
                 households_no_vehicle REAL
             )"""
         )
+        fips = "17031010100"
         connection.execute(
-            "INSERT INTO tracts VALUES ('A', 1000, 1, 1, 41.8, -87.6, 100, 20, 100, 10)"
+            "INSERT INTO tracts VALUES (?, 1000, 1, 1, 41.8, -87.6, 100, 20, 100, 10)",
+            (fips,),
         )
         connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         connection.executemany(
-            "INSERT INTO metadata VALUES (?, ?)",
-            [
-                ("acs_vintage", "2024"),
-                ("acs_dataset", "2024/acs/acs5"),
-                ("acs_geography_vintage", "2020"),
-            ],
+            "INSERT INTO metadata VALUES (?, ?)", _complete_metadata((fips,))
         )
 
     class FakeS3:
@@ -188,11 +196,76 @@ def test_get_all_tracts_materializes_prepared_database_from_s3(tmp_path, monkeyp
     monkeypatch.setenv("EVIDENCE_BUCKET", "evidence-bucket")
     monkeypatch.setenv("TRACT_DATA_CACHE_PATH", str(target))
     monkeypatch.setattr(access_data.boto3, "client", lambda service: FakeS3())
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 1)
 
     result = access_data.get_all_tracts()
 
-    assert [row["tract_fips"] for row in result] == ["A"]
+    assert [row["tract_fips"] for row in result] == [fips]
     assert target.exists()
+
+
+def test_get_all_tracts_rejects_partial_cook_county_surface(tmp_path, monkeypatch):
+    database = tmp_path / "partial.db"
+    fips = "17031010100"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE tracts (
+                tract_fips TEXT PRIMARY KEY, population INTEGER,
+                low_access_half_mile INTEGER, low_access_one_mile INTEGER,
+                centroid_lat REAL, centroid_lon REAL, poverty_universe REAL,
+                population_below_poverty REAL, households_total REAL,
+                households_no_vehicle REAL
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO tracts VALUES (?, 1000, 1, 1, 41.8, -87.6, 100, 20, 100, 10)",
+            (fips,),
+        )
+        connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.executemany(
+            "INSERT INTO metadata VALUES (?, ?)", _complete_metadata((fips,))
+        )
+    monkeypatch.setattr(access_data, "DB_PATH", database)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 2)
+
+    try:
+        access_data.get_all_tracts()
+    except access_data.PreparedTractDataError as error:
+        assert "expected 2 Cook County tracts, found 1" in str(error)
+    else:
+        raise AssertionError("A partial Cook County artifact must fail closed")
+
+
+def test_get_all_tracts_rejects_database_missing_core_columns(tmp_path, monkeypatch):
+    database = tmp_path / "missing_core.db"
+    fips = "17031010100"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE tracts (
+                tract_fips TEXT PRIMARY KEY,
+                low_access_half_mile INTEGER, low_access_one_mile INTEGER,
+                centroid_lat REAL, centroid_lon REAL, poverty_universe REAL,
+                population_below_poverty REAL, households_total REAL,
+                households_no_vehicle REAL
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO tracts VALUES (?, 1, 1, 41.8, -87.6, 100, 20, 100, 10)",
+            (fips,),
+        )
+        connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.executemany(
+            "INSERT INTO metadata VALUES (?, ?)", _complete_metadata((fips,))
+        )
+    monkeypatch.setattr(access_data, "DB_PATH", database)
+    monkeypatch.setitem(access_data.PILOT_CITY, "expected_tract_count", 1)
+
+    try:
+        access_data.get_all_tracts()
+    except access_data.PreparedTractDataError as error:
+        assert "missing required columns: population" in str(error)
+    else:
+        raise AssertionError("Missing core tract columns must fail as prepared data")
 
 
 def test_complete_resource_cache_requires_county_coverage(tmp_path, monkeypatch):
