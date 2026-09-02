@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime, timezone
 
-from data.prep_acs import enrich_database
+from data.prep_acs import _tract_digest, enrich_database
 from data_sources.contracts import DataQualityReport, EvidenceStatus, EvidenceValue, SourceCitation, TractEvidence
 
 
@@ -33,6 +33,8 @@ def test_enrich_database_adds_real_acs_values_and_metadata(tmp_path):
     assert row == (900.0, 225.0, 400.0, 80.0)
     assert metadata["acs_vintage"] == "2024"
     assert metadata["acs_geography_vintage"] == "2020"
+    assert metadata["tract_count"] == "1"
+    assert metadata["tract_fips_sha256"] == _tract_digest(("17031010100",))
 
 
 def test_incomplete_snapshot_rolls_back_old_values_and_vintage(tmp_path):
@@ -46,7 +48,7 @@ def test_incomplete_snapshot_rolls_back_old_values_and_vintage(tmp_path):
     try:
         enrich_database(path, [make_evidence()], 2024)
     except ValueError as error:
-        assert "matched 1 of 2" in str(error)
+        assert "tract sets do not match" in str(error)
     else:
         raise AssertionError("an incomplete ACS snapshot must fail closed")
     with sqlite3.connect(path) as connection:
