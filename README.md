@@ -117,22 +117,38 @@ for the urban pilot city, `_sample_rural_tracts` for the rural pilot
 county) so you can smoke-test the plumbing immediately. For real
 data:
 
-1. **USDA Food Access Research Atlas — LRAM or SRAM.** USDA discontinued
-   the old standalone SNAP Retailer Locator (individual retailer points);
-   what replaced it is folded into the Atlas itself as two tract-level
-   products, both downloadable from
-   <https://www.ers.usda.gov/data-products/food-access-research-atlas/download-the-data>:
-   **LRAM** (Large Retailer Access Map — large grocery/supermarkets only,
-   2019 data) is the methodological continuation of the classic Atlas and
-   the recommended default, since it isolates genuine full-service grocery
-   access rather than counting a dollar store as "access." **SRAM**
-   (SNAP-authorized Retailer Access Map — every SNAP-authorized store
-   including convenience and dollar stores, 2025 data) is more current but
-   more lenient. Download either product, save it locally, then run
-   `python data/prep_atlas.py --input data/raw/lram.csv --product LRAM --regions all`
-   — it matches columns by pattern rather than one hardcoded spelling,
-   since names have shifted across releases, and prints what it found if
-   auto-matching needs a hand.
+1. **USDA 2025 SNAP-authorized Retailer Access Map (SRAM).** The current
+   production input is USDA's 2025 SRAM release on 2020 Census tract
+   geography. USDA distributes it as separate General, Driving Distance, and
+   Straight Line Distance CSV files. Extract the official ZIP into
+   `data/raw/sram_2025/`. The pipeline joins the General file to the selected
+   access file one-to-one on `CensusTract20`, rejects duplicate or incomplete
+   tract sets, and reads the official Windows-1252 encoding. Driving-distance
+   access is the production default because route planning depends on the road
+   network; straight-line access requires `--distance-method straight`.
+
+   Download and extract the official 2020 Census tract Gazetteer file to
+   `data/raw/census_2020_tract_centroids/2020_Gaz_tracts_national.txt`.
+   It supplies coordinates for the same 2020 tract geography. A 2010 Gazetteer
+   file must not be joined to current SRAM.
+
+   ```bash
+   python data/prep_atlas.py \
+     --input data/raw/sram_2025 \
+     --product SRAM \
+     --distance-method driving \
+     --centroids data/raw/census_2020_tract_centroids/2020_Gaz_tracts_national.txt \
+     --regions all
+   ```
+
+   The urban output contains all Cook County tracts. The rural output contains
+   only USDA-classified rural tracts (`Urban=0`) in Cook, Kane, Kendall,
+   Grundy, Will, Kankakee, and McHenry Counties. Each database records the
+   access method, exact source files, geography vintage, tract count, tract
+   manifest checksum, and preparation timestamp. Legacy LRAM combined-file
+   ingestion remains available for reproducibility but requires matching 2010
+   coordinates and cannot be directly enriched with current ACS data.
+
 2. **OpenStreetMap** — no setup needed. Queried live via the public
    Overpass API in `tools/existing_resources.py` for community gardens,
    grocery stores, farms, and convenience stores (kept separate from real
@@ -149,7 +165,7 @@ data:
    below for details and a real caveat about this script's verification.
 
 The default `--regions all` run builds both `data/atlas_pilot_city.db` and
-`data/atlas_rural_county.db` from the same official file. Use `--regions
+`data/atlas_rural_county.db` from the validated SRAM bundle. Use `--regions
 urban` or `--regions rural` to build only one. Each database records the
 selected product, source file, thresholds, region, and preparation time in
 its `metadata` table. Tool responses label fallback records as
