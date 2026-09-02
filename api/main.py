@@ -185,7 +185,8 @@ def site_tract_scores(food_access_gap: float | None = Query(default=None, ge=0),
         weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
                            population_served=population_served, transit_burden=transit_burden,
                            existing_coverage=existing_coverage)
-        return score_all_gaps(get_all_tracts(), load_resource_cache("urban"), weights=weights)
+        resources = load_resource_cache("urban", require_complete_coverage=True)
+        return score_all_gaps(get_all_tracts(), resources, weights=weights)
     except (PreparedTractDataError, ResourceCacheError) as exc:
         raise HTTPException(status_code=503, detail=f"Prepared heatmap data unavailable: {exc}") from exc
 
