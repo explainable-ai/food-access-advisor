@@ -21,6 +21,16 @@ class Session:
         return Response(self.payload)
 
 
+class SequencedSession(Session):
+    def __init__(self, payloads):
+        super().__init__(None)
+        self.payloads = iter(payloads)
+
+    def post(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        return Response(next(self.payloads))
+
+
 def test_matrix_converts_seconds_to_minutes():
     session = Session({"durations": [[0, 120], [180, 0]]})
     provider = OpenRouteServiceProvider(api_key="test", session=session)
@@ -38,6 +48,34 @@ def test_directions_parses_geojson_and_alternatives():
     routes = provider.directions([{"lat": 37, "lon": -89.2}, {"lat": 37.1, "lon": -89.1}])
     assert len(routes) == 2
     assert routes[0]["durationMinutes"] == 10
+
+
+def test_waypoint_route_returns_color_coded_route_choices():
+    def feature(coordinates, distance):
+        return {
+            "geometry": {"coordinates": coordinates},
+            "properties": {"summary": {"distance": distance, "duration": 600}, "segments": []},
+        }
+
+    primary = feature([[-89.2, 37.0], [-89.15, 37.05], [-89.2, 37.0]], 9)
+    shortest = feature([[-89.2, 37.0], [-89.14, 37.04], [-89.2, 37.0]], 8)
+    reverse = feature([[-89.2, 37.0], [-89.1, 37.1], [-89.15, 37.05], [-89.2, 37.0]], 11)
+    session = SequencedSession([
+        {"features": [primary]},
+        {"features": [shortest]},
+        {"features": [reverse]},
+    ])
+    provider = OpenRouteServiceProvider(api_key="test", session=session)
+    routes = provider.directions([
+        {"lat": 37.0, "lon": -89.2},
+        {"lat": 37.05, "lon": -89.15},
+        {"lat": 37.1, "lon": -89.1},
+        {"lat": 37.0, "lon": -89.2},
+    ])
+
+    assert len(routes) == 3
+    assert session.calls[1][1]["json"]["preference"] == "shortest"
+    assert session.calls[2][1]["json"]["coordinates"][1] == [-89.1, 37.1]
 
 
 def test_missing_key_is_explicit(monkeypatch):

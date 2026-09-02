@@ -63,7 +63,34 @@ class OpenRouteServiceProvider:
         features = payload.get("features") if isinstance(payload, dict) else None
         if not features:
             raise TravelTimeProviderError("openrouteservice returned no road geometry")
-        return [_parse_feature(feature) for feature in features]
+        routes = [_parse_feature(feature) for feature in features]
+
+        # ORS' built-in alternative_routes option applies to a simple
+        # origin/destination trip. A service route normally has waypoints, so
+        # produce honest alternatives by comparing a shortest-path request and
+        # (when possible) the reverse stop order while preserving both ends.
+        # Each option is still a real ORS road route; no straight connector is
+        # synthesized.
+        if len(coordinates) > 2 and alternatives:
+            variants = [
+                {**body, "preference": "shortest"},
+            ]
+            interior = coordinates[1:-1]
+            if len(interior) > 1:
+                variants.append({**body, "coordinates": [coordinates[0], *reversed(interior), coordinates[-1]]})
+            for variant in variants[: int(alternatives)]:
+                try:
+                    candidate_payload = self._post("/v2/directions/driving-car/geojson", variant)
+                except TravelTimeProviderError:
+                    continue
+                for feature in candidate_payload.get("features") or []:
+                    candidate = _parse_feature(feature)
+                    if candidate["coordinates"] and not _same_route(candidate, routes):
+                        routes.append(candidate)
+                        break
+                if len(routes) >= int(alternatives) + 1:
+                    break
+        return routes[: int(alternatives) + 1]
 
 
 def _parse_feature(feature):
@@ -88,6 +115,17 @@ def _parse_feature(feature):
         "distanceMiles": summary.get("distance"),
         "durationMinutes": round(float(summary["duration"]) / 60, 3) if summary.get("duration") is not None else None,
     }
+
+
+def _same_route(candidate, routes):
+    coordinates = candidate.get("coordinates") or []
+    signature = tuple((round(float(lon), 5), round(float(lat), 5)) for lon, lat in coordinates)
+    for route in routes:
+        other = route.get("coordinates") or []
+        other_signature = tuple((round(float(lon), 5), round(float(lat), 5)) for lon, lat in other)
+        if signature == other_signature:
+            return True
+    return False
 
 
 def get_openrouteservice_matrix(points):
