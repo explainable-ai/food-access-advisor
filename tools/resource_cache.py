@@ -47,26 +47,50 @@ def _key(scope):
     return f"{prefix}/{scope}.json"
 
 
-def _validate_coverage(scope, payload):
-    if not isinstance(payload, dict):
-        raise ResourceCacheError("complete heatmap resource cache must include coverage metadata")
-    raw = payload.get("coverage_bbox")
-    if not isinstance(raw, (list, tuple)) or len(raw) != 4:
-        raise ResourceCacheError("resource cache has no valid coverage_bbox")
-    try:
-        actual = tuple(float(value) for value in raw)
-    except (TypeError, ValueError) as exc:
-        raise ResourceCacheError("resource cache coverage_bbox contains a non-numeric value") from exc
-    expected = tuple((PILOT_CITY if scope == "urban" else PILOT_RURAL_COUNTY)["bbox"])
-    covers = (
+def _required_coverage_bboxes(scope):
+    config = PILOT_CITY if scope == "urban" else PILOT_RURAL_COUNTY
+    areas = config.get("resource_areas")
+    return [tuple(area["bbox"]) for area in areas] if areas else [tuple(config["bbox"])]
+
+
+def _normalize_coverage_bboxes(payload):
+    raw_values = payload.get("coverage_bboxes")
+    if raw_values is None and payload.get("coverage_bbox") is not None:
+        raw_values = [payload["coverage_bbox"]]
+    if not isinstance(raw_values, (list, tuple)) or not raw_values:
+        raise ResourceCacheError("resource cache has no valid coverage metadata")
+    normalized = []
+    for raw in raw_values:
+        if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+            raise ResourceCacheError("resource cache contains an invalid coverage box")
+        try:
+            normalized.append(tuple(float(value) for value in raw))
+        except (TypeError, ValueError) as exc:
+            raise ResourceCacheError("resource cache coverage contains a non-numeric value") from exc
+    return normalized
+
+
+def _covers(actual, expected):
+    return (
         actual[0] <= expected[0]
         and actual[1] <= expected[1]
         and actual[2] >= expected[2]
         and actual[3] >= expected[3]
     )
-    if not covers:
+
+
+def _validate_coverage(scope, payload):
+    if not isinstance(payload, dict):
+        raise ResourceCacheError("complete resource cache must include coverage metadata")
+    actual_values = _normalize_coverage_bboxes(payload)
+    missing = [
+        expected
+        for expected in _required_coverage_bboxes(scope)
+        if not any(_covers(actual, expected) for actual in actual_values)
+    ]
+    if missing:
         raise ResourceCacheError(
-            f"resource cache coverage {actual} does not cover required {scope} bounds {expected}; "
+            f"resource cache does not cover required {scope} bounds {missing}; "
             "refresh the prepared snapshot"
         )
 
@@ -103,9 +127,13 @@ def refresh_resource_cache(scope):
         raise ValueError("resource cache scope must be urban or rural")
     fetcher = get_existing_resources if scope == "urban" else get_rural_existing_resources
     resources = _validate(fetcher())
-    coverage_bbox = list((PILOT_CITY if scope == "urban" else PILOT_RURAL_COUNTY)["bbox"])
-    payload = {"scope": scope, "refreshed_at": datetime.now(timezone.utc).isoformat(),
-               "coverage_bbox": coverage_bbox, "resources": resources}
+    coverage_bboxes = [list(values) for values in _required_coverage_bboxes(scope)]
+    payload = {
+        "scope": scope,
+        "refreshed_at": datetime.now(timezone.utc).isoformat(),
+        "coverage_bboxes": coverage_bboxes,
+        "resources": resources,
+    }
     encoded = json.dumps(payload, separators=(",", ":")).encode()
     bucket = _bucket()
     if bucket:
