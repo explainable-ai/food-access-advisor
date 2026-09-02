@@ -17,8 +17,8 @@ class PriorityWeights:
     food_access_gap: float = 0.25
     poverty: float = 0.20
     no_vehicle: float = 0.15
-    population_served: float = 0.15
-    transit_burden: float = 0.15
+    population_served: float = 0.20
+    transit_burden: float = 0.10
     existing_coverage: float = 0.10
 
     def normalized(self) -> dict[str, float]:
@@ -167,6 +167,18 @@ def _score_all(tracts, resources, weights):
     return scored
 
 
+def score_all_gaps(tracts: list, resources: list,
+                   weights: Mapping[str, float] | None = None) -> list:
+    """Score and rank every tract without the expensive sensitivity sweep.
+
+    This is the prepared-data read model used by the county heatmap. It keeps
+    the exact same components, missing-evidence rules, tie-break, and score
+    explanation as score_gaps; only the top-N truncation and sensitivity
+    scenarios are omitted.
+    """
+    return _score_all(tracts, resources, _coerce_weights(weights))
+
+
 @tool
 def score_gaps(tracts: list, resources: list, top_n: int = 3, weights: Mapping[str, float] | None = None,
                sensitivity_percent: float = 0.20) -> list:
@@ -176,7 +188,7 @@ def score_gaps(tracts: list, resources: list, top_n: int = 3, weights: Mapping[s
     if not 0 <= sensitivity_percent <= 1:
         raise ValueError("sensitivity_percent must be between 0 and 1")
     selected_weights = _coerce_weights(weights)
-    baseline = _score_all(tracts, resources, selected_weights)
+    baseline = score_all_gaps(tracts, resources, selected_weights)
     ranges = {item["tract_fips"]: {"scores": [item["need_score"]], "ranks": [item["rank"]]} for item in baseline}
     base_values = asdict(selected_weights)
     for name, value in base_values.items():
