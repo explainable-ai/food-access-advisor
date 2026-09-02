@@ -287,6 +287,25 @@ def test_complete_resource_cache_requires_county_coverage(tmp_path, monkeypatch)
         raise AssertionError("partial resource coverage must not power the heatmap")
 
 
+def test_complete_resource_cache_rejects_empty_county_snapshot(tmp_path, monkeypatch):
+    payload = {
+        "scope": "urban",
+        "coverage_bbox": list(access_data.PILOT_CITY["bbox"]),
+        "resources": [],
+    }
+    (tmp_path / "urban.json").write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setenv("RESOURCE_CACHE_DIR", str(tmp_path))
+    monkeypatch.delenv("RESOURCE_CACHE_BUCKET", raising=False)
+    monkeypatch.delenv("EVIDENCE_BUCKET", raising=False)
+
+    try:
+        resource_cache.load_resource_cache("urban", require_complete_coverage=True)
+    except resource_cache.ResourceCacheError as error:
+        assert "resource cache is empty" in str(error)
+    else:
+        raise AssertionError("An empty county resource snapshot must fail closed")
+
+
 def test_site_tract_scores_never_falls_back_to_sample_rows(monkeypatch):
     def unavailable():
         raise api_main.PreparedTractDataError("prepared database missing")
