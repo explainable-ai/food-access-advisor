@@ -133,3 +133,132 @@ def test_current_urban_atlas_requires_authoritative_tract_manifest(
         assert "does not match the authoritative 2020 manifest" in str(error)
     else:
         raise AssertionError("A wrong Cook County tract set must fail closed")
+
+
+
+def _write_split_sram_bundle(root):
+    general = pd.DataFrame(
+        {
+            "CensusTract20": ["17031010100", "17089960100"],
+            "State": ["Illinois", "Illinois"],
+            "County20": ["Cook", "Kane"],
+            "Urban": ["1", "0"],
+            "POP2020": ["1000", "700"],
+        }
+    )
+    driving = pd.DataFrame(
+        {
+            "CensusTract20": ["17031010100", "17089960100"],
+            "DD_SRAM_LILATracts_halfAnd10": ["1", "0"],
+            "DD_SRAM_LILATracts_1And10": ["1", "1"],
+            "DD_SRAM_LILATracts_1And20": ["0", "1"],
+        }
+    )
+    straight = pd.DataFrame(
+        {
+            "CensusTract20": ["17031010100", "17089960100"],
+            "SD_SRAM_LILATracts_halfAnd10": ["0", "1"],
+            "SD_SRAM_LILATracts_1And10": ["0", "0"],
+            "SD_SRAM_LILATracts_1And20": ["1", "0"],
+        }
+    )
+    general.to_csv(
+        root / prep_atlas.SRAM_FILES["general"], index=False, encoding="cp1252"
+    )
+    driving.to_csv(
+        root / prep_atlas.SRAM_FILES["driving"], index=False, encoding="cp1252"
+    )
+    straight.to_csv(
+        root / prep_atlas.SRAM_FILES["straight"], index=False, encoding="cp1252"
+    )
+
+
+def test_loads_split_sram_bundle_with_driving_distance_by_default(tmp_path):
+    _write_split_sram_bundle(tmp_path)
+    frame, method, sources = prep_atlas._load_data(tmp_path, "SRAM")
+
+    assert method == "sram_driving_distance"
+    assert len(sources) == 2
+    assert list(frame["CensusTract20"]) == ["17031010100", "17089960100"]
+    assert "DD_SRAM_LILATracts_halfAnd10" in frame
+    assert "SD_SRAM_LILATracts_halfAnd10" not in frame
+
+
+def test_split_sram_can_explicitly_use_straight_line_distance(tmp_path):
+    _write_split_sram_bundle(tmp_path)
+    frame, method, _ = prep_atlas._load_data(
+        tmp_path, "SRAM", distance_method="straight"
+    )
+
+    assert method == "sram_straight_distance"
+    assert "SD_SRAM_LILATracts_halfAnd10" in frame
+    assert "DD_SRAM_LILATracts_halfAnd10" not in frame
+
+
+def test_split_sram_rejects_incomplete_tract_join(tmp_path):
+    _write_split_sram_bundle(tmp_path)
+    driving_path = tmp_path / prep_atlas.SRAM_FILES["driving"]
+    driving = pd.read_csv(driving_path, dtype=str, encoding="cp1252").iloc[:1]
+    driving.to_csv(driving_path, index=False, encoding="cp1252")
+
+    try:
+        prep_atlas._load_data(tmp_path, "SRAM")
+    except ValueError as error:
+        assert "SRAM tract sets do not match" in str(error)
+    else:
+        raise AssertionError("An incomplete SRAM tract join must fail closed")
+
+
+def test_sram_database_records_access_method_and_requires_coordinates(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "urban.db"
+    monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", target)
+    monkeypatch.setitem(
+        prep_atlas.REGIONS["urban"]["config"], "expected_tract_count", 1
+    )
+    expected_digest = prep_atlas.hashlib.sha256(b"17031010100").hexdigest()
+    monkeypatch.setitem(
+        prep_atlas.REGIONS["urban"]["config"],
+        "expected_tract_fips_sha256",
+        expected_digest,
+    )
+    frame = pd.DataFrame(
+        {
+            "CensusTract20": ["17031010100"],
+            "POP2020": ["1000"],
+            "Urban": ["1"],
+            "DD_SRAM_LILATracts_halfAnd10": ["1"],
+            "DD_SRAM_LILATracts_1And10": ["1"],
+        }
+    )
+
+    try:
+        prep_atlas.prepare_region_database(
+            frame,
+            "urban",
+            "SRAM",
+            "sram_2025",
+            require_coordinates=True,
+        )
+    except ValueError as error:
+        assert "tracts lack 2020 centroids" in str(error)
+    else:
+        raise AssertionError("Current SRAM preparation must require 2020 coordinates")
+
+    prep_atlas.prepare_region_database(
+        frame,
+        "urban",
+        "SRAM",
+        "sram_2025",
+        {"17031010100": (41.9, -87.7)},
+        access_method="sram_driving_distance",
+        source_files=("general.csv", "driving.csv"),
+        require_coordinates=True,
+    )
+    with sqlite3.connect(target) as connection:
+        metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+    assert metadata["access_method"] == "sram_driving_distance"
+    assert metadata["source_files"] == "general.csv|driving.csv"
+    assert metadata["tract_count"] == "1"
+    assert metadata["tract_fips_sha256"] == expected_digest
