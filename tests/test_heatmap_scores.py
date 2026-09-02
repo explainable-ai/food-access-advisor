@@ -132,6 +132,21 @@ def test_get_all_tracts_rejects_atlas_database_without_acs(tmp_path, monkeypatch
         raise AssertionError("Atlas-only data must not power the heatmap")
 
 
+def test_get_all_tracts_rejects_malformed_database_as_prepared_data_failure(
+    tmp_path, monkeypatch
+):
+    database = tmp_path / "malformed.db"
+    database.touch()
+    monkeypatch.setattr(access_data, "DB_PATH", database)
+
+    try:
+        access_data.get_all_tracts()
+    except access_data.PreparedTractDataError as error:
+        assert "unreadable or has an invalid schema" in str(error)
+    else:
+        raise AssertionError("Malformed data must return a prepared-data failure")
+
+
 def test_complete_resource_cache_requires_county_coverage(tmp_path, monkeypatch):
     payload = {
         "scope": "urban",
