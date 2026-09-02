@@ -35,6 +35,9 @@ DEFAULT_WEIGHTS = PriorityWeights()
 
 
 def _severity_component(tract):
+    continuous_rural_gap = tract.get("low_income_low_access_share")
+    if continuous_rural_gap is not None:
+        return max(0.0, min(float(continuous_rural_gap), 1.0))
     if tract.get("low_access_half_mile"):
         return 1.0
     if tract.get("low_access_one_mile"):
