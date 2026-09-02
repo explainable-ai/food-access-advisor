@@ -84,6 +84,31 @@ def get_low_access_tracts(limit: int = 25) -> list:
     return _read_database(DB_PATH, limit)
 
 
+def _validate_complete_heatmap_database(path):
+    with sqlite3.connect(path) as connection:
+        available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
+        missing_columns = sorted(set(ACS_COLUMNS) - available)
+        has_metadata = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata'"
+        ).fetchone()
+        metadata = dict(connection.execute("SELECT key, value FROM metadata")) if has_metadata else {}
+        missing_metadata = [name for name in ("acs_vintage", "acs_dataset", "acs_geography_vintage")
+                            if not metadata.get(name)]
+        tract_count = connection.execute("SELECT COUNT(*) FROM tracts").fetchone()[0]
+    if missing_columns or missing_metadata or tract_count == 0:
+        problems = []
+        if missing_columns:
+            problems.append(f"missing ACS columns: {', '.join(missing_columns)}")
+        if missing_metadata:
+            problems.append(f"missing ACS metadata: {', '.join(missing_metadata)}")
+        if tract_count == 0:
+            problems.append("tract table is empty")
+        raise PreparedTractDataError(
+            "prepared Cook County tract database is incomplete (" + "; ".join(problems) + "); "
+            "run data/prep_atlas.py and data/prep_acs.py before deployment"
+        )
+
+
 def get_all_tracts() -> list:
     """Return every prepared Cook County tract for the evidence heatmap.
 
@@ -96,6 +121,7 @@ def get_all_tracts() -> list:
             f"prepared Cook County tract database is unavailable at {DB_PATH}; "
             "run data/prep_atlas.py and data/prep_acs.py before deployment"
         )
+    _validate_complete_heatmap_database(DB_PATH)
     return _read_database(DB_PATH, low_access_only=False)
 
 
