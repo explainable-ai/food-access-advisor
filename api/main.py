@@ -72,8 +72,15 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 # Produced by data/prep_tract_boundaries.py -- see that script for why
 # these are separate one-time-generated files rather than computed here.
 BOUNDARY_FILES_BY_COUNTY_FIPS = {
-    PILOT_CITY["county_fips"][0]: DATA_DIR / "tract_boundaries_pilot_city.geojson",
-    PILOT_RURAL_COUNTY["county_fips"][0]: DATA_DIR / "tract_boundaries_rural_county.geojson",
+    **{
+        county: DATA_DIR / "tract_boundaries_pilot_city.geojson"
+        for county in PILOT_CITY["county_fips"]
+    },
+    **{
+        county: DATA_DIR / "tract_boundaries_rural_county.geojson"
+        for county in PILOT_RURAL_COUNTY["county_fips"]
+        if county not in PILOT_CITY["county_fips"]
+    },
 }
 
 app = FastAPI(title="Food-Access Advisor API")
@@ -204,8 +211,8 @@ def route_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
                            population_served=population_served, transit_burden=transit_burden,
                            existing_coverage=existing_coverage)
         return _ranked_tracts(get_low_access_rural_tracts, lambda: load_resource_cache("rural"), top_n, weights)
-    except ResourceCacheError as exc:
-        raise HTTPException(status_code=503, detail=f"Prepared resource data unavailable: {exc}") from exc
+    except (PreparedTractDataError, ResourceCacheError) as exc:
+        raise HTTPException(status_code=503, detail=f"Prepared route data unavailable: {exc}") from exc
 
 
 @app.get("/api/site-advisor/resources", response_model=list[ExistingResource])
@@ -347,7 +354,7 @@ def verify_tract(request: VerifyRequest,
 
 
 @app.get("/api/tract-boundaries")
-def tract_boundaries(county: str = Query(..., description="County FIPS, e.g. 17031 or 17003")):
+def tract_boundaries(county: str = Query(..., description="Configured Illinois county FIPS")):
     """Serves the GeoJSON FeatureCollection built by
     data/prep_tract_boundaries.py -- one file per pilot region, keyed by
     tract_fips. Returns 404 with a clear message (not a bare file-not-found
