@@ -40,6 +40,24 @@ def test_prepares_only_rural_tracts_from_all_configured_counties(tmp_path, monke
     assert metadata["rural_indicator"] == "Urban=0"
 
 
+def test_rural_prep_requires_usda_classification(tmp_path, monkeypatch):
+    monkeypatch.setitem(prep_atlas.REGIONS["rural"], "db_path", tmp_path / "rural.db")
+    frame = pd.DataFrame(
+        {
+            "CensusTract": ["17089960100"],
+            "POP2010": [1],
+            "LILATracts_1And10": [1],
+            "LILATracts_1And20": [1],
+        }
+    )
+    try:
+        prep_atlas.prepare_region_database(frame, "rural", "LRAM", "atlas.csv")
+    except ValueError as error:
+        assert "USDA urban/rural indicator" in str(error)
+    else:
+        raise AssertionError("rural prep must fail without an official classification field")
+
+
 def test_region_fails_when_required_threshold_is_missing(tmp_path, monkeypatch):
     monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", tmp_path / "urban.db")
     frame = pd.DataFrame({"CensusTract": ["17031010100"], "POP2010": [1]})
