@@ -316,6 +316,7 @@ def get_low_access_rural_tracts(limit: int = 25) -> list:
             "run data/prep_atlas.py for the rural region, then upload it to "
             f"s3://$EVIDENCE_BUCKET/{DEFAULT_RURAL_DATABASE_KEY}"
         )
+    _validate_complete_rural_database(path)
     return _read_database(
         path,
         limit,
