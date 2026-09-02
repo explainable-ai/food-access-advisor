@@ -12,6 +12,10 @@ PILOT_CITY = {
     # Census county FIPS codes covered by this pilot — Cook County, IL.
     # Find yours at https://www.census.gov/library/reference/code-lists/ansi.html
     "county_fips": ["17031"],
+    # 2020 Census geography contains 1,332 Cook County tracts, including
+    # the water tract that the frontend deliberately leaves unshaded.
+    "tract_geography_vintage": "2020",
+    "expected_tract_count": 1332,
     # Cook County-wide resource coverage box (south, west, north, east),
     # with a small buffer so nearby cross-boundary stores count. Prepared
     # resource snapshots used by the heatmap must cover this entire box.
