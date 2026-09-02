@@ -12,10 +12,10 @@ PILOT_CITY = {
     # Census county FIPS codes covered by this pilot — Cook County, IL.
     # Find yours at https://www.census.gov/library/reference/code-lists/ansi.html
     "county_fips": ["17031"],
-    # Rough bounding box (south, west, north, east) in decimal degrees,
-    # used for live Overpass queries. Doesn't need to be precise — it's a
-    # search area, not a boundary.
-    "bbox": (41.60, -87.85, 42.05, -87.52),
+    # Cook County-wide resource coverage box (south, west, north, east),
+    # with a small buffer so nearby cross-boundary stores count. Prepared
+    # resource snapshots used by the heatmap must cover this entire box.
+    "bbox": (41.45, -88.30, 42.20, -87.50),
 }
 
 # Rural pilot for the Route Advisor (a separate sibling agent from the
