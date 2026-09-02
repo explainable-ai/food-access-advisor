@@ -6,6 +6,7 @@ sample rows so `python agent.py` runs before you've done the real data-prep
 step — swap in the full download when you're ready (see README > Data setup).
 """
 
+import hashlib
 import os
 import sqlite3
 import tempfile
@@ -26,7 +27,31 @@ DEFAULT_CACHE_PATH = Path("/tmp/food-access-advisor/atlas_pilot_city.db")
 # accidentally fall through to reading Chicago's tracts.
 RURAL_DB_PATH = Path(__file__).parent.parent / "data" / "atlas_rural_county.db"
 
-ACS_COLUMNS = ("poverty_universe", "population_below_poverty", "households_total", "households_no_vehicle")
+CORE_COLUMNS = (
+    "tract_fips",
+    "population",
+    "low_access_half_mile",
+    "low_access_one_mile",
+    "centroid_lat",
+    "centroid_lon",
+)
+ACS_COLUMNS = (
+    "poverty_universe",
+    "population_below_poverty",
+    "households_total",
+    "households_no_vehicle",
+)
+HEATMAP_COLUMNS = CORE_COLUMNS + ACS_COLUMNS
+HEATMAP_METADATA = (
+    "region",
+    "region_name",
+    "geography_vintage",
+    "acs_vintage",
+    "acs_dataset",
+    "acs_geography_vintage",
+    "tract_count",
+    "tract_fips_sha256",
+)
 
 
 class PreparedTractDataError(RuntimeError):
@@ -61,9 +86,10 @@ def _prepared_database_path():
 
 
 def _read_database(path, limit=None, low_access_only=True):
-    connection = sqlite3.connect(path)
-    connection.row_factory = sqlite3.Row
+    connection = None
     try:
+        connection = sqlite3.connect(path)
+        connection.row_factory = sqlite3.Row
         available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
         optional = ", ".join(name if name in available else f"NULL AS {name}" for name in ACS_COLUMNS)
         where_clause = "WHERE low_access_half_mile = 1 OR low_access_one_mile = 1" if low_access_only else ""
@@ -78,8 +104,13 @@ def _read_database(path, limit=None, low_access_only=True):
             parameters,
         ).fetchall()
         return [{**dict(row), "data_mode": "real"} for row in rows]
+    except sqlite3.Error as error:
+        raise PreparedTractDataError(
+            f"prepared tract database is unreadable or has an invalid schema at {path}"
+        ) from error
     finally:
-        connection.close()
+        if connection:
+            connection.close()
 
 
 @tool
@@ -120,27 +151,61 @@ def _validate_complete_heatmap_database(path):
     try:
         with sqlite3.connect(path) as connection:
             available = {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}
-            missing_columns = sorted(set(ACS_COLUMNS) - available)
+            missing_columns = sorted(set(HEATMAP_COLUMNS) - available)
             has_metadata = connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata'"
             ).fetchone()
             metadata = dict(connection.execute("SELECT key, value FROM metadata")) if has_metadata else {}
-            missing_metadata = [name for name in ("acs_vintage", "acs_dataset", "acs_geography_vintage")
-                                if not metadata.get(name)]
+            missing_metadata = [name for name in HEATMAP_METADATA if not metadata.get(name)]
             tract_count = connection.execute("SELECT COUNT(*) FROM tracts").fetchone()[0]
+            tract_rows = (
+                connection.execute(
+                    "SELECT tract_fips, population, centroid_lat, centroid_lon FROM tracts"
+                ).fetchall()
+                if not (set(CORE_COLUMNS) - available)
+                else []
+            )
     except sqlite3.Error as error:
         raise PreparedTractDataError(
             "prepared Cook County tract database is unreadable or has an invalid schema; "
             "run data/prep_atlas.py and data/prep_acs.py before deployment"
         ) from error
-    if missing_columns or missing_metadata or tract_count == 0:
-        problems = []
-        if missing_columns:
-            problems.append(f"missing ACS columns: {', '.join(missing_columns)}")
-        if missing_metadata:
-            problems.append(f"missing ACS metadata: {', '.join(missing_metadata)}")
-        if tract_count == 0:
-            problems.append("tract table is empty")
+    problems = []
+    if missing_columns:
+        problems.append(f"missing required columns: {', '.join(missing_columns)}")
+    if missing_metadata:
+        problems.append(f"missing preparation metadata: {', '.join(missing_metadata)}")
+    if tract_count == 0:
+        problems.append("tract table is empty")
+    expected_count = int(PILOT_CITY["expected_tract_count"])
+    if tract_count != expected_count:
+        problems.append(f"expected {expected_count} Cook County tracts, found {tract_count}")
+    if metadata.get("region") != "urban" or metadata.get("region_name") != PILOT_CITY["name"]:
+        problems.append("database metadata does not identify the Cook County urban study area")
+    expected_vintage = str(PILOT_CITY["tract_geography_vintage"])
+    if metadata.get("geography_vintage") != expected_vintage:
+        problems.append(f"tract geography is not the required {expected_vintage} vintage")
+    if metadata.get("acs_geography_vintage") != expected_vintage:
+        problems.append(f"ACS geography is not the required {expected_vintage} vintage")
+    actual_fips = [str(row[0]) for row in tract_rows]
+    prefixes = tuple(PILOT_CITY["county_fips"])
+    if actual_fips and any(len(fips) != 11 or not fips.isdigit() or not fips.startswith(prefixes)
+                           for fips in actual_fips):
+        problems.append("tract table contains a GEOID outside the configured Cook County FIPS")
+    actual_digest = hashlib.sha256("\n".join(sorted(actual_fips)).encode()).hexdigest()
+    if metadata.get("tract_fips_sha256") != actual_digest:
+        problems.append("tract GEOID set does not match the prepared evidence manifest")
+    try:
+        metadata_count = int(metadata.get("tract_count", ""))
+    except ValueError:
+        metadata_count = -1
+    if metadata_count != tract_count:
+        problems.append("tract row count does not match the prepared evidence manifest")
+    if tract_rows and any(
+        row[1] is None or row[2] is None or row[3] is None for row in tract_rows
+    ):
+        problems.append("one or more tracts are missing population or centroid values")
+    if problems:
         raise PreparedTractDataError(
             "prepared Cook County tract database is incomplete (" + "; ".join(problems) + "); "
             "run data/prep_atlas.py and data/prep_acs.py before deployment"
