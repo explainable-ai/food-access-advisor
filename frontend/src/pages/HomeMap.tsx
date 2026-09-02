@@ -40,8 +40,8 @@ const REGIONS: Record<
     getResources: getSiteResources,
   },
   rural: {
-    toggleLabel: "Alexander Co. · Mobile route",
-    countyFips: "17003",
+    toggleLabel: "Chicagoland rural fringe · Mobile route",
+    countyFips: "17089",
     center: [-89.3, 37.15],
     zoom: 10,
     getRankedTracts: getRouteRankedTracts,

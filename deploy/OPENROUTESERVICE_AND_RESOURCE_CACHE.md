@@ -6,7 +6,34 @@ route resource/ranking endpoints read these S3 objects instead:
 - `s3://$RESOURCE_CACHE_BUCKET/$RESOURCE_CACHE_PREFIX/urban.json`
 - `s3://$RESOURCE_CACHE_BUCKET/$RESOURCE_CACHE_PREFIX/rural.json`
 
-## One-time bootstrap
+## Rural tract bootstrap
+
+The route study area is the USDA-classified rural portion of Cook, Kane,
+Kendall, Grundy, Will, Kankakee, and McHenry Counties. County membership
+alone is not accepted as rural.
+
+Use the same current SRAM workbook and 2020 tract geography used for the
+Chicago database:
+
+```powershell
+python data/prep_atlas.py --input .\data\raw\food_access_atlas.xlsx --product SRAM --regions rural
+python data/prep_acs.py --year 2024 --regions rural
+python data/prep_tract_boundaries.py
+
+aws s3 cp .\data\atlas_rural_county.db `
+  s3://food-access-evidence-576951331959-us-east-1/prepared-data/atlas_rural_fringe.db `
+  --profile bedrock-dev `
+  --region us-east-1
+```
+
+The deployed API reads that object through `RURAL_TRACT_DATA_KEY` (default
+`prepared-data/atlas_rural_fringe.db`). It fails closed if the object is
+missing; it never substitutes Alexander County or illustrative tracts. The
+boundary command regenerates `data/tract_boundaries_rural_county.geojson`
+for every configured county; package that generated file with the API image
+before enabling rural tract-boundary requests.
+
+## Resource-cache bootstrap
 
 Run this on a machine that can reach Overpass and AWS:
 
@@ -14,16 +41,17 @@ Run this on a machine that can reach Overpass and AWS:
 $env:AWS_PROFILE = "bedrock-dev"
 $env:AWS_REGION = "us-east-1"
 $env:RESOURCE_CACHE_BUCKET = "food-access-evidence-576951331959-us-east-1"
-python -m scripts.refresh_resource_cache
+python -m scripts.refresh_resource_cache --scope urban
+python -m scripts.refresh_resource_cache --scope rural
 ```
 
 Then schedule the same command in the ingestion/Watchdog runtime. A failed
 refresh leaves the previous S3 object intact, so public API reads keep serving
 the last successful snapshot.
 
-The ECS task role needs `s3:GetObject` for
-`arn:aws:s3:::food-access-evidence-576951331959-us-east-1/resource-cache/*`.
-The refresh runtime additionally needs `s3:PutObject` for that prefix.
+The ECS task role needs `s3:GetObject` for the `resource-cache/*` and
+`prepared-data/*` prefixes. The refresh runtime additionally needs
+`s3:PutObject` for `resource-cache/*`.
 
 ## openrouteservice key
 

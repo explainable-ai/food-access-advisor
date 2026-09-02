@@ -18,7 +18,7 @@ Watchdog is generalized rather than tripled: one accountability agent
 watches both the Site Advisor's ("site") and the Route Advisor's ("route")
 recommendations, rather than building a third agent to do the same job.
 That means it needs BOTH regions' live resource data, not just Chicago's —
-a "route" row's centroid sits in Alexander County, and checking it against
+a "route" row's centroid sits in the configured Chicagoland rural fringe, and checking it against
 Chicago's OSM query would silently compare it to resources roughly 180
 miles away, always reporting "still needed" regardless of what actually
 opened nearby. See the system prompt's step 3/4 and

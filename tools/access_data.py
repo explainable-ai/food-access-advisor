@@ -15,7 +15,7 @@ from pathlib import Path
 import boto3
 from strands import tool
 
-from config import PILOT_CITY
+from config import PILOT_CITY, PILOT_RURAL_COUNTY
 
 DB_PATH = Path(__file__).parent.parent / "data" / "atlas_pilot_city.db"
 DEFAULT_DATABASE_KEY = "prepared-data/atlas_pilot_city.db"
@@ -26,6 +26,8 @@ DEFAULT_CACHE_PATH = Path("/tmp/food-access-advisor/atlas_pilot_city.db")
 # config.PILOT_RURAL_COUNTY), so a missing rural file should never
 # accidentally fall through to reading Chicago's tracts.
 RURAL_DB_PATH = Path(__file__).parent.parent / "data" / "atlas_rural_county.db"
+DEFAULT_RURAL_DATABASE_KEY = "prepared-data/atlas_rural_fringe.db"
+DEFAULT_RURAL_CACHE_PATH = Path("/tmp/food-access-advisor/atlas_rural_fringe.db")
 
 CORE_COLUMNS = (
     "tract_fips",
@@ -58,15 +60,15 @@ class PreparedTractDataError(RuntimeError):
     """The all-tract heatmap dataset has not been prepared for this deployment."""
 
 
-def _prepared_database_path():
-    """Return the packaged database or materialize its prepared S3 artifact."""
-    if DB_PATH.exists():
-        return DB_PATH
+def _materialize_database(local_path, key_env, cache_env, default_key, default_cache, label):
+    """Return a packaged database or materialize its prepared S3 artifact."""
+    if local_path.exists():
+        return local_path
     bucket = os.getenv("TRACT_DATA_BUCKET") or os.getenv("EVIDENCE_BUCKET")
     if not bucket:
-        return DB_PATH
-    key = os.getenv("TRACT_DATA_KEY", DEFAULT_DATABASE_KEY).strip("/")
-    target = Path(os.getenv("TRACT_DATA_CACHE_PATH", DEFAULT_CACHE_PATH))
+        return local_path
+    key = os.getenv(key_env, default_key).strip("/")
+    target = Path(os.getenv(cache_env, default_cache))
     if target.exists():
         return target
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -80,9 +82,31 @@ def _prepared_database_path():
         if temporary_path:
             temporary_path.unlink(missing_ok=True)
         raise PreparedTractDataError(
-            f"prepared Cook County tract database is unavailable at s3://{bucket}/{key}: {error}"
+            f"prepared {label} tract database is unavailable at s3://{bucket}/{key}: {error}"
         ) from error
     return target
+
+
+def _prepared_database_path():
+    return _materialize_database(
+        DB_PATH,
+        "TRACT_DATA_KEY",
+        "TRACT_DATA_CACHE_PATH",
+        DEFAULT_DATABASE_KEY,
+        DEFAULT_CACHE_PATH,
+        "Cook County",
+    )
+
+
+def _prepared_rural_database_path():
+    return _materialize_database(
+        RURAL_DB_PATH,
+        "RURAL_TRACT_DATA_KEY",
+        "RURAL_TRACT_DATA_CACHE_PATH",
+        DEFAULT_RURAL_DATABASE_KEY,
+        DEFAULT_RURAL_CACHE_PATH,
+        "Chicagoland rural-fringe",
+    )
 
 
 def _read_database(path, limit=None, low_access_only=True):
@@ -141,10 +165,11 @@ def get_low_access_tracts(limit: int = 25) -> list:
         `centroid_lon`. Sourced from the USDA Food Access Research Atlas —
         cite the Atlas's publication year in any answer built from this.
     """
-    if not DB_PATH.exists():
+    path = _prepared_database_path()
+    if not path.exists():
         return _sample_tracts()[:limit]
 
-    return _read_database(DB_PATH, limit)
+    return _read_database(path, limit)
 
 
 def _validate_complete_heatmap_database(path):
@@ -238,40 +263,21 @@ def get_all_tracts() -> list:
 
 @tool
 def get_low_access_rural_tracts(limit: int = 25) -> list:
-    """Return low-income, low-access census tracts for the rural pilot
-    county (see config.PILOT_RURAL_COUNTY — currently Alexander County, IL).
+    """Return prepared low-income, low-access rural-fringe tracts.
 
-    Same boundary discipline as `get_low_access_tracts`: no region
-    argument. This is permanently scoped by which database file it reads
-    (RURAL_DB_PATH, a separate file from the urban tracts DB) — not a
-    filter a model could bypass.
-
-    Reuses the same `low_access_half_mile` / `low_access_one_mile` field
-    names as the urban tool, even though the rural Atlas columns behind
-    them (`LILATracts_1And10` / `LILATracts_1And20`, see
-    config.PILOT_RURAL_COUNTY) mean a 10-mile and 20-mile threshold, not a
-    half-mile and one-mile one. That's deliberate, not a copy-paste
-    mistake: `score_gaps` only ever reads these two fields as "low access
-    at the tighter threshold" vs. "low access at the wider one" to weigh
-    severity — it never reads the literal mileage the field name implies —
-    so reusing the same two field names lets the one deterministic scorer
-    rank both urban and rural tracts without a rural-specific copy of it.
-
-    `data/prep_atlas.py --product LRAM --regions rural` builds this database.
-    Until that prep step runs, the tool returns clearly labelled sample rows.
-
-    Args:
-        limit: Maximum number of tracts to return, ordered by population
-            descending.
-
-    Returns:
-        A list of dicts, same shape as `get_low_access_tracts`'s output.
+    The database contains only USDA-classified rural tracts from the seven
+    configured Chicagoland counties. A missing prepared artifact is an
+    unavailable-data condition, never permission to substitute Alexander
+    County or illustrative rows.
     """
-    if not RURAL_DB_PATH.exists():
-        return _sample_rural_tracts()[:limit]
-
-    return _read_database(RURAL_DB_PATH, limit)
-
+    path = _prepared_rural_database_path()
+    if not path.exists():
+        raise PreparedTractDataError(
+            f"prepared Chicagoland rural-fringe database is unavailable at {path}; "
+            "run data/prep_atlas.py for the rural region, then upload it to "
+            f"s3://$EVIDENCE_BUCKET/{DEFAULT_RURAL_DATABASE_KEY}"
+        )
+    return _read_database(path, limit)
 
 def _sample_tracts() -> list:
     """Illustrative placeholder rows — NOT real Atlas data, and the FIPS
@@ -304,45 +310,6 @@ def _sample_tracts() -> list:
             "low_access_one_mile": 1,
             "centroid_lat": 41.7524,
             "centroid_lon": -87.6091,
-            "data_mode": "sample",
-        },
-    ]
-
-
-def _sample_rural_tracts() -> list:
-    """Illustrative placeholder rows for Alexander County, IL (seat: Cairo)
-    — NOT real Atlas data. FIPS codes follow Alexander County's real state+
-    county prefix (17003) but the tract suffixes and coordinates are
-    illustrative, not verified against a real download — same caveat as
-    `_sample_tracts()`. Run `data/prep_atlas.py --product LRAM --regions rural`
-    with a real Atlas download before using this for
-    anything but a smoke test."""
-    return [
-        {
-            "tract_fips": "17003960100",
-            "population": 1560,
-            "low_access_half_mile": 1,
-            "low_access_one_mile": 1,
-            "centroid_lat": 37.0059,
-            "centroid_lon": -89.1770,
-            "data_mode": "sample",
-        },
-        {
-            "tract_fips": "17003960200",
-            "population": 980,
-            "low_access_half_mile": 1,
-            "low_access_one_mile": 1,
-            "centroid_lat": 37.0512,
-            "centroid_lon": -89.2185,
-            "data_mode": "sample",
-        },
-        {
-            "tract_fips": "17003960300",
-            "population": 1215,
-            "low_access_half_mile": 0,
-            "low_access_one_mile": 1,
-            "centroid_lat": 37.1203,
-            "centroid_lon": -89.2564,
             "data_mode": "sample",
         },
     ]

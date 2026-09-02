@@ -4,21 +4,58 @@ from data import prep_atlas
 
 
 def test_normalize_tract_fips_handles_excel_numbers():
-    assert prep_atlas._normalize_tract_fips("17003960100.0") == "17003960100"
+    assert prep_atlas._normalize_tract_fips("17089960100.0") == "17089960100"
 
 
-def test_prepares_rural_database_with_provenance(tmp_path, monkeypatch):
+def test_prepares_only_rural_tracts_from_all_configured_counties(tmp_path, monkeypatch):
     target = tmp_path / "rural.db"
     monkeypatch.setitem(prep_atlas.REGIONS["rural"], "db_path", target)
-    frame = pd.DataFrame({"CensusTract": ["17003960100", "17031990000"], "POP2010": [1560, 999],
-                          "LILATracts_1And10": [1, 1], "LILATracts_1And20": [1, 0]})
-    count, path = prep_atlas.prepare_region_database(frame, "rural", "LRAM", "atlas.csv")
-    assert count == 1 and path == target
+    frame = pd.DataFrame(
+        {
+            "CensusTract": [
+                "17089960100",  # Kane, rural
+                "17093960100",  # Kendall, rural
+                "17031990000",  # Cook, urban: excluded
+                "17003960100",  # Alexander: excluded
+            ],
+            "POP2010": [1560, 980, 999, 500],
+            "Urban": [0, 0, 1, 0],
+            "LILATracts_1And10": [1, 1, 1, 1],
+            "LILATracts_1And20": [1, 0, 0, 1],
+        }
+    )
+    count, path = prep_atlas.prepare_region_database(
+        frame, "rural", "LRAM", "atlas.csv"
+    )
+    assert count == 2 and path == target
     with sqlite3.connect(target) as connection:
-        assert connection.execute("SELECT tract_fips FROM tracts").fetchone()[0] == "17003960100"
+        geoids = {
+            row[0] for row in connection.execute("SELECT tract_fips FROM tracts")
+        }
         metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+    assert geoids == {"17089960100", "17093960100"}
     assert metadata["product"] == "LRAM" and metadata["data_mode"] == "real"
     assert metadata["thresholds"] == "10/20 miles"
+    assert metadata["rural_only"] == "true"
+    assert metadata["rural_indicator"] == "Urban=0"
+
+
+def test_rural_prep_requires_usda_classification(tmp_path, monkeypatch):
+    monkeypatch.setitem(prep_atlas.REGIONS["rural"], "db_path", tmp_path / "rural.db")
+    frame = pd.DataFrame(
+        {
+            "CensusTract": ["17089960100"],
+            "POP2010": [1],
+            "LILATracts_1And10": [1],
+            "LILATracts_1And20": [1],
+        }
+    )
+    try:
+        prep_atlas.prepare_region_database(frame, "rural", "LRAM", "atlas.csv")
+    except ValueError as error:
+        assert "USDA urban/rural indicator" in str(error)
+    else:
+        raise AssertionError("rural prep must fail without an official classification field")
 
 
 def test_region_fails_when_required_threshold_is_missing(tmp_path, monkeypatch):
