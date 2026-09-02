@@ -167,6 +167,28 @@ its `metadata` table. Tool responses label fallback records as
    alone. An incomplete ACS response also rolls back without relabeling old
    values as the new vintage.
 
+
+5. **Publish the production heatmap artifacts.** The ECS image intentionally
+   excludes generated SQLite files. After the Atlas and ACS preparation steps,
+   upload the validated database and publish the county-wide resource snapshot
+   from a workstation or scheduled ingestion job that can reach the source APIs:
+
+   ```bash
+   export EVIDENCE_BUCKET=food-access-evidence
+   aws s3 cp data/atlas_pilot_city.db \
+     "s3://$EVIDENCE_BUCKET/prepared-data/atlas_pilot_city.db"
+   python scripts/refresh_resource_cache.py
+   ```
+
+   ECS reads the database from
+   `s3://$EVIDENCE_BUCKET/prepared-data/atlas_pilot_city.db` into an atomic
+   `/tmp` cache and reads the existing-resource snapshot from
+   `s3://$EVIDENCE_BUCKET/resource-cache/urban.json`. Set
+   `TRACT_DATA_BUCKET` or `TRACT_DATA_KEY` only when overriding those defaults.
+   The task role needs `s3:GetObject` for both objects. Do not run the resource
+   refresh inside ECS when its network cannot reach Overpass; publish the
+   prepared snapshot before deploying the service.
+
 The ranked-tract endpoints accept non-negative query weights named
 `food_access_gap`, `poverty`, `no_vehicle`, `population_served`,
 `transit_burden`, and `existing_coverage`. Weights are normalized to sum to
