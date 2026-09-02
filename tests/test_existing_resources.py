@@ -159,3 +159,27 @@ def test_rural_kind_classification(monkeypatch):
     kinds = {r["name"]: r["kind"] for r in result}
     assert kinds["Rural Food Bank"] == "food_bank"
     assert kinds["Mobile Market"] == "market"
+
+
+def test_rural_queries_each_planning_band_and_deduplicates(monkeypatch):
+    calls = {"count": 0}
+    shared = {
+        "type": "node",
+        "id": 99,
+        "lat": 41.64,
+        "lon": -88.45,
+        "tags": {"shop": "grocery", "name": "Shared Market"},
+    }
+
+    def same_resource_for_each_band(*args, **kwargs):
+        calls["count"] += 1
+        return _FakeResponse([shared])
+
+    monkeypatch.setattr(existing_resources.requests, "post", same_resource_for_each_band)
+
+    result = get_rural_existing_resources()
+
+    assert calls["count"] == len(
+        existing_resources.PILOT_RURAL_COUNTY["resource_areas"]
+    )
+    assert [row["entity_id"] for row in result] == ["osm:node/99"]
