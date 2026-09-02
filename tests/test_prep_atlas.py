@@ -154,6 +154,9 @@ def _write_split_sram_bundle(root):
             "DD_SRAM_LILATracts_halfAnd10": ["1", "0"],
             "DD_SRAM_LILATracts_1And10": ["1", "1"],
             "DD_SRAM_LILATracts_1And20": ["0", "1"],
+            "DD_SRAM_lapop10share": ["0.00", "0.81"],
+            "DD_SRAM_lalowi10share": ["0.00", "0.60"],
+            "DD_SRAM_lahunv10share": ["0.00", "0.09"],
         }
     )
     straight = pd.DataFrame(
@@ -276,4 +279,57 @@ def test_cook_boundary_and_sram_manifests_are_explicitly_distinct():
     assert (
         config["expected_atlas_tract_fips_sha256"]
         == "aac4ceecdc0e4ea16437ad9a6ff592b863376a52a6b48ee3e07f97ebf874ed0f"
+    )
+
+
+def test_sram_rural_database_retains_continuous_driving_distance_shares(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "rural.db"
+    config = prep_atlas.REGIONS["rural"]["config"]
+    monkeypatch.setitem(prep_atlas.REGIONS["rural"], "db_path", target)
+    monkeypatch.setitem(config, "expected_atlas_tract_count", 1)
+    geoid = "17063000600"
+    expected_digest = prep_atlas.hashlib.sha256(geoid.encode()).hexdigest()
+    monkeypatch.setitem(
+        config, "expected_atlas_tract_fips_sha256", expected_digest
+    )
+    frame = pd.DataFrame(
+        {
+            "CensusTract20": [geoid],
+            "POP2020": ["2826"],
+            "Urban": ["0"],
+            "DD_SRAM_LILATracts_1And10": ["0"],
+            "DD_SRAM_LILATracts_1And20": ["0"],
+            "DD_SRAM_lapop10share": ["0.81"],
+            "DD_SRAM_lalowi10share": ["0.60"],
+            "DD_SRAM_lahunv10share": ["0.09"],
+        }
+    )
+
+    prep_atlas.prepare_region_database(
+        frame,
+        "rural",
+        "SRAM",
+        "sram_2025",
+        {geoid: (41.20, -88.30)},
+        access_method="sram_driving_distance",
+        source_files=("general.csv", "driving.csv"),
+        require_coordinates=True,
+    )
+
+    with sqlite3.connect(target) as connection:
+        row = connection.execute(
+            """SELECT low_access_population_share,
+                      low_income_low_access_share,
+                      no_vehicle_low_access_share
+               FROM tracts WHERE tract_fips = ?""",
+            (geoid,),
+        ).fetchone()
+        metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+
+    assert row == (0.81, 0.60, 0.09)
+    assert (
+        metadata["rural_food_access_metric"]
+        == "low_income_low_access_share_10mi"
     )
