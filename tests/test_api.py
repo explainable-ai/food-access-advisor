@@ -71,13 +71,13 @@ def test_route_advisor_returns_answer_text(monkeypatch):
     monkeypatch.setattr(
         api_main,
         "route_request",
-        lambda mode, question: FakeGraphResult("route_advisor", "A stop near tract 17003960100 would help most."),
+        lambda mode, question: FakeGraphResult("route_advisor", "A stop near tract 17089960100 would help most."),
     )
 
     response = client.post("/api/route-advisor", json={"question": "where would a route change help?"})
 
     assert response.status_code == 200
-    assert response.json() == {"answer": "A stop near tract 17003960100 would help most."}
+    assert response.json() == {"answer": "A stop near tract 17089960100 would help most."}
 
 
 def test_site_advisor_surfaces_overpass_failure_as_502(monkeypatch):
@@ -140,6 +140,19 @@ def test_site_ranked_tracts_rejects_all_zero_weights(monkeypatch):
 
 def test_route_ranked_tracts_returns_scored_list(monkeypatch):
     monkeypatch.setattr(api_main, "load_resource_cache", lambda scope: [])
+    monkeypatch.setattr(
+        api_main,
+        "get_low_access_rural_tracts",
+        lambda: [{
+            "tract_fips": "17089960100",
+            "population": 1000,
+            "low_access_half_mile": 1,
+            "low_access_one_mile": 1,
+            "centroid_lat": 41.88,
+            "centroid_lon": -88.47,
+            "data_mode": "real",
+        }],
+    )
 
     response = client.get("/api/route-advisor/ranked-tracts")
 
@@ -263,7 +276,7 @@ def test_route_evidence_surfaces_failure_as_502(monkeypatch):
 
     response = client.post(
         "/api/route-advisor/evidence",
-        json={"tract": {"tract_fips": "17003960100", "need_score": 80.0}},
+        json={"tract": {"tract_fips": "17089960100", "need_score": 80.0}},
     )
 
     assert response.status_code == 502
@@ -346,7 +359,7 @@ def test_impact_metrics_returns_both_regions(tmp_path, monkeypatch):
         tract_fips="17031840000", recommendation_type="site", source_agent="advisor"
     )
     flagged_tracts.flag_tract_for_recheck(
-        tract_fips="17003960100", recommendation_type="route", source_agent="route_advisor"
+        tract_fips="17089960100", recommendation_type="route", source_agent="route_advisor"
     )
 
     response = client.get("/api/impact-metrics")
