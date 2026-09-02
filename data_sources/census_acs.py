@@ -62,6 +62,22 @@ def _parse_number(value: str | int | float | None) -> int | float | None:
     return int(number) if number.is_integer() else number
 
 
+def _validate_fips(state_fips, county_fips):
+    if len(state_fips) != 2 or not state_fips.isdigit():
+        raise ValueError("state_fips must be two digits")
+    if len(county_fips) != 3 or not county_fips.isdigit():
+        raise ValueError("county_fips must be three digits")
+
+
+def variable_fields(variables):
+    fields = ["NAME"]
+    for variable in variables:
+        fields.append(variable.estimate)
+        if variable.margin_of_error:
+            fields.append(variable.margin_of_error)
+    return fields
+
+
 class ACSClient:
     def __init__(self, year: int, api_key: str | None = None, *, session: requests.Session | None = None,
                  timeout_seconds: float = 20.0, clock=utc_now):
@@ -77,33 +93,40 @@ class ACSClient:
     def dataset_url(self) -> str:
         return f"{ACS_API_ROOT}/{self.year}/acs/acs5"
 
-    def fetch_tracts(self, *, state_fips: str, county_fips: str,
-                     variables: Iterable[ACSVariable] = DEFAULT_VARIABLES) -> list[TractEvidence]:
-        if len(state_fips) != 2 or not state_fips.isdigit():
-            raise ValueError("state_fips must be two digits")
-        if len(county_fips) != 3 or not county_fips.isdigit():
-            raise ValueError("county_fips must be three digits")
-
+    def fetch_payload(self, *, state_fips: str, county_fips: str,
+                      variables: Iterable[ACSVariable] = DEFAULT_VARIABLES):
+        """Return the untouched Census payload and retrieval time for snapshotting."""
+        _validate_fips(state_fips, county_fips)
         requested = tuple(variables)
-        fields = ["NAME"]
-        for variable in requested:
-            fields.append(variable.estimate)
-            if variable.margin_of_error:
-                fields.append(variable.margin_of_error)
-        params = {"get": ",".join(fields), "for": "tract:*", "in": f"state:{state_fips} county:{county_fips}"}
+        params = {
+            "get": ",".join(variable_fields(requested)),
+            "for": "tract:*",
+            "in": f"state:{state_fips} county:{county_fips}",
+        }
         if self.api_key:
             params["key"] = self.api_key
-
         response = self.session.get(self.dataset_url, params=params, timeout=self.timeout_seconds)
         response.raise_for_status()
         payload = response.json()
+        self.validate_payload(payload)
+        return payload, self.clock()
+
+    @staticmethod
+    def validate_payload(payload):
         if not isinstance(payload, list) or not payload:
             raise ValueError("Census ACS response must contain a header row")
         header = payload[0]
         if not isinstance(header, list) or not {"state", "county", "tract"}.issubset(header):
             raise ValueError("Census ACS response is missing tract geography columns")
 
-        retrieved_at: datetime = self.clock()
+    def parse_payload(self, payload, *, retrieved_at: datetime,
+                      variables: Iterable[ACSVariable] = DEFAULT_VARIABLES):
+        """Parse a live or snapshotted payload into typed tract evidence."""
+        self.validate_payload(payload)
+        if retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None:
+            raise ValueError("ACS retrieved_at must be timezone-aware")
+        requested = tuple(variables)
+        header = payload[0]
         evidence = []
         for row in payload[1:]:
             record = dict(zip(header, row, strict=False))
@@ -131,3 +154,13 @@ class ACSClient:
                 quality=DataQualityReport(status=status, source_row_count=1, matched_rows=1, missing_fields=missing_fields),
                 values=values, metadata={"name": record.get("NAME")}))
         return evidence
+
+    def fetch_tracts(self, *, state_fips: str, county_fips: str,
+                     variables: Iterable[ACSVariable] = DEFAULT_VARIABLES) -> list[TractEvidence]:
+        requested = tuple(variables)
+        payload, retrieved_at = self.fetch_payload(
+            state_fips=state_fips,
+            county_fips=county_fips,
+            variables=requested,
+        )
+        return self.parse_payload(payload, retrieved_at=retrieved_at, variables=requested)
