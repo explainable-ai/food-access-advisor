@@ -16,6 +16,9 @@ PILOT_CITY = {
     # the water tract that the frontend deliberately leaves unshaded.
     "tract_geography_vintage": "2020",
     "expected_tract_count": 1332,
+    # SHA-256 of the sorted, newline-delimited authoritative 2020 Cook
+    # County tract GEOIDs used by the tract-boundary preparation pipeline.
+    "expected_tract_fips_sha256": "e8c642ba760be2ee7a5712fb27961a9bb7a1e7f2a6317f80599f4089aebb376e",
     # Cook County-wide resource coverage box (south, west, north, east),
     # with a small buffer so nearby cross-boundary stores count. Prepared
     # resource snapshots used by the heatmap must cover this entire box.
