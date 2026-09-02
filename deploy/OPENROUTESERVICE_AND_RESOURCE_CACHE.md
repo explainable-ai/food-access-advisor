@@ -14,7 +14,7 @@ Run this on a machine that can reach Overpass and AWS:
 $env:AWS_PROFILE = "bedrock-dev"
 $env:AWS_REGION = "us-east-1"
 $env:RESOURCE_CACHE_BUCKET = "food-access-evidence-576951331959-us-east-1"
-python scripts/refresh_resource_cache.py
+python -m scripts.refresh_resource_cache
 ```
 
 Then schedule the same command in the ingestion/Watchdog runtime. A failed
