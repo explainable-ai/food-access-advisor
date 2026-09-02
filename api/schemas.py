@@ -123,7 +123,7 @@ class RouteOptimizationRequest(BaseModel):
     service_minutes: float = Field(default=20, ge=0)
     travel_time_matrix: Optional[list[list[float]]] = None
     average_speed_mph: float = Field(default=35, gt=0)
-    travel_time_provider: Literal["amazon_location", "estimate"] = "amazon_location"
+    travel_time_provider: Literal["openrouteservice", "estimate"] = "openrouteservice"
 
 
 class RouteOptimizationResponse(BaseModel):
@@ -141,6 +141,34 @@ class RouteOptimizationResponse(BaseModel):
     unselected_stops: list[Any]
     coverage_change: Optional[dict[str, list[str]]] = None
     constraints: Optional[dict[str, float]] = None
+
+
+class RouteDirectionsRequest(BaseModel):
+    origin: RoutePoint
+    waypoints: list[RoutePoint] = Field(default_factory=list, max_length=14)
+    destination: RoutePoint
+    alternatives: int = Field(default=2, ge=0, le=2)
+
+
+class RouteStep(BaseModel):
+    instruction: str
+    distanceMiles: Optional[float] = None
+    durationMinutes: Optional[float] = None
+
+
+class RouteLeg(BaseModel):
+    index: int
+    distanceMiles: Optional[float] = None
+    durationMinutes: Optional[float] = None
+    steps: list[RouteStep] = Field(default_factory=list)
+
+
+class RoadRoute(BaseModel):
+    coordinates: list[list[float]]
+    legs: list[RouteLeg] = Field(default_factory=list)
+    distanceMiles: Optional[float] = None
+    durationMinutes: Optional[float] = None
+    alternatives: list["RoadRoute"] = Field(default_factory=list)
 
 
 class VerifyRequest(BaseModel):
