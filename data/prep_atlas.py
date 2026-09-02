@@ -22,6 +22,7 @@ TRACT_COL_MATCH = re.compile(r"censustract", re.I)
 POP_COL_MATCH = re.compile(r"^pop2010$|^pop2020$|^pop$|^population$", re.I)
 LAT_COL_MATCH = re.compile(r"^lat(itude)?$|intptlat", re.I)
 LON_COL_MATCH = re.compile(r"^lon(gitude)?$|intptlon", re.I)
+URBAN_COL_MATCH = re.compile(r"^urban$", re.I)
 
 REGIONS = {
     "urban": {"config": PILOT_CITY, "db_path": DATA_DIR / "atlas_pilot_city.db",
@@ -96,8 +97,20 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
     population = _find_col(frame.columns, POP_COL_MATCH)
     tight = _find_col(frame.columns, region["tight"])
     wide = _find_col(frame.columns, region["wide"])
-    missing = [name for name, value in {"tract": tract, "population": population,
-               "tight threshold": tight, "wide threshold": wide}.items() if value is None]
+    rural_indicator = (
+        _find_col(frame.columns, URBAN_COL_MATCH)
+        if region["config"].get("rural_only")
+        else None
+    )
+    required = {
+        "tract": tract,
+        "population": population,
+        "tight threshold": tight,
+        "wide threshold": wide,
+    }
+    if region["config"].get("rural_only"):
+        required["USDA urban/rural indicator"] = rural_indicator
+    missing = [name for name, value in required.items() if value is None]
     if missing:
         raise ValueError(f"{region_name}: could not match {', '.join(missing)}")
     lat = _find_col(frame.columns, LAT_COL_MATCH)
@@ -106,6 +119,13 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
     data["_fips"] = data[tract].map(_normalize_tract_fips)
     prefixes = tuple(region["config"]["county_fips"])
     data = data[data["_fips"].str.startswith(prefixes)]
+    if rural_indicator:
+        expected_value = float(region["config"].get("rural_indicator_value", 0))
+        data = data[
+            data[rural_indicator].map(
+                lambda value: _numeric_or_default(value, default=None) == expected_value
+            )
+        ]
     if data.empty:
         raise ValueError(f"{region_name}: no tracts matched county FIPS {prefixes}")
     centroids = centroids or {}
@@ -145,6 +165,12 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
                 connection.executemany("INSERT INTO metadata VALUES (?, ?)", {
                     "data_mode": "real", "product": product, "region": region_name,
                     "region_name": region["config"]["name"], "thresholds": region["thresholds"],
+                    "county_fips": ",".join(region["config"]["county_fips"]),
+                    "rural_only": str(bool(region["config"].get("rural_only"))).lower(),
+                    "rural_indicator": (
+                        f"{rural_indicator}={region['config'].get('rural_indicator_value', 0)}"
+                        if rural_indicator else "not_applied"
+                    ),
                     "geography_vintage": ATLAS_GEOGRAPHY_VINTAGE[product],
                     "source_file": str(source_path), "prepared_at": datetime.now(timezone.utc).isoformat(),
                 }.items())
