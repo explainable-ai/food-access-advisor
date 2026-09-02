@@ -1,6 +1,7 @@
 """Build urban and rural SQLite databases from an official USDA Atlas file."""
 import argparse
 from contextlib import closing
+import hashlib
 import os
 import re
 import sqlite3
@@ -118,6 +119,20 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
             coordinates = centroids.get(fips, (None, None))
         rows.append((fips, int(_numeric_or_default(row[population])), _binary_flag(row[tight]),
                      _binary_flag(row[wide]), *coordinates))
+    expected_count = region["config"].get("expected_tract_count")
+    expected_vintage = region["config"].get("tract_geography_vintage")
+    if expected_count and ATLAS_GEOGRAPHY_VINTAGE[product] == expected_vintage and len(rows) != expected_count:
+        raise ValueError(
+            f"{region_name}: expected {expected_count} {expected_vintage} tracts, found {len(rows)}"
+        )
+    expected_digest = region["config"].get("expected_tract_fips_sha256")
+    actual_digest = hashlib.sha256(
+        "\n".join(sorted(row[0] for row in rows)).encode()
+    ).hexdigest()
+    if expected_digest and ATLAS_GEOGRAPHY_VINTAGE[product] == expected_vintage and actual_digest != expected_digest:
+        raise ValueError(
+            f"{region_name}: tract GEOID set does not match the authoritative {expected_vintage} manifest"
+        )
     target = region["db_path"]
     fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
     os.close(fd)

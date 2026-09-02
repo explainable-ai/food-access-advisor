@@ -48,12 +48,17 @@ from api.schemas import (
 from api.auth import require_staff_user
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from orchestration import route_request
-from tools.access_data import get_low_access_rural_tracts, get_low_access_tracts
+from tools.access_data import (
+    PreparedTractDataError,
+    get_all_tracts,
+    get_low_access_rural_tracts,
+    get_low_access_tracts,
+)
 from tools.evidence_brief import write_evidence_brief, write_route_brief
 from tools.evidence_snapshots import read_change_page, review_change
 from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
-from tools.gap_scorer import score_gaps
+from tools.gap_scorer import score_all_gaps, score_gaps
 from tools.impact_metrics import compute_impact_metrics
 from tools.route_optimizer import optimize_route
 from tools.resource_cache import ResourceCacheError, load_resource_cache
@@ -161,6 +166,29 @@ def site_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
         return _ranked_tracts(get_low_access_tracts, lambda: load_resource_cache("urban"), top_n, weights)
     except ResourceCacheError as exc:
         raise HTTPException(status_code=503, detail=f"Prepared resource data unavailable: {exc}") from exc
+
+
+@app.get("/api/site-advisor/tract-scores", response_model=list[RankedTract])
+def site_tract_scores(food_access_gap: float | None = Query(default=None, ge=0),
+                      poverty: float | None = Query(default=None, ge=0),
+                      no_vehicle: float | None = Query(default=None, ge=0),
+                      population_served: float | None = Query(default=None, ge=0),
+                      transit_burden: float | None = Query(default=None, ge=0),
+                      existing_coverage: float | None = Query(default=None, ge=0)):
+    """Return an evidence score for every prepared Cook County tract.
+
+    The endpoint reads only deployment-prepared Atlas/ACS and resource-cache
+    snapshots. It never calls Overpass at request time and never fills missing
+    tracts with illustrative values.
+    """
+    try:
+        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
+                           population_served=population_served, transit_burden=transit_burden,
+                           existing_coverage=existing_coverage)
+        resources = load_resource_cache("urban", require_complete_coverage=True)
+        return score_all_gaps(get_all_tracts(), resources, weights=weights)
+    except (PreparedTractDataError, ResourceCacheError) as exc:
+        raise HTTPException(status_code=503, detail=f"Prepared heatmap data unavailable: {exc}") from exc
 
 
 @app.get("/api/route-advisor/ranked-tracts", response_model=list[RankedTract])

@@ -43,3 +43,56 @@ def test_nan_cells_use_safe_defaults_and_centroid_fallback(tmp_path, monkeypatch
     with sqlite3.connect(target) as connection:
         row = connection.execute("SELECT population, low_access_half_mile, low_access_one_mile, centroid_lat, centroid_lon FROM tracts").fetchone()
     assert row == (0, 0, 0, 41.9, -87.7)
+
+
+def test_current_urban_atlas_requires_expected_cook_county_tract_count(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", tmp_path / "urban.db")
+    monkeypatch.setitem(
+        prep_atlas.REGIONS["urban"]["config"], "expected_tract_count", 2
+    )
+    frame = pd.DataFrame(
+        {
+            "CensusTract": ["17031010100"],
+            "POP2020": [1000],
+            "LILATracts_half": [1],
+            "LILATracts_1And10": [1],
+        }
+    )
+
+    try:
+        prep_atlas.prepare_region_database(frame, "urban", "SRAM", "atlas.csv")
+    except ValueError as error:
+        assert "expected 2 2020 tracts, found 1" in str(error)
+    else:
+        raise AssertionError("A partial current Cook County Atlas extract must fail closed")
+
+
+def test_current_urban_atlas_requires_authoritative_tract_manifest(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setitem(prep_atlas.REGIONS["urban"], "db_path", tmp_path / "urban.db")
+    monkeypatch.setitem(
+        prep_atlas.REGIONS["urban"]["config"], "expected_tract_count", 1
+    )
+    monkeypatch.setitem(
+        prep_atlas.REGIONS["urban"]["config"],
+        "expected_tract_fips_sha256",
+        "0" * 64,
+    )
+    frame = pd.DataFrame(
+        {
+            "CensusTract": ["17031010100"],
+            "POP2020": [1000],
+            "LILATracts_half": [1],
+            "LILATracts_1And10": [1],
+        }
+    )
+
+    try:
+        prep_atlas.prepare_region_database(frame, "urban", "SRAM", "atlas.csv")
+    except ValueError as error:
+        assert "does not match the authoritative 2020 manifest" in str(error)
+    else:
+        raise AssertionError("A wrong Cook County tract set must fail closed")
