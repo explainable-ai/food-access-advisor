@@ -1,5 +1,6 @@
 """Enrich prepared Atlas databases with official ACS prioritization fields."""
 import argparse
+import hashlib
 import os
 import sqlite3
 import sys
@@ -13,6 +14,10 @@ DATA_DIR = Path(__file__).parent
 REGIONS = {"urban": (PILOT_CITY, DATA_DIR / "atlas_pilot_city.db"),
            "rural": (PILOT_RURAL_COUNTY, DATA_DIR / "atlas_rural_county.db")}
 FIELDS = ("poverty_universe", "population_below_poverty", "households_total", "households_no_vehicle")
+
+
+def _tract_digest(geoids):
+    return hashlib.sha256("\n".join(sorted(geoids)).encode()).hexdigest()
 
 
 def enrich_database(path, evidence, year):
@@ -40,6 +45,18 @@ def enrich_database(path, evidence, year):
                 f"Tract geography mismatch: Atlas uses {atlas_vintage}, ACS uses {evidence_vintage}. "
                 "Use a matching tract vintage or an explicit Census crosswalk."
             )
+        atlas_geoids = {
+            row[0] for row in connection.execute("SELECT tract_fips FROM tracts")
+        }
+        evidence_geoids = set(by_geoid)
+        if atlas_geoids != evidence_geoids:
+            missing = len(evidence_geoids - atlas_geoids)
+            unexpected = len(atlas_geoids - evidence_geoids)
+            raise ValueError(
+                "ACS and Atlas tract sets do not match: "
+                f"{missing} ACS tracts are missing from Atlas and "
+                f"{unexpected} Atlas tracts are absent from ACS; no changes were committed"
+            )
         for field in FIELDS:
             if field not in {row[1] for row in connection.execute("PRAGMA table_info(tracts)")}:
                 connection.execute(f"ALTER TABLE tracts ADD COLUMN {field} REAL")
@@ -60,6 +77,14 @@ def enrich_database(path, evidence, year):
         connection.execute("INSERT OR REPLACE INTO metadata VALUES ('acs_vintage', ?)", (str(year),))
         connection.execute("INSERT OR REPLACE INTO metadata VALUES ('acs_dataset', ?)", (f"{year}/acs/acs5",))
         connection.execute("INSERT OR REPLACE INTO metadata VALUES ('acs_geography_vintage', ?)", (evidence_vintage,))
+        connection.execute(
+            "INSERT OR REPLACE INTO metadata VALUES ('tract_count', ?)",
+            (str(tract_count),),
+        )
+        connection.execute(
+            "INSERT OR REPLACE INTO metadata VALUES ('tract_fips_sha256', ?)",
+            (_tract_digest(atlas_geoids),),
+        )
     return matched
 
 
