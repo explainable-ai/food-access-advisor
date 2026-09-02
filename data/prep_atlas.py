@@ -118,6 +118,12 @@ def prepare_region_database(frame, region_name, product, source_path, centroids=
             coordinates = centroids.get(fips, (None, None))
         rows.append((fips, int(_numeric_or_default(row[population])), _binary_flag(row[tight]),
                      _binary_flag(row[wide]), *coordinates))
+    expected_count = region["config"].get("expected_tract_count")
+    expected_vintage = region["config"].get("tract_geography_vintage")
+    if expected_count and ATLAS_GEOGRAPHY_VINTAGE[product] == expected_vintage and len(rows) != expected_count:
+        raise ValueError(
+            f"{region_name}: expected {expected_count} {expected_vintage} tracts, found {len(rows)}"
+        )
     target = region["db_path"]
     fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
     os.close(fd)
