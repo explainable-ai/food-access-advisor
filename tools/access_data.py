@@ -193,6 +193,8 @@ def _validate_complete_heatmap_database(path):
                            for fips in actual_fips):
         problems.append("tract table contains a GEOID outside the configured Cook County FIPS")
     actual_digest = hashlib.sha256("\n".join(sorted(actual_fips)).encode()).hexdigest()
+    if actual_digest != PILOT_CITY["expected_tract_fips_sha256"]:
+        problems.append("tract GEOID set does not match the authoritative Cook County manifest")
     if metadata.get("tract_fips_sha256") != actual_digest:
         problems.append("tract GEOID set does not match the prepared evidence manifest")
     try:
