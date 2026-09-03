@@ -93,7 +93,7 @@ def _cors_origins() -> list[str]:
         (
             "http://localhost:5173,http://localhost:8080,"
             "https://preview--food-equity-navigator.lovable.app,"
-            "https://food-equity-navigator.lovable.app,"
+            "https://food-equity-navigator.lovable.app,https://food-guide-advisor.lovable.app,"
             "https://4edb7a89-80c4-4184-bc69-eb628ea0e136.lovableproject.com"
         ),
     )
