@@ -50,6 +50,7 @@ from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from orchestration import route_request
 from tools.access_data import (
     PreparedTractDataError,
+    get_all_rural_tracts,
     get_all_tracts,
     get_low_access_rural_tracts,
     get_low_access_tracts,
@@ -211,6 +212,29 @@ def site_tract_scores(food_access_gap: float | None = Query(default=None, ge=0),
         return score_all_gaps(get_all_tracts(), resources, weights=weights)
     except (PreparedTractDataError, ResourceCacheError) as exc:
         raise HTTPException(status_code=503, detail=f"Prepared heatmap data unavailable: {exc}") from exc
+
+
+@app.get("/api/route-advisor/tract-scores", response_model=list[RankedTract])
+def route_tract_scores(food_access_gap: float | None = Query(default=None, ge=0),
+                       poverty: float | None = Query(default=None, ge=0),
+                       no_vehicle: float | None = Query(default=None, ge=0),
+                       population_served: float | None = Query(default=None, ge=0),
+                       transit_burden: float | None = Query(default=None, ge=0),
+                       existing_coverage: float | None = Query(default=None, ge=0)):
+    """Return an evidence score for all 72 prepared rural-fringe tracts.
+
+    Route candidate ranking intentionally filters to tracts with a positive
+    rural access gap. The heatmap must use the complete prepared tract universe
+    so operators can see the full geographic contrast rather than three dots.
+    """
+    try:
+        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
+                           population_served=population_served, transit_burden=transit_burden,
+                           existing_coverage=existing_coverage)
+        resources = load_resource_cache("rural", require_complete_coverage=True)
+        return score_all_gaps(get_all_rural_tracts(), resources, weights=weights)
+    except (PreparedTractDataError, ResourceCacheError) as exc:
+        raise HTTPException(status_code=503, detail=f"Prepared rural heatmap data unavailable: {exc}") from exc
 
 
 @app.get("/api/route-advisor/ranked-tracts", response_model=list[RankedTract])
