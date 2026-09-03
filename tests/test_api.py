@@ -25,17 +25,31 @@ def test_health_endpoint_has_no_dependencies():
     assert response.json() == {"status": "ok"}
 
 
-def test_cors_allows_local_frontend_but_not_unknown_origin():
-    allowed = client.options(
-        "/api/watchdog/changes",
-        headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"},
-    )
-    blocked = client.options(
-        "/api/watchdog/changes",
-        headers={"Origin": "https://untrusted.example", "Access-Control-Request-Method": "GET"},
-    )
-    assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
-    assert "access-control-allow-origin" not in blocked.headers
+def test_cors_allows_local_and_lovable_frontends_but_not_unknown_origin():
+    origins = [
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "https://preview--food-equity-navigator.lovable.app",
+        "https://food-equity-navigator.lovable.app",
+    ]
+    for origin in origins:
+        allowed = client.options(
+            "/api/watchdog/changes",
+            headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+        )
+        assert allowed.headers["access-control-allow-origin"] == origin
+
+    blocked_origins = [
+        "https://untrusted.example",
+        "https://attacker-controlled.lovable.app",
+        "https://food-equity-navigator.lovableproject.com",
+    ]
+    for origin in blocked_origins:
+        blocked = client.options(
+            "/api/watchdog/changes",
+            headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+        )
+        assert "access-control-allow-origin" not in blocked.headers
 
 
 def use_temp_db(tmp_path, monkeypatch):

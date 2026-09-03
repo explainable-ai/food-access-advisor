@@ -39,6 +39,21 @@
       ]
     },
     {
+      "Sid": "ListEvidencePrefixes",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::food-access-evidence-576951331959-us-east-1",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "resource-cache/*",
+            "prepared-data/*",
+            "snapshots/*"
+          ]
+        }
+      }
+    },
+    {
       "Sid": "InvokeHaikuUSInferenceProfile",
       "Effect": "Allow",
       "Action": [
