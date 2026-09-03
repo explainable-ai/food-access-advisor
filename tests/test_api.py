@@ -39,11 +39,17 @@ def test_cors_allows_local_and_lovable_frontends_but_not_unknown_origin():
         )
         assert allowed.headers["access-control-allow-origin"] == origin
 
-    blocked = client.options(
-        "/api/watchdog/changes",
-        headers={"Origin": "https://untrusted.example", "Access-Control-Request-Method": "GET"},
-    )
-    assert "access-control-allow-origin" not in blocked.headers
+    blocked_origins = [
+        "https://untrusted.example",
+        "https://attacker-controlled.lovable.app",
+        "https://food-equity-navigator.lovableproject.com",
+    ]
+    for origin in blocked_origins:
+        blocked = client.options(
+            "/api/watchdog/changes",
+            headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+        )
+        assert "access-control-allow-origin" not in blocked.headers
 
 
 def use_temp_db(tmp_path, monkeypatch):
