@@ -154,17 +154,21 @@ export function HomeMap() {
     const map = mapRef.current;
     if (!map) return;
     const config = REGIONS[region];
+    let cancelled = false;
 
     map.flyTo({ center: config.center, zoom: config.zoom });
 
     function draw() {
-      if (!map || !map.isStyleLoaded()) {
-        map?.once("load", draw);
+      if (cancelled) return;
+      if (!map.isStyleLoaded()) {
+        map.once("load", draw);
         return;
       }
       setBoundaryError(null);
       getTractBoundaries(config.countyFips)
         .then((boundaries) => {
+          if (cancelled) return;
+
           const statusByFips = metrics ? buildStatusByFips(metrics, region) : {};
           const withStatus = {
             ...boundaries,
@@ -214,10 +218,18 @@ export function HomeMap() {
             paint: { "line-color": "#17212B", "line-width": 1 },
           });
         })
-        .catch((err) => setBoundaryError(err instanceof Error ? err.message : String(err)));
+        .catch((err) => {
+          if (!cancelled) {
+            setBoundaryError(err instanceof Error ? err.message : String(err));
+          }
+        });
     }
 
     draw();
+    return () => {
+      cancelled = true;
+      map.off("load", draw);
+    };
   }, [region, metrics]);
 
   const regionMetrics = metrics?.[region];
