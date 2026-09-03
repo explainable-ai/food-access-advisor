@@ -90,7 +90,11 @@ def _cors_origins() -> list[str]:
     """Return explicit local/custom origins; a wildcard is never accepted."""
     raw = os.getenv(
         "FOOD_ACCESS_CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:8080",
+        (
+            "http://localhost:5173,http://localhost:8080,"
+            "https://preview--food-equity-navigator.lovable.app,"
+            "https://food-equity-navigator.lovable.app"
+        ),
     )
     origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
     if "*" in origins:
@@ -99,11 +103,8 @@ def _cors_origins() -> list[str]:
 
 
 def _cors_origin_regex() -> str | None:
-    """Allow Lovable preview/published subdomains without opening CORS to every site."""
-    raw = os.getenv(
-        "FOOD_ACCESS_CORS_ORIGIN_REGEX",
-        r"^https://(?:[a-z0-9-]+\.)*(?:lovable\.app|lovableproject\.com)$",
-    )
+    """Return only an explicitly configured regex; exact origins are safer by default."""
+    raw = os.getenv("FOOD_ACCESS_CORS_ORIGIN_REGEX", "")
     return raw.strip() or None
 
 
