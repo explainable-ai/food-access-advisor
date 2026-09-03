@@ -30,7 +30,8 @@ def test_cors_allows_local_and_lovable_frontends_but_not_unknown_origin():
         "http://localhost:5173",
         "http://localhost:8080",
         "https://preview--food-equity-navigator.lovable.app",
-        "https://food-equity-navigator.lovable.app,https://food-guide-advisor.lovable.app",
+        "https://food-equity-navigator.lovable.app",
+        "https://food-guide-advisor.lovable.app",
         "https://4edb7a89-80c4-4184-bc69-eb628ea0e136.lovableproject.com",
     ]
     for origin in origins:
