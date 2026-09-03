@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { GeoJSONSource, MapLibreMap, NavigationControl } from "maplibre-gl";
+import { GeoJSONSource, LngLatBounds, MapLibreMap, NavigationControl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   getImpactMetrics,
@@ -12,6 +12,7 @@ import {
   type FlaggedTractStatus,
   type ImpactMetrics,
   type RankedTract,
+  type TractBoundaries,
 } from "../lib/api";
 
 type RegionKey = "urban" | "rural";
@@ -42,8 +43,8 @@ const REGIONS: Record<
   rural: {
     toggleLabel: "Chicagoland rural fringe · Mobile route",
     countyFips: "17089",
-    center: [-89.3, 37.15],
-    zoom: 10,
+    center: [-87.91, 41.75],
+    zoom: 7,
     getRankedTracts: getRouteRankedTracts,
     getResources: getRouteResources,
   },
@@ -74,6 +75,31 @@ function buildStatusByFips(metrics: ImpactMetrics, region: RegionKey): Record<st
     byFips[tract.tract_fips] = tract.status;
   }
   return byFips;
+}
+
+function fitMapToBoundaries(map: MapLibreMap, boundaries: TractBoundaries) {
+  const bounds = new LngLatBounds();
+
+  function extendCoordinates(value: unknown): void {
+    if (!Array.isArray(value)) return;
+    if (
+      value.length >= 2 &&
+      typeof value[0] === "number" &&
+      typeof value[1] === "number"
+    ) {
+      bounds.extend([value[0], value[1]]);
+      return;
+    }
+    for (const child of value) extendCoordinates(child);
+  }
+
+  for (const feature of boundaries.features) {
+    extendCoordinates(feature.geometry.coordinates);
+  }
+
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds, { padding: 32, maxZoom: 10, duration: 800 });
+  }
 }
 
 export function HomeMap() {
@@ -128,17 +154,21 @@ export function HomeMap() {
     const map = mapRef.current;
     if (!map) return;
     const config = REGIONS[region];
+    let cancelled = false;
 
     map.flyTo({ center: config.center, zoom: config.zoom });
 
     function draw() {
-      if (!map || !map.isStyleLoaded()) {
-        map?.once("load", draw);
+      if (cancelled) return;
+      if (!map.isStyleLoaded()) {
+        map.once("load", draw);
         return;
       }
       setBoundaryError(null);
       getTractBoundaries(config.countyFips)
         .then((boundaries) => {
+          if (cancelled) return;
+
           const statusByFips = metrics ? buildStatusByFips(metrics, region) : {};
           const withStatus = {
             ...boundaries,
@@ -150,6 +180,8 @@ export function HomeMap() {
               },
             })),
           };
+
+          fitMapToBoundaries(map, boundaries);
 
           const existingSource = map.getSource("tracts") as GeoJSONSource | undefined;
           if (existingSource) {
@@ -186,10 +218,18 @@ export function HomeMap() {
             paint: { "line-color": "#17212B", "line-width": 1 },
           });
         })
-        .catch((err) => setBoundaryError(err instanceof Error ? err.message : String(err)));
+        .catch((err) => {
+          if (!cancelled) {
+            setBoundaryError(err instanceof Error ? err.message : String(err));
+          }
+        });
     }
 
     draw();
+    return () => {
+      cancelled = true;
+      map.off("load", draw);
+    };
   }, [region, metrics]);
 
   const regionMetrics = metrics?.[region];
