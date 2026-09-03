@@ -87,17 +87,30 @@ app = FastAPI(title="Food-Access Advisor API")
 
 
 def _cors_origins() -> list[str]:
-    """Return explicit origins only; a wildcard is never accepted."""
-    raw = os.getenv("FOOD_ACCESS_CORS_ORIGINS", "http://localhost:5173")
+    """Return explicit local/custom origins; a wildcard is never accepted."""
+    raw = os.getenv(
+        "FOOD_ACCESS_CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:8080",
+    )
     origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
     if "*" in origins:
         raise RuntimeError("FOOD_ACCESS_CORS_ORIGINS must contain explicit origins, never '*'")
     return origins
 
 
+def _cors_origin_regex() -> str | None:
+    """Allow Lovable preview/published subdomains without opening CORS to every site."""
+    raw = os.getenv(
+        "FOOD_ACCESS_CORS_ORIGIN_REGEX",
+        r"^https://(?:[a-z0-9-]+\.)*(?:lovable\.app|lovableproject\.com)$",
+    )
+    return raw.strip() or None
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=_cors_origin_regex(),
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
     allow_credentials=False,
