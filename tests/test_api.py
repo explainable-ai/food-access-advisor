@@ -154,6 +154,37 @@ def test_site_ranked_tracts_rejects_all_zero_weights(monkeypatch):
     assert "greater than zero" in response.json()["detail"]
 
 
+def test_route_tract_scores_returns_every_prepared_rural_tract(monkeypatch):
+    rural_tracts = [
+        {
+            "tract_fips": f"17091010{index:03d}",
+            "population": 1000 + index,
+            "low_access_half_mile": 0,
+            "low_access_one_mile": 0,
+            "centroid_lat": 41.1 + index / 1000,
+            "centroid_lon": -87.9,
+            "low_income_low_access_share": index / 100,
+            "data_mode": "real",
+        }
+        for index in range(4)
+    ]
+    monkeypatch.setattr(api_main, "get_all_rural_tracts", lambda: rural_tracts)
+    monkeypatch.setattr(
+        api_main,
+        "load_resource_cache",
+        lambda scope, require_complete_coverage=False: [],
+    )
+
+    response = client.get("/api/route-advisor/tract-scores")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == len(rural_tracts)
+    assert {row["tract_fips"] for row in body} == {
+        tract["tract_fips"] for tract in rural_tracts
+    }
+
+
 def test_route_ranked_tracts_returns_scored_list(monkeypatch):
     monkeypatch.setattr(api_main, "load_resource_cache", lambda scope: [])
     monkeypatch.setattr(
