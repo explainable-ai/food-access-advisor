@@ -9,7 +9,7 @@
                              "containerPort":  8000,
                              "environment":  [
                                                  {
-                                                     "value":  "https://4edb7a89-80c4-4184-bc69-eb628ea0e136.lovableproject.com",
+                                                     "value":  "https://preview--food-equity-navigator.lovable.app,https://food-equity-navigator.lovable.app,https://4edb7a89-80c4-4184-bc69-eb628ea0e136.lovableproject.com",
                                                      "name":  "FOOD_ACCESS_CORS_ORIGINS"
                                                  },
                                                  {
