@@ -1,5 +1,6 @@
 """Tests for the prepared Chicago scoring context."""
 
+import hashlib
 import json
 import sqlite3
 import sys
@@ -16,6 +17,9 @@ from data.prep_urban_context import (  # noqa: E402
     build_context,
     load_food_insecurity_snapshot,
 )
+
+TEST_CHICAGO_FIPS = "17031010100"
+TEST_CHICAGO_DIGEST = hashlib.sha256(TEST_CHICAGO_FIPS.encode()).hexdigest()
 
 
 def _write_database(path):
@@ -96,6 +100,8 @@ def test_build_context_includes_real_transportation_for_chicago(tmp_path):
         gtfs,
         generated_at="2026-09-04T00:00:00Z",
         service_date=date(2026, 9, 4),
+        expected_chicago_count=1,
+        expected_chicago_fips_sha256=TEST_CHICAGO_DIGEST,
     )
 
     assert payload["context_format"] == CONTEXT_FORMAT
@@ -122,7 +128,14 @@ def test_build_context_fails_when_food_snapshot_omits_prepared_tract(tmp_path):
     _write_gtfs(gtfs)
 
     with pytest.raises(ValueError, match="missing 1 prepared tracts"):
-        build_context(database, food, gtfs, service_date=date(2026, 9, 4))
+        build_context(
+            database,
+            food,
+            gtfs,
+            service_date=date(2026, 9, 4),
+            expected_chicago_count=1,
+            expected_chicago_fips_sha256=TEST_CHICAGO_DIGEST,
+        )
 
 
 def test_zero_universe_food_insecurity_rate_is_missing(tmp_path):
@@ -150,3 +163,26 @@ def test_zero_universe_food_insecurity_rate_is_missing(tmp_path):
 
     assert record["food_insecurity_rate"] is None
     assert record["food_insecurity_universe"] == 0
+
+
+def test_food_snapshot_requires_community_area_classification(tmp_path):
+    snapshot = tmp_path / "food.json"
+    snapshot.write_text(
+        json.dumps(
+            {
+                "features": [
+                    {
+                        "attributes": {
+                            "GEOID": TEST_CHICAGO_FIPS,
+                            "Rate200FPL": 72,
+                            "PopPovDetermined": 1000,
+                        }
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing CookCountyCommunityArea"):
+        load_food_insecurity_snapshot(snapshot)
