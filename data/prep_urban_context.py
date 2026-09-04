@@ -18,7 +18,7 @@ import math
 import sqlite3
 import zipfile
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from tools.geo import haversine_miles
@@ -83,29 +83,61 @@ def load_food_insecurity_snapshot(path):
     return records
 
 
-def _weekday_service_weights(archive):
+def _parse_gtfs_date(value):
+    return datetime.strptime(value, "%Y%m%d").date()
+
+
+def _weekday_service_weights(archive, service_date):
     if "calendar.txt" not in archive.namelist():
         raise ValueError("CTA GTFS feed is missing calendar.txt")
     with archive.open("calendar.txt") as raw:
-        rows = csv.DictReader(io.TextIOWrapper(raw, encoding="utf-8-sig"))
-        weights = {}
-        weekdays = ("monday", "tuesday", "wednesday", "thursday", "friday")
-        for row in rows:
-            active_days = sum(int(row.get(day) or 0) for day in weekdays)
-            if active_days:
-                weights[row["service_id"]] = active_days / 5
+        calendars = {
+            row["service_id"]: row
+            for row in csv.DictReader(io.TextIOWrapper(raw, encoding="utf-8-sig"))
+        }
+    exceptions = {}
+    if "calendar_dates.txt" in archive.namelist():
+        with archive.open("calendar_dates.txt") as raw:
+            for row in csv.DictReader(io.TextIOWrapper(raw, encoding="utf-8-sig")):
+                exceptions[(row["service_id"], row["date"])] = int(row["exception_type"])
+    week_start = service_date - timedelta(days=service_date.weekday())
+    weekdays = [week_start + timedelta(days=offset) for offset in range(5)]
+    service_ids = set(calendars) | {service_id for service_id, _ in exceptions}
+    weights = {}
+    for service_id in service_ids:
+        calendar = calendars.get(service_id)
+        active_days = 0
+        for day in weekdays:
+            date_key = day.strftime("%Y%m%d")
+            exception = exceptions.get((service_id, date_key))
+            if exception is not None:
+                active_days += int(exception == 1)
+                continue
+            if not calendar:
+                continue
+            in_range = (
+                _parse_gtfs_date(calendar["start_date"])
+                <= day
+                <= _parse_gtfs_date(calendar["end_date"])
+            )
+            active_days += int(in_range and int(calendar.get(day.strftime("%A").lower()) or 0))
+        if active_days:
+            weights[service_id] = active_days / 5
     if not weights:
-        raise ValueError("CTA GTFS calendar contains no weekday service")
-    return weights
+        raise ValueError("CTA GTFS calendar contains no service in the selected weekday")
+    return weights, week_start, weekdays[-1]
 
 
-def load_gtfs_service(path):
+def load_gtfs_service(path, service_date):
     with zipfile.ZipFile(path) as archive:
         required = {"stops.txt", "trips.txt", "stop_times.txt", "calendar.txt"}
         missing = sorted(required - set(archive.namelist()))
         if missing:
             raise ValueError(f"CTA GTFS feed missing required files: {', '.join(missing)}")
-        service_weights = _weekday_service_weights(archive)
+        service_weights, week_start, week_end = _weekday_service_weights(
+            archive,
+            service_date,
+        )
         trip_routes = {}
         trip_weights = {}
         with archive.open("trips.txt") as raw:
@@ -151,7 +183,7 @@ def load_gtfs_service(path):
                 )
     if not stops:
         raise ValueError("CTA GTFS feed contains no usable scheduled stops")
-    return stops
+    return stops, week_start, week_end
 
 
 def transit_metrics(lat, lon, stops):
@@ -188,9 +220,20 @@ def _tracts(database_path):
     return rows
 
 
-def build_context(database_path, food_insecurity_path, gtfs_path, *, generated_at=None):
+def build_context(
+    database_path,
+    food_insecurity_path,
+    gtfs_path,
+    *,
+    generated_at=None,
+    service_date=None,
+):
     food = load_food_insecurity_snapshot(food_insecurity_path)
-    stops = load_gtfs_service(gtfs_path)
+    selected_service_date = service_date or datetime.now(timezone.utc).date()
+    stops, service_week_start, service_week_end = load_gtfs_service(
+        gtfs_path,
+        selected_service_date,
+    )
     records = []
     missing_food = []
     chicago_count = 0
@@ -255,6 +298,10 @@ def build_context(database_path, food_insecurity_path, gtfs_path, *, generated_a
                     "30% average weekday scheduled service"
                 ),
                 "nearby_stop_miles": NEARBY_STOP_MILES,
+                "service_week": {
+                    "start": service_week_start.isoformat(),
+                    "end": service_week_end.isoformat(),
+                },
             },
         },
         "records": records,
@@ -275,12 +322,14 @@ def main():
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--food-insecurity-snapshot", type=Path, required=True)
     parser.add_argument("--cta-gtfs", type=Path, required=True)
+    parser.add_argument("--service-date", type=date.fromisoformat)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     payload = build_context(
         args.database,
         args.food_insecurity_snapshot,
         args.cta_gtfs,
+        service_date=args.service_date,
     )
     write_context(args.output, payload)
     print(
