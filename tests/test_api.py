@@ -19,6 +19,36 @@ from tools.existing_resources import OverpassQueryError  # noqa: E402
 client = TestClient(api_main.app)
 
 
+def prepared_urban_tracts():
+    return [
+        {
+            "tract_fips": "17031010100",
+            "population": 1000,
+            "low_access_half_mile": 1,
+            "low_access_one_mile": 1,
+            "centroid_lat": 41.88,
+            "centroid_lon": -87.63,
+            "is_chicago": True,
+            "community_area": "North Lawndale",
+            "food_insecurity_rate": 0.8,
+            "transit_burden": 0.7,
+            "scoring_context_version": "food-access-advisor-urban-context-v1",
+        },
+        {
+            "tract_fips": "17031010200",
+            "population": 900,
+            "low_access_half_mile": 0,
+            "low_access_one_mile": 1,
+            "centroid_lat": 42.05,
+            "centroid_lon": -87.75,
+            "is_chicago": False,
+            "food_insecurity_rate": 0.2,
+            "transit_burden": None,
+            "scoring_context_version": "food-access-advisor-urban-context-v1",
+        },
+    ]
+
+
 def test_health_endpoint_has_no_dependencies():
     response = client.get("/health")
     assert response.status_code == 200
@@ -129,7 +159,12 @@ def test_flagged_tracts_returns_rows_for_valid_status(tmp_path, monkeypatch):
 
 
 def test_site_ranked_tracts_returns_scored_list(monkeypatch):
-    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope: [])
+    monkeypatch.setattr(api_main, "get_all_tracts", prepared_urban_tracts)
+    monkeypatch.setattr(
+        api_main,
+        "load_resource_cache",
+        lambda scope, require_complete_coverage=False: [],
+    )
 
     response = client.get("/api/site-advisor/ranked-tracts")
 
@@ -140,10 +175,37 @@ def test_site_ranked_tracts_returns_scored_list(monkeypatch):
 
 
 def test_site_ranked_tracts_accepts_adjustable_weights(monkeypatch):
-    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope: [])
+    monkeypatch.setattr(api_main, "get_all_tracts", prepared_urban_tracts)
+    monkeypatch.setattr(
+        api_main,
+        "load_resource_cache",
+        lambda scope, require_complete_coverage=False: [],
+    )
     response = client.get("/api/site-advisor/ranked-tracts", params={"poverty": 1, "food_access_gap": 0})
     assert response.status_code == 200
     assert response.json()[0]["weights_used"]["poverty"] > 0
+
+
+def test_site_scores_default_to_chicago_and_can_include_cook_county(monkeypatch):
+    monkeypatch.setattr(api_main, "get_all_tracts", prepared_urban_tracts)
+    monkeypatch.setattr(
+        api_main,
+        "load_resource_cache",
+        lambda scope, require_complete_coverage=False: [],
+    )
+
+    chicago = client.get("/api/site-advisor/tract-scores")
+    county = client.get(
+        "/api/site-advisor/tract-scores",
+        params={"study_area": "cook_county"},
+    )
+
+    assert chicago.status_code == 200
+    assert len(chicago.json()) == 1
+    assert chicago.json()[0]["community_area"] == "North Lawndale"
+    assert chicago.json()[0]["score_components"]["transit_burden"] == 70.0
+    assert county.status_code == 200
+    assert len(county.json()) == 2
 
 
 def test_site_ranked_tracts_rejects_all_zero_weights(monkeypatch):
