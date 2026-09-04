@@ -15,6 +15,7 @@ from tools import access_data  # noqa: E402
 from tools.access_data import (  # noqa: E402
     PreparedTractDataError,
     get_all_rural_tracts,
+    get_low_access_tracts,
     get_low_access_rural_tracts,
 )
 
@@ -71,6 +72,25 @@ def _write_rural_db(path):
 def test_get_low_access_rural_tracts_has_no_region_argument():
     sig = inspect.signature(get_low_access_rural_tracts)
     assert list(sig.parameters) == ["limit"]
+
+
+def test_urban_candidates_filter_chicago_before_limit(tmp_path, monkeypatch):
+    database = tmp_path / "urban.db"
+    database.touch()
+    monkeypatch.setattr(access_data, "_prepared_database_path", lambda: database)
+    monkeypatch.setattr(
+        access_data,
+        "_read_database",
+        lambda path, urban_context=False: [
+            {"tract_fips": "suburb", "is_chicago": False},
+            {"tract_fips": "chicago-1", "is_chicago": True},
+            {"tract_fips": "chicago-2", "is_chicago": True},
+        ],
+    )
+
+    rows = get_low_access_tracts(limit=1)
+
+    assert [row["tract_fips"] for row in rows] == ["chicago-1"]
 
 
 def test_missing_rural_artifact_fails_closed(tmp_path, monkeypatch):
