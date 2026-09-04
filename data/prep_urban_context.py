@@ -34,6 +34,10 @@ NEARBY_STOP_MILES = 0.5
 MAX_PROXIMITY_MILES = 0.75
 FULL_ROUTE_ACCESS = 4
 FULL_WEEKDAY_TRIPS = 96
+EXPECTED_CHICAGO_TRACT_COUNT = 792
+EXPECTED_CHICAGO_TRACT_FIPS_SHA256 = (
+    "783a312067fa1e1188ef1e9e07d5e7601ddf0db2e4cc2e1b3038dd0d5548afd2"
+)
 
 
 def _sha256(path):
@@ -78,6 +82,10 @@ def load_food_insecurity_snapshot(path):
             continue
         if geoid in records:
             raise ValueError(f"food-insecurity snapshot contains duplicate GEOID {geoid}")
+        if "CookCountyCommunityArea" not in attributes:
+            raise ValueError(
+                "food-insecurity snapshot is missing CookCountyCommunityArea"
+            )
         community = str(attributes.get("CookCountyCommunityArea") or "").strip()
         if community.lower() in {"", "na", "n/a", "none"}:
             community = None
@@ -240,8 +248,22 @@ def build_context(
     *,
     generated_at=None,
     service_date=None,
+    expected_chicago_count=EXPECTED_CHICAGO_TRACT_COUNT,
+    expected_chicago_fips_sha256=EXPECTED_CHICAGO_TRACT_FIPS_SHA256,
 ):
     food = load_food_insecurity_snapshot(food_insecurity_path)
+    chicago_geoids = sorted(
+        geoid for geoid, record in food.items() if record["is_chicago"]
+    )
+    chicago_digest = hashlib.sha256("\n".join(chicago_geoids).encode()).hexdigest()
+    if (
+        len(chicago_geoids) != expected_chicago_count
+        or chicago_digest != expected_chicago_fips_sha256
+    ):
+        raise ValueError(
+            "food-insecurity snapshot Chicago classification does not match "
+            f"the expected {expected_chicago_count}-tract universe"
+        )
     selected_service_date = service_date or datetime.now(timezone.utc).date()
     stops, service_week_start, service_week_end = load_gtfs_service(
         gtfs_path,
