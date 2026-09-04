@@ -1,7 +1,8 @@
-"""Unit tests for prepared rural tract reads."""
+"""Unit tests for prepared tract reads and scoring-context validation."""
 
 import hashlib
 import inspect
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -143,3 +144,64 @@ def test_get_all_rural_tracts_validates_complete_manifest(tmp_path, monkeypatch)
     rows = get_all_rural_tracts()
 
     assert {row["tract_fips"] for row in rows} == set(geoids)
+
+
+def test_urban_context_overlay_requires_complete_transportation(tmp_path, monkeypatch):
+    context_path = tmp_path / "context.json"
+    context_path.write_text(
+        json.dumps(
+            {
+                "context_format": access_data.URBAN_CONTEXT_FORMAT,
+                "tract_count": 1,
+                "chicago_tract_count": 1,
+                "transportation_scored_tract_count": 1,
+                "records": [
+                    {
+                        "tract_fips": "17031010100",
+                        "is_chicago": True,
+                        "community_area": "North Lawndale",
+                        "food_insecurity_rate": 0.8,
+                        "transit_burden": 0.7,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(access_data, "URBAN_CONTEXT_PATH", context_path)
+    rows = [{"tract_fips": "17031010100", "population": 1000}]
+
+    overlaid = access_data._overlay_urban_context(rows, require_complete=True)
+
+    assert overlaid[0]["community_area"] == "North Lawndale"
+    assert overlaid[0]["transit_burden"] == 0.7
+
+
+def test_urban_context_rejects_missing_transportation(tmp_path, monkeypatch):
+    context_path = tmp_path / "context.json"
+    context_path.write_text(
+        json.dumps(
+            {
+                "context_format": access_data.URBAN_CONTEXT_FORMAT,
+                "tract_count": 1,
+                "chicago_tract_count": 1,
+                "transportation_scored_tract_count": 0,
+                "records": [
+                    {
+                        "tract_fips": "17031010100",
+                        "is_chicago": True,
+                        "food_insecurity_rate": 0.8,
+                        "transit_burden": None,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(access_data, "URBAN_CONTEXT_PATH", context_path)
+
+    with pytest.raises(PreparedTractDataError, match="missing transportation"):
+        access_data._overlay_urban_context(
+            [{"tract_fips": "17031010100", "population": 1000}],
+            require_complete=True,
+        )
