@@ -43,9 +43,8 @@ REQUEST_HEADERS = {
     "https://github.com/explainable-ai/food-access-advisor)"
 }
 
-# Node/way filters for the urban query — unchanged from the original
-# single-region version.
-URBAN_NODE_FILTERS = [
+# The original six point-resource tags used in both study areas.
+BASE_NODE_FILTERS = [
     'node["leisure"="garden"]',
     'way["landuse"="allotments"]',
     'node["shop"="farm"]',
@@ -54,13 +53,14 @@ URBAN_NODE_FILTERS = [
     'node["shop"="convenience"]',
 ]
 
-# Rural adds two tags that barely come up in a dense city query but matter
-# more at rural density — mobile markets and food banks are a meaningfully
-# larger share of rural food access than urban (see the rural
-# systems-thinking pass in docs/design-canvas.html and the tracker's
-# data-source research notes). Both confirmed as real, documented OSM tags
-# on the OSM wiki before using them here, not guessed.
-RURAL_NODE_FILTERS = URBAN_NODE_FILTERS + [
+URBAN_NODE_FILTERS = BASE_NODE_FILTERS + [
+    'node["social_facility"="food_bank"]',
+    'node["amenity"="marketplace"]',
+]
+
+# Keep the Route Advisor's existing eight-filter query unchanged and
+# independent from future urban-only additions.
+RURAL_NODE_FILTERS = BASE_NODE_FILTERS + [
     'node["social_facility"="food_bank"]',
     'node["amenity"="marketplace"]',
 ]
@@ -91,7 +91,8 @@ def get_existing_resources() -> list:
 
     Returns:
         A list of dicts with stable `entity_id`, `kind` ("garden" |
-        "grocery" | "farm" | "convenience"), `name`, `lat`, `lon`.
+        "grocery" | "farm" | "convenience" | "food_bank" | "market"),
+        `name`, `lat`, `lon`.
         "convenience" is kept separate
         from "grocery" deliberately — a corner store or dollar store is a
         weaker food-access signal than a real grocery store (the "food
@@ -127,13 +128,11 @@ def get_rural_existing_resources() -> list:
 
     Same boundary discipline as `get_existing_resources`: no arguments.
     Bounds always come from `config.PILOT_RURAL_COUNTY["resource_areas"]`
-    (or its single `bbox` fallback). Extends the
-    urban tag set with `social_facility=food_bank` and
-    `amenity=marketplace` — see RURAL_NODE_FILTERS.
+    (or its single `bbox` fallback). It uses the same verified resource tags
+    as the urban snapshot — see RURAL_NODE_FILTERS.
 
     Returns:
-        Same shape as `get_existing_resources`, with two additional
-        possible `kind` values: "food_bank" and "market".
+        Same shape as `get_existing_resources`.
     """
     areas = PILOT_RURAL_COUNTY.get("resource_areas") or [
         {"name": "rural", "bbox": PILOT_RURAL_COUNTY["bbox"]}
