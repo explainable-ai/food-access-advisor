@@ -175,6 +175,10 @@ def test_urban_context_overlay_requires_complete_transportation(tmp_path, monkey
                 "tract_count": 1,
                 "chicago_tract_count": 1,
                 "transportation_scored_tract_count": 1,
+                "sources": {
+                    "food_insecurity": {"name": "Greater Chicago Food Depository"},
+                    "transportation": {"name": "Chicago Transit Authority static GTFS"},
+                },
                 "records": [
                     {
                         "tract_fips": "17031010100",
@@ -195,6 +199,9 @@ def test_urban_context_overlay_requires_complete_transportation(tmp_path, monkey
 
     assert overlaid[0]["community_area"] == "North Lawndale"
     assert overlaid[0]["transit_burden"] == 0.7
+    assert overlaid[0]["evidence_sources"]["food_insecurity"]["name"] == (
+        "Greater Chicago Food Depository"
+    )
 
 
 def test_urban_context_rejects_missing_transportation(tmp_path, monkeypatch):
