@@ -23,6 +23,10 @@ DEFAULT_DATABASE_KEY = "prepared-data/atlas_pilot_city.db"
 DEFAULT_CACHE_PATH = Path("/tmp/food-access-advisor/atlas_pilot_city.db")
 URBAN_CONTEXT_PATH = Path(__file__).parent.parent / "data" / "urban_scoring_context.json"
 URBAN_CONTEXT_FORMAT = "food-access-advisor-urban-context-v1"
+EXPECTED_CHICAGO_TRACT_COUNT = 792
+EXPECTED_CHICAGO_TRACT_FIPS_SHA256 = (
+    "783a312067fa1e1188ef1e9e07d5e7601ddf0db2e4cc2e1b3038dd0d5548afd2"
+)
 
 # Separate file, not a second table in the same DB: the urban and rural
 # databases come from different Atlas download runs (see
@@ -154,6 +158,14 @@ def _load_urban_context():
     chicago = [record for record in records if record.get("is_chicago")]
     if payload.get("chicago_tract_count") != len(chicago):
         problems.append("Chicago tract count does not match its manifest")
+    chicago_digest = hashlib.sha256(
+        "\n".join(sorted(str(record.get("tract_fips")) for record in chicago)).encode()
+    ).hexdigest()
+    if (
+        len(chicago) != EXPECTED_CHICAGO_TRACT_COUNT
+        or chicago_digest != EXPECTED_CHICAGO_TRACT_FIPS_SHA256
+    ):
+        problems.append("Chicago tract classification does not match the expected universe")
     transit = [record for record in chicago if record.get("transit_burden") is not None]
     if payload.get("transportation_scored_tract_count") != len(transit):
         problems.append("transportation coverage does not match its manifest")
