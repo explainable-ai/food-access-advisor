@@ -180,9 +180,13 @@ def _coerce_weights(weights):
     return PriorityWeights(**{**asdict(DEFAULT_WEIGHTS), **weights})
 
 
-def _weighted_score(components, normalized_weights):
+def _weighted_score(components, normalized_weights, *, preserve_missing=False):
     available = {name: value for name, value in components.items() if value is not None}
-    denominator = sum(normalized_weights[name] for name in available)
+    denominator = (
+        sum(normalized_weights.values())
+        if preserve_missing
+        else sum(normalized_weights[name] for name in available)
+    )
     if not denominator:
         return 0.0, {}
     contributions = {}
@@ -249,7 +253,11 @@ def _score_all(tracts, resources, weights, *, prepared_inputs=None):
     for index, tract in enumerate(tracts):
         nearest = prepared[index]["nearest"]
         components = prepared[index]["components"]
-        score, contributions = _weighted_score(components, normalized_weights)
+        score, contributions = _weighted_score(
+            components,
+            normalized_weights,
+            preserve_missing=bool(tract.get("scoring_context_version")),
+        )
         missing = [name for name, value in components.items() if value is None]
         economic_label = (
             "food-insecurity risk"
