@@ -139,7 +139,14 @@ def _load_urban_context():
     if not isinstance(records, list) or not records:
         problems.append("context contains no tract records")
         records = []
-    by_fips = {str(record.get("tract_fips")): record for record in records}
+    sources = payload.get("sources") if isinstance(payload.get("sources"), dict) else {}
+    by_fips = {
+        str(record.get("tract_fips")): {
+            **record,
+            "evidence_sources": sources,
+        }
+        for record in records
+    }
     if len(by_fips) != len(records):
         problems.append("context contains duplicate tract GEOIDs")
     if payload.get("tract_count") != len(records):
