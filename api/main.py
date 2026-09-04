@@ -182,6 +182,8 @@ def _site_weights(study_area, **values):
             status_code=422,
             detail="Transit burden is available only for Chicago; use a zero transit weight for Cook County.",
         )
+    if study_area == "cook_county":
+        values.pop("transit_burden", None)
     selected = _weights(**values)
     if study_area == "cook_county":
         return {**(selected or {}), "transit_burden": 0}
