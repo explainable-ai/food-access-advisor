@@ -221,6 +221,25 @@ def test_cook_county_rejects_nonzero_chicago_only_transit_weight(monkeypatch):
     assert "available only for Chicago" in response.json()["detail"]
 
 
+def test_cook_county_accepts_explicit_zero_transit_weight(monkeypatch):
+    monkeypatch.setattr(api_main, "get_all_tracts", prepared_urban_tracts)
+    monkeypatch.setattr(
+        api_main,
+        "load_resource_cache",
+        lambda scope, require_complete_coverage=False: [],
+    )
+
+    response = client.get(
+        "/api/site-advisor/tract-scores",
+        params={"study_area": "cook_county", "transit_burden": 0},
+    )
+
+    assert response.status_code == 200
+    assert all(
+        row["weights_used"]["transit_burden"] == 0 for row in response.json()
+    )
+
+
 def test_site_ranked_tracts_rejects_all_zero_weights(monkeypatch):
     response = client.get("/api/site-advisor/ranked-tracts", params={
         "food_access_gap": 0, "poverty": 0, "no_vehicle": 0,
