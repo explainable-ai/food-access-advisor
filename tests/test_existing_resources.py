@@ -142,6 +142,10 @@ def test_urban_query_includes_food_bank_and_marketplace_tags(monkeypatch):
 
     assert "social_facility" in captured["query"] and "food_bank" in captured["query"]
     assert "amenity" in captured["query"] and "marketplace" in captured["query"]
+    assert 'way["social_facility"="food_bank"]' in captured["query"]
+    assert 'relation["social_facility"="food_bank"]' in captured["query"]
+    assert 'way["amenity"="marketplace"]' in captured["query"]
+    assert 'relation["amenity"="marketplace"]' in captured["query"]
 
 
 def test_urban_kind_classification(monkeypatch):
