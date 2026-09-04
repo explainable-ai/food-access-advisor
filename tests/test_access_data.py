@@ -193,6 +193,12 @@ def test_urban_context_overlay_requires_complete_transportation(tmp_path, monkey
         encoding="utf-8",
     )
     monkeypatch.setattr(access_data, "URBAN_CONTEXT_PATH", context_path)
+    monkeypatch.setattr(access_data, "EXPECTED_CHICAGO_TRACT_COUNT", 1)
+    monkeypatch.setattr(
+        access_data,
+        "EXPECTED_CHICAGO_TRACT_FIPS_SHA256",
+        _digest(["17031010100"]),
+    )
     rows = [{"tract_fips": "17031010100", "population": 1000}]
 
     overlaid = access_data._overlay_urban_context(rows, require_complete=True)
@@ -226,6 +232,12 @@ def test_urban_context_rejects_missing_transportation(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setattr(access_data, "URBAN_CONTEXT_PATH", context_path)
+    monkeypatch.setattr(access_data, "EXPECTED_CHICAGO_TRACT_COUNT", 1)
+    monkeypatch.setattr(
+        access_data,
+        "EXPECTED_CHICAGO_TRACT_FIPS_SHA256",
+        _digest(["17031010100"]),
+    )
 
     with pytest.raises(PreparedTractDataError, match="missing transportation"):
         access_data._overlay_urban_context(
