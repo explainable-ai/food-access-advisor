@@ -5,7 +5,7 @@ Ask it something like:
 
 It calls, in order: get_low_access_tracts (the stock), get_existing_resources
 (what's already there), score_gaps (the deterministic ranking), and
-write_evidence_brief (the one LLM-generated piece) — then answers with the
+write_site_evidence_brief (the one LLM-generated piece) — then answers with the
 ranked list and the brief for the top result.
 
 The Watchdog agent (scheduled, checks whether a past recommendation was ever
@@ -20,7 +20,7 @@ from config import PILOT_CITY
 from model import build_model
 from tools.access_data import get_low_access_tracts
 from tools.existing_resources import get_existing_resources
-from tools.evidence_brief import write_evidence_brief
+from tools.site_evidence_brief import write_site_evidence_brief
 from tools.flagged_tracts import flag_tract_for_recheck
 from tools.gap_scorer import score_gaps
 from tools.telemetry import configure_telemetry, print_metrics
@@ -39,7 +39,7 @@ the pilot city, that's fixed in code, not something either of us can point \
 elsewhere) to see what's already nearby.
 3. Call score_gaps with both results to rank the candidates. Never rank \
 tracts yourself — the scorer is the source of truth, you only explain it.
-4. Call write_evidence_brief on the single top-ranked tract and include its \
+4. Call write_site_evidence_brief on the single top-ranked tract and include its \
 output verbatim in your answer.
 5. Call flag_top_tract_for_recheck on that same top-ranked tract. This is \
 what lets the Watchdog agent check back later on whether a resource ever \
@@ -96,7 +96,7 @@ def build_advisor() -> Agent:
             get_low_access_tracts,
             get_existing_resources,
             score_gaps,
-            write_evidence_brief,
+            write_site_evidence_brief,
             flag_top_tract_for_recheck,
         ],
     )
@@ -117,4 +117,3 @@ if __name__ == "__main__":
             continue
         result = advisor(question)
         print_metrics(result)
-
