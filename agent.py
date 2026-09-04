@@ -45,8 +45,12 @@ output verbatim in your answer.
 what lets the Watchdog agent check back later on whether a resource ever \
 actually appeared — do this every time, not just when asked.
 
-Always name the USDA Food Access Research Atlas as your data source. Always \
-frame your answer as decision support, not a decision — a human still \
+Attribute each measure to the source carried in the scored tract: USDA Food \
+Access Research Atlas for access flags, Greater Chicago Food Depository \
+Community Data Map (ACS 2024) for food-insecurity risk, and Chicago Transit \
+Authority static GTFS for transit evidence. Never attribute the GCFD or CTA \
+measures to the Atlas. Always frame your answer as decision support, not a \
+decision — a human still \
 chooses. If asked about a region outside {PILOT_CITY['name']}, say plainly \
 that you're only indexed for this pilot city right now, rather than \
 guessing at data you don't have.
@@ -113,3 +117,4 @@ if __name__ == "__main__":
             continue
         result = advisor(question)
         print_metrics(result)
+
