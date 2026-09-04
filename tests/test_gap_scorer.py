@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from tools import gap_scorer  # noqa: E402
 from tools.gap_scorer import PriorityWeights, score_gaps  # noqa: E402
 
 
@@ -192,7 +193,8 @@ def test_adjustable_weights_can_change_ranking():
                "population_served": 0, "transit_burden": 0, "existing_coverage": 0}
     result = score_gaps([high_population, high_poverty], [], top_n=2, weights=weights)
     assert result[0]["tract_fips"] == "A"
-    assert "food-insecurity risk" in result[0]["score_explanation"]
+    assert "poverty" in result[0]["score_explanation"]
+    assert "food-insecurity risk" not in result[0]["score_explanation"]
     assert "food-access gap" not in result[0]["score_explanation"]
 
 
@@ -210,6 +212,29 @@ def test_sensitivity_range_contains_baseline_score():
     result = score_gaps([make_tract("A", 2000)], [], top_n=1)[0]
     assert result["sensitivity"]["score_min"] <= result["need_score"] <= result["sensitivity"]["score_max"]
     assert result["sensitivity"]["rank_stable"] is True
+
+
+def test_sensitivity_reuses_weight_independent_resource_evidence(monkeypatch):
+    tracts = [make_tract("A", 2000), make_tract("B", 1000)]
+    resources = [{"kind": "grocery", "name": "G", "lat": 41.81, "lon": -87.64}]
+    calls = {"nearest": 0, "coverage": 0}
+    original_nearest = gap_scorer._nearest_resource
+    original_coverage = gap_scorer._best_coverage
+
+    def counted_nearest(*args, **kwargs):
+        calls["nearest"] += 1
+        return original_nearest(*args, **kwargs)
+
+    def counted_coverage(*args, **kwargs):
+        calls["coverage"] += 1
+        return original_coverage(*args, **kwargs)
+
+    monkeypatch.setattr(gap_scorer, "_nearest_resource", counted_nearest)
+    monkeypatch.setattr(gap_scorer, "_best_coverage", counted_coverage)
+
+    score_gaps(tracts, resources, top_n=2)
+
+    assert calls == {"nearest": len(tracts), "coverage": len(tracts)}
 
 
 def test_continuous_rural_gap_overrides_binary_severity():
