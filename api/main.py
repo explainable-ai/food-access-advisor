@@ -54,7 +54,7 @@ from tools.access_data import (
     get_all_tracts,
     get_low_access_rural_tracts,
 )
-from tools.evidence_brief import write_evidence_brief, write_route_brief
+from tools.evidence_brief import write_route_brief
 from tools.evidence_snapshots import read_change_page, review_change
 from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
@@ -62,6 +62,7 @@ from tools.gap_scorer import score_all_gaps, score_gaps
 from tools.impact_metrics import compute_impact_metrics
 from tools.route_optimizer import optimize_route
 from tools.resource_cache import ResourceCacheError, load_resource_cache
+from tools.site_evidence_brief import write_site_evidence_brief
 from tools.travel_time_provider import (
     TravelTimeProviderError,
     get_openrouteservice_directions,
@@ -173,6 +174,20 @@ def _weights(**values):
     return supplied or None
 
 
+def _site_weights(study_area, **values):
+    """Use one comparable weight set across every tract in a study area."""
+    transit = values.get("transit_burden")
+    if study_area == "cook_county" and transit not in (None, 0):
+        raise HTTPException(
+            status_code=422,
+            detail="Transit burden is available only for Chicago; use a zero transit weight for Cook County.",
+        )
+    selected = _weights(**values)
+    if study_area == "cook_county":
+        return {**(selected or {}), "transit_burden": 0}
+    return selected
+
+
 def _urban_study_area(tracts: list, study_area: Literal["chicago", "cook_county"]):
     """Keep neighborhood-first Chicago ranking distinct from county context."""
     if study_area == "chicago":
@@ -190,9 +205,15 @@ def site_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
                        transit_burden: float | None = Query(default=None, ge=0),
                        existing_coverage: float | None = Query(default=None, ge=0)):
     try:
-        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
-                           population_served=population_served, transit_burden=transit_burden,
-                           existing_coverage=existing_coverage)
+        weights = _site_weights(
+            study_area,
+            food_access_gap=food_access_gap,
+            poverty=poverty,
+            no_vehicle=no_vehicle,
+            population_served=population_served,
+            transit_burden=transit_burden,
+            existing_coverage=existing_coverage,
+        )
         tracts = _urban_study_area(get_all_tracts(), study_area)
         resources = load_resource_cache("urban", require_complete_coverage=True)
         return score_gaps(tracts, resources, top_n=top_n, weights=weights)
@@ -215,9 +236,15 @@ def site_tract_scores(food_access_gap: float | None = Query(default=None, ge=0),
     tracts with illustrative values.
     """
     try:
-        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
-                           population_served=population_served, transit_burden=transit_burden,
-                           existing_coverage=existing_coverage)
+        weights = _site_weights(
+            study_area,
+            food_access_gap=food_access_gap,
+            poverty=poverty,
+            no_vehicle=no_vehicle,
+            population_served=population_served,
+            transit_burden=transit_burden,
+            existing_coverage=existing_coverage,
+        )
         resources = load_resource_cache("urban", require_complete_coverage=True)
         tracts = _urban_study_area(get_all_tracts(), study_area)
         return score_all_gaps(tracts, resources, weights=weights)
@@ -332,7 +359,7 @@ async def _run_evidence(write_brief_fn, tract: RankedTract) -> EvidenceResponse:
 
 @app.post("/api/site-advisor/evidence", response_model=EvidenceResponse)
 async def site_evidence(request: EvidenceRequest) -> EvidenceResponse:
-    return await _run_evidence(write_evidence_brief, request.tract)
+    return await _run_evidence(write_site_evidence_brief, request.tract)
 
 
 @app.post("/api/route-advisor/evidence", response_model=EvidenceResponse)
