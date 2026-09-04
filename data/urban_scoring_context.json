@@ -66,7 +66,7 @@
       "transit_burden": 0.0612,
       "transit_nearest_stop_miles": 0.115,
       "transit_route_count": 4,
-      "transit_weekday_trips": 270.0
+      "transit_weekday_trips": 270
     },
     {
       "community_area": "Rogers Park",
@@ -79,7 +79,7 @@
       "transit_burden": 0.0434,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 4,
-      "transit_weekday_trips": 270.0
+      "transit_weekday_trips": 270
     },
     {
       "community_area": "Rogers Park",
@@ -144,7 +144,7 @@
       "transit_burden": 0.0084,
       "transit_nearest_stop_miles": 0.016,
       "transit_route_count": 4,
-      "transit_weekday_trips": 270.0
+      "transit_weekday_trips": 270
     },
     {
       "community_area": "West Ridge",
@@ -157,7 +157,7 @@
       "transit_burden": 0.0829,
       "transit_nearest_stop_miles": 0.155,
       "transit_route_count": 5,
-      "transit_weekday_trips": 213.0
+      "transit_weekday_trips": 213
     },
     {
       "community_area": "West Ridge",
@@ -170,7 +170,7 @@
       "transit_burden": 0.0034,
       "transit_nearest_stop_miles": 0.006,
       "transit_route_count": 5,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -183,7 +183,7 @@
       "transit_burden": 0.1098,
       "transit_nearest_stop_miles": 0.206,
       "transit_route_count": 4,
-      "transit_weekday_trips": 121.0
+      "transit_weekday_trips": 121
     },
     {
       "community_area": "West Ridge",
@@ -196,7 +196,7 @@
       "transit_burden": 0.0781,
       "transit_nearest_stop_miles": 0.006,
       "transit_route_count": 3,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -209,7 +209,7 @@
       "transit_burden": 0.1594,
       "transit_nearest_stop_miles": 0.018,
       "transit_route_count": 2,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -222,7 +222,7 @@
       "transit_burden": 0.2789,
       "transit_nearest_stop_miles": 0.242,
       "transit_route_count": 2,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -235,7 +235,7 @@
       "transit_burden": 0.0568,
       "transit_nearest_stop_miles": 0.106,
       "transit_route_count": 5,
-      "transit_weekday_trips": 204.0
+      "transit_weekday_trips": 204
     },
     {
       "community_area": "West Ridge",
@@ -248,7 +248,7 @@
       "transit_burden": 0.1733,
       "transit_nearest_stop_miles": 0.184,
       "transit_route_count": 3,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -261,7 +261,7 @@
       "transit_burden": 0.1954,
       "transit_nearest_stop_miles": 0.079,
       "transit_route_count": 3,
-      "transit_weekday_trips": 71.0
+      "transit_weekday_trips": 71
     },
     {
       "community_area": "West Ridge",
@@ -274,7 +274,7 @@
       "transit_burden": 0.1226,
       "transit_nearest_stop_miles": 0.23,
       "transit_route_count": 6,
-      "transit_weekday_trips": 204.0
+      "transit_weekday_trips": 204
     },
     {
       "community_area": "West Ridge",
@@ -287,7 +287,7 @@
       "transit_burden": 0.1144,
       "transit_nearest_stop_miles": 0.214,
       "transit_route_count": 4,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -300,7 +300,7 @@
       "transit_burden": 0.1285,
       "transit_nearest_stop_miles": 0.241,
       "transit_route_count": 4,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -313,7 +313,7 @@
       "transit_burden": 0.1913,
       "transit_nearest_stop_miles": 0.218,
       "transit_route_count": 3,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "West Ridge",
@@ -417,7 +417,7 @@
       "transit_burden": 0.1506,
       "transit_nearest_stop_miles": 0.142,
       "transit_route_count": 3,
-      "transit_weekday_trips": 166.0
+      "transit_weekday_trips": 166
     },
     {
       "community_area": "Edgewater",
@@ -547,7 +547,7 @@
       "transit_burden": 0.1189,
       "transit_nearest_stop_miles": 0.082,
       "transit_route_count": 3,
-      "transit_weekday_trips": 166.0
+      "transit_weekday_trips": 166
     },
     {
       "community_area": "Uptown",
@@ -560,7 +560,7 @@
       "transit_burden": 0.0866,
       "transit_nearest_stop_miles": 0.162,
       "transit_route_count": 5,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "Uptown",
@@ -664,7 +664,7 @@
       "transit_burden": 0.0669,
       "transit_nearest_stop_miles": 0.126,
       "transit_route_count": 6,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "Uptown",
@@ -677,7 +677,7 @@
       "transit_burden": 0.061,
       "transit_nearest_stop_miles": 0.114,
       "transit_route_count": 6,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "Uptown",
@@ -703,7 +703,7 @@
       "transit_burden": 0.3295,
       "transit_nearest_stop_miles": 0.337,
       "transit_route_count": 2,
-      "transit_weekday_trips": 108.0
+      "transit_weekday_trips": 108
     },
     {
       "community_area": "Lincoln Square",
@@ -716,7 +716,7 @@
       "transit_burden": 0.07,
       "transit_nearest_stop_miles": 0.131,
       "transit_route_count": 8,
-      "transit_weekday_trips": 358.0
+      "transit_weekday_trips": 358
     },
     {
       "community_area": "Lincoln Square",
@@ -729,7 +729,7 @@
       "transit_burden": 0.0387,
       "transit_nearest_stop_miles": 0.073,
       "transit_route_count": 6,
-      "transit_weekday_trips": 358.0
+      "transit_weekday_trips": 358
     },
     {
       "community_area": "Lincoln Square",
@@ -742,7 +742,7 @@
       "transit_burden": 0.041,
       "transit_nearest_stop_miles": 0.077,
       "transit_route_count": 4,
-      "transit_weekday_trips": 143.0
+      "transit_weekday_trips": 143
     },
     {
       "community_area": "Lincoln Square",
@@ -755,7 +755,7 @@
       "transit_burden": 0.084,
       "transit_nearest_stop_miles": 0.158,
       "transit_route_count": 8,
-      "transit_weekday_trips": 358.0
+      "transit_weekday_trips": 358
     },
     {
       "community_area": "Lincoln Square",
@@ -768,7 +768,7 @@
       "transit_burden": 0.0119,
       "transit_nearest_stop_miles": 0.022,
       "transit_route_count": 5,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "Lincoln Square",
@@ -781,7 +781,7 @@
       "transit_burden": 0.0657,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 8,
-      "transit_weekday_trips": 331.0
+      "transit_weekday_trips": 331
     },
     {
       "community_area": "Lincoln Square",
@@ -794,7 +794,7 @@
       "transit_burden": 0.0423,
       "transit_nearest_stop_miles": 0.079,
       "transit_route_count": 8,
-      "transit_weekday_trips": 331.0
+      "transit_weekday_trips": 331
     },
     {
       "community_area": "Lincoln Square",
@@ -807,7 +807,7 @@
       "transit_burden": 0.0885,
       "transit_nearest_stop_miles": 0.166,
       "transit_route_count": 8,
-      "transit_weekday_trips": 331.0
+      "transit_weekday_trips": 331
     },
     {
       "community_area": "Lincoln Square",
@@ -820,7 +820,7 @@
       "transit_burden": 0.0652,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 8,
-      "transit_weekday_trips": 331.0
+      "transit_weekday_trips": 331
     },
     {
       "community_area": "North Center",
@@ -846,7 +846,7 @@
       "transit_burden": 0.1298,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Center",
@@ -859,7 +859,7 @@
       "transit_burden": 0.0476,
       "transit_nearest_stop_miles": 0.089,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Center",
@@ -872,7 +872,7 @@
       "transit_burden": 0.1293,
       "transit_nearest_stop_miles": 0.242,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Center",
@@ -911,7 +911,7 @@
       "transit_burden": 0.0645,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 6,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Center",
@@ -924,7 +924,7 @@
       "transit_burden": 0.0667,
       "transit_nearest_stop_miles": 0.125,
       "transit_route_count": 6,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Center",
@@ -937,7 +937,7 @@
       "transit_burden": 0.0647,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 6,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Center",
@@ -950,7 +950,7 @@
       "transit_burden": 0.0644,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Center",
@@ -989,7 +989,7 @@
       "transit_burden": 0.076,
       "transit_nearest_stop_miles": 0.143,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Lake View",
@@ -1561,7 +1561,7 @@
       "transit_burden": 0.0576,
       "transit_nearest_stop_miles": 0.108,
       "transit_route_count": 10,
-      "transit_weekday_trips": 278.0
+      "transit_weekday_trips": 278
     },
     {
       "community_area": "Lincoln Park",
@@ -1587,7 +1587,7 @@
       "transit_burden": 0.141,
       "transit_nearest_stop_miles": 0.264,
       "transit_route_count": 7,
-      "transit_weekday_trips": 278.0
+      "transit_weekday_trips": 278
     },
     {
       "community_area": "Lincoln Park",
@@ -1600,7 +1600,7 @@
       "transit_burden": 0.0633,
       "transit_nearest_stop_miles": 0.119,
       "transit_route_count": 12,
-      "transit_weekday_trips": 278.0
+      "transit_weekday_trips": 278
     },
     {
       "community_area": "Lincoln Park",
@@ -1613,7 +1613,7 @@
       "transit_burden": 0.0618,
       "transit_nearest_stop_miles": 0.116,
       "transit_route_count": 12,
-      "transit_weekday_trips": 278.0
+      "transit_weekday_trips": 278
     },
     {
       "community_area": "Lincoln Park",
@@ -1652,7 +1652,7 @@
       "transit_burden": 0.0137,
       "transit_nearest_stop_miles": 0.026,
       "transit_route_count": 12,
-      "transit_weekday_trips": 278.0
+      "transit_weekday_trips": 278
     },
     {
       "community_area": "Near North Side",
@@ -1782,7 +1782,7 @@
       "transit_burden": 0.0061,
       "transit_nearest_stop_miles": 0.011,
       "transit_route_count": 17,
-      "transit_weekday_trips": 446.0
+      "transit_weekday_trips": 446
     },
     {
       "community_area": "Near North Side",
@@ -1847,7 +1847,7 @@
       "transit_burden": 0.063,
       "transit_nearest_stop_miles": 0.118,
       "transit_route_count": 11,
-      "transit_weekday_trips": 388.0
+      "transit_weekday_trips": 388
     },
     {
       "community_area": "Near North Side",
@@ -1860,7 +1860,7 @@
       "transit_burden": 0.1147,
       "transit_nearest_stop_miles": 0.215,
       "transit_route_count": 8,
-      "transit_weekday_trips": 271.0
+      "transit_weekday_trips": 271
     },
     {
       "community_area": "Edison Park",
@@ -1873,7 +1873,7 @@
       "transit_burden": 0.9938,
       "transit_nearest_stop_miles": 0.738,
       "transit_route_count": 0,
-      "transit_weekday_trips": 0.0
+      "transit_weekday_trips": 0
     },
     {
       "community_area": "Edison Park",
@@ -1886,7 +1886,7 @@
       "transit_burden": 0.5072,
       "transit_nearest_stop_miles": 0.248,
       "transit_route_count": 1,
-      "transit_weekday_trips": 48.0
+      "transit_weekday_trips": 48
     },
     {
       "community_area": "Edison Park",
@@ -1899,7 +1899,7 @@
       "transit_burden": 0.2316,
       "transit_nearest_stop_miles": 0.153,
       "transit_route_count": 2,
-      "transit_weekday_trips": 100.0
+      "transit_weekday_trips": 100
     },
     {
       "community_area": "Norwood Park",
@@ -1912,7 +1912,7 @@
       "transit_burden": 0.4093,
       "transit_nearest_stop_miles": 0.234,
       "transit_route_count": 2,
-      "transit_weekday_trips": 53.0
+      "transit_weekday_trips": 53
     },
     {
       "community_area": "Norwood Park",
@@ -1925,7 +1925,7 @@
       "transit_burden": 0.3285,
       "transit_nearest_stop_miles": 0.335,
       "transit_route_count": 2,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "Norwood Park",
@@ -1938,7 +1938,7 @@
       "transit_burden": 0.3673,
       "transit_nearest_stop_miles": 0.138,
       "transit_route_count": 2,
-      "transit_weekday_trips": 50.0
+      "transit_weekday_trips": 50
     },
     {
       "community_area": "Norwood Park",
@@ -1951,7 +1951,7 @@
       "transit_burden": 0.4416,
       "transit_nearest_stop_miles": 0.137,
       "transit_route_count": 1,
-      "transit_weekday_trips": 50.0
+      "transit_weekday_trips": 50
     },
     {
       "community_area": "Norwood Park",
@@ -1964,7 +1964,7 @@
       "transit_burden": 0.9351,
       "transit_nearest_stop_miles": 0.628,
       "transit_route_count": 0,
-      "transit_weekday_trips": 0.0
+      "transit_weekday_trips": 0
     },
     {
       "community_area": "Norwood Park",
@@ -1977,7 +1977,7 @@
       "transit_burden": 0.1728,
       "transit_nearest_stop_miles": 0.008,
       "transit_route_count": 3,
-      "transit_weekday_trips": 66.0
+      "transit_weekday_trips": 66
     },
     {
       "community_area": "Norwood Park",
@@ -1990,7 +1990,7 @@
       "transit_burden": 0.2315,
       "transit_nearest_stop_miles": 0.258,
       "transit_route_count": 4,
-      "transit_weekday_trips": 66.0
+      "transit_weekday_trips": 66
     },
     {
       "community_area": "Jefferson Park",
@@ -2003,7 +2003,7 @@
       "transit_burden": 0.1873,
       "transit_nearest_stop_miles": 0.07,
       "transit_route_count": 2,
-      "transit_weekday_trips": 169.0
+      "transit_weekday_trips": 169
     },
     {
       "community_area": "Jefferson Park",
@@ -2016,7 +2016,7 @@
       "transit_burden": 0.14,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 3,
-      "transit_weekday_trips": 169.0
+      "transit_weekday_trips": 169
     },
     {
       "community_area": "Jefferson Park",
@@ -2029,7 +2029,7 @@
       "transit_burden": 0.1467,
       "transit_nearest_stop_miles": 0.029,
       "transit_route_count": 4,
-      "transit_weekday_trips": 54.0
+      "transit_weekday_trips": 54
     },
     {
       "community_area": "Jefferson Park",
@@ -2042,7 +2042,7 @@
       "transit_burden": 0.0423,
       "transit_nearest_stop_miles": 0.079,
       "transit_route_count": 7,
-      "transit_weekday_trips": 298.0
+      "transit_weekday_trips": 298
     },
     {
       "community_area": "Jefferson Park",
@@ -2081,7 +2081,7 @@
       "transit_burden": 0.4058,
       "transit_nearest_stop_miles": 0.052,
       "transit_route_count": 1,
-      "transit_weekday_trips": 47.0
+      "transit_weekday_trips": 47
     },
     {
       "community_area": "Forest Glen",
@@ -2094,7 +2094,7 @@
       "transit_burden": 0.1194,
       "transit_nearest_stop_miles": 0.083,
       "transit_route_count": 3,
-      "transit_weekday_trips": 142.0
+      "transit_weekday_trips": 142
     },
     {
       "community_area": "Forest Glen",
@@ -2107,7 +2107,7 @@
       "transit_burden": 0.2695,
       "transit_nearest_stop_miles": 0.077,
       "transit_route_count": 2,
-      "transit_weekday_trips": 71.0
+      "transit_weekday_trips": 71
     },
     {
       "community_area": "Forest Glen",
@@ -2120,7 +2120,7 @@
       "transit_burden": 0.2705,
       "transit_nearest_stop_miles": 0.132,
       "transit_route_count": 2,
-      "transit_weekday_trips": 80.0
+      "transit_weekday_trips": 80
     },
     {
       "community_area": "North Park",
@@ -2159,7 +2159,7 @@
       "transit_burden": 0.0113,
       "transit_nearest_stop_miles": 0.021,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Albany Park",
@@ -2328,7 +2328,7 @@
       "transit_burden": 0.0039,
       "transit_nearest_stop_miles": 0.007,
       "transit_route_count": 6,
-      "transit_weekday_trips": 122.0
+      "transit_weekday_trips": 122
     },
     {
       "community_area": "Portage Park",
@@ -2341,7 +2341,7 @@
       "transit_burden": 0.1132,
       "transit_nearest_stop_miles": 0.212,
       "transit_route_count": 5,
-      "transit_weekday_trips": 122.0
+      "transit_weekday_trips": 122
     },
     {
       "community_area": "Portage Park",
@@ -2354,7 +2354,7 @@
       "transit_burden": 0.1313,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 4,
-      "transit_weekday_trips": 122.0
+      "transit_weekday_trips": 122
     },
     {
       "community_area": "Portage Park",
@@ -2367,7 +2367,7 @@
       "transit_burden": 0.1305,
       "transit_nearest_stop_miles": 0.245,
       "transit_route_count": 4,
-      "transit_weekday_trips": 122.0
+      "transit_weekday_trips": 122
     },
     {
       "community_area": "Portage Park",
@@ -2380,7 +2380,7 @@
       "transit_burden": 0.1273,
       "transit_nearest_stop_miles": 0.239,
       "transit_route_count": 4,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "Portage Park",
@@ -2393,7 +2393,7 @@
       "transit_burden": 0.1311,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 4,
-      "transit_weekday_trips": 122.0
+      "transit_weekday_trips": 122
     },
     {
       "community_area": "Portage Park",
@@ -2406,7 +2406,7 @@
       "transit_burden": 0.2063,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 3,
-      "transit_weekday_trips": 122.0
+      "transit_weekday_trips": 122
     },
     {
       "community_area": "Portage Park",
@@ -2432,7 +2432,7 @@
       "transit_burden": 0.132,
       "transit_nearest_stop_miles": 0.248,
       "transit_route_count": 4,
-      "transit_weekday_trips": 164.0
+      "transit_weekday_trips": 164
     },
     {
       "community_area": "Portage Park",
@@ -2445,7 +2445,7 @@
       "transit_burden": 0.0031,
       "transit_nearest_stop_miles": 0.006,
       "transit_route_count": 4,
-      "transit_weekday_trips": 164.0
+      "transit_weekday_trips": 164
     },
     {
       "community_area": "Portage Park",
@@ -2458,7 +2458,7 @@
       "transit_burden": 0.2064,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 3,
-      "transit_weekday_trips": 164.0
+      "transit_weekday_trips": 164
     },
     {
       "community_area": "Portage Park",
@@ -2471,7 +2471,7 @@
       "transit_burden": 0.1313,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 4,
-      "transit_weekday_trips": 164.0
+      "transit_weekday_trips": 164
     },
     {
       "community_area": "Irving Park",
@@ -2536,7 +2536,7 @@
       "transit_burden": 0.0012,
       "transit_nearest_stop_miles": 0.002,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Irving Park",
@@ -2549,7 +2549,7 @@
       "transit_burden": 0.0055,
       "transit_nearest_stop_miles": 0.01,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Irving Park",
@@ -2575,7 +2575,7 @@
       "transit_burden": 0.1384,
       "transit_nearest_stop_miles": 0.119,
       "transit_route_count": 3,
-      "transit_weekday_trips": 136.0
+      "transit_weekday_trips": 136
     },
     {
       "community_area": "Irving Park",
@@ -2588,7 +2588,7 @@
       "transit_burden": 0.1017,
       "transit_nearest_stop_miles": 0.191,
       "transit_route_count": 4,
-      "transit_weekday_trips": 176.0
+      "transit_weekday_trips": 176
     },
     {
       "community_area": "Irving Park",
@@ -2653,7 +2653,7 @@
       "transit_burden": 0.1332,
       "transit_nearest_stop_miles": 0.25,
       "transit_route_count": 4,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Irving Park",
@@ -2666,7 +2666,7 @@
       "transit_burden": 0.0304,
       "transit_nearest_stop_miles": 0.057,
       "transit_route_count": 4,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Dunning",
@@ -2679,7 +2679,7 @@
       "transit_burden": 0.1898,
       "transit_nearest_stop_miles": 0.215,
       "transit_route_count": 3,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "Dunning",
@@ -2692,7 +2692,7 @@
       "transit_burden": 0.1317,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 4,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "Dunning",
@@ -2705,7 +2705,7 @@
       "transit_burden": 0.2817,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 2,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "Dunning",
@@ -2731,7 +2731,7 @@
       "transit_burden": 0.2285,
       "transit_nearest_stop_miles": 0.147,
       "transit_route_count": 2,
-      "transit_weekday_trips": 176.0
+      "transit_weekday_trips": 176
     },
     {
       "community_area": "Dunning",
@@ -2770,7 +2770,7 @@
       "transit_burden": 0.2059,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 3,
-      "transit_weekday_trips": 138.0
+      "transit_weekday_trips": 138
     },
     {
       "community_area": "Dunning",
@@ -2796,7 +2796,7 @@
       "transit_burden": 0.2835,
       "transit_nearest_stop_miles": 0.25,
       "transit_route_count": 2,
-      "transit_weekday_trips": 138.0
+      "transit_weekday_trips": 138
     },
     {
       "community_area": "Dunning",
@@ -2809,7 +2809,7 @@
       "transit_burden": 0.133,
       "transit_nearest_stop_miles": 0.249,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Montclare",
@@ -2835,7 +2835,7 @@
       "transit_burden": 0.1358,
       "transit_nearest_stop_miles": 0.114,
       "transit_route_count": 3,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Belmont Cragin",
@@ -2848,7 +2848,7 @@
       "transit_burden": 0.1308,
       "transit_nearest_stop_miles": 0.245,
       "transit_route_count": 4,
-      "transit_weekday_trips": 164.0
+      "transit_weekday_trips": 164
     },
     {
       "community_area": "Belmont Cragin",
@@ -2861,7 +2861,7 @@
       "transit_burden": 0.2062,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 3,
-      "transit_weekday_trips": 164.0
+      "transit_weekday_trips": 164
     },
     {
       "community_area": "Belmont Cragin",
@@ -2874,7 +2874,7 @@
       "transit_burden": 0.1311,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -2887,7 +2887,7 @@
       "transit_burden": 0.1311,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 4,
-      "transit_weekday_trips": 164.0
+      "transit_weekday_trips": 164
     },
     {
       "community_area": "Belmont Cragin",
@@ -2900,7 +2900,7 @@
       "transit_burden": 0.1247,
       "transit_nearest_stop_miles": 0.234,
       "transit_route_count": 5,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -2913,7 +2913,7 @@
       "transit_burden": 0.1246,
       "transit_nearest_stop_miles": 0.234,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -2926,7 +2926,7 @@
       "transit_burden": 0.1301,
       "transit_nearest_stop_miles": 0.103,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -2939,7 +2939,7 @@
       "transit_burden": 0.1496,
       "transit_nearest_stop_miles": 0.14,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -2952,7 +2952,7 @@
       "transit_burden": 0.2056,
       "transit_nearest_stop_miles": 0.245,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -2965,7 +2965,7 @@
       "transit_burden": 0.1388,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -2978,7 +2978,7 @@
       "transit_burden": 0.0641,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -3017,7 +3017,7 @@
       "transit_burden": 0.0446,
       "transit_nearest_stop_miles": 0.084,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Belmont Cragin",
@@ -3030,7 +3030,7 @@
       "transit_burden": 0.0201,
       "transit_nearest_stop_miles": 0.038,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Hermosa",
@@ -3043,7 +3043,7 @@
       "transit_burden": 0.1984,
       "transit_nearest_stop_miles": 0.231,
       "transit_route_count": 3,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Hermosa",
@@ -3082,7 +3082,7 @@
       "transit_burden": 0.1802,
       "transit_nearest_stop_miles": 0.197,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Hermosa",
@@ -3108,7 +3108,7 @@
       "transit_burden": 0.0716,
       "transit_nearest_stop_miles": 0.134,
       "transit_route_count": 4,
-      "transit_weekday_trips": 247.0
+      "transit_weekday_trips": 247
     },
     {
       "community_area": "Avondale",
@@ -3121,7 +3121,7 @@
       "transit_burden": 0.0866,
       "transit_nearest_stop_miles": 0.162,
       "transit_route_count": 4,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Avondale",
@@ -3134,7 +3134,7 @@
       "transit_burden": 0.0246,
       "transit_nearest_stop_miles": 0.046,
       "transit_route_count": 4,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Avondale",
@@ -3147,7 +3147,7 @@
       "transit_burden": 0.0689,
       "transit_nearest_stop_miles": 0.129,
       "transit_route_count": 5,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Avondale",
@@ -3199,7 +3199,7 @@
       "transit_burden": 0.0311,
       "transit_nearest_stop_miles": 0.058,
       "transit_route_count": 4,
-      "transit_weekday_trips": 247.0
+      "transit_weekday_trips": 247
     },
     {
       "community_area": "Avondale",
@@ -3212,7 +3212,7 @@
       "transit_burden": 0.097,
       "transit_nearest_stop_miles": 0.182,
       "transit_route_count": 6,
-      "transit_weekday_trips": 247.0
+      "transit_weekday_trips": 247
     },
     {
       "community_area": "Logan Square",
@@ -3225,7 +3225,7 @@
       "transit_burden": 0.0657,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 8,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Logan Square",
@@ -3342,7 +3342,7 @@
       "transit_burden": 0.1626,
       "transit_nearest_stop_miles": 0.164,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Logan Square",
@@ -3355,7 +3355,7 @@
       "transit_burden": 0.1184,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Logan Square",
@@ -3394,7 +3394,7 @@
       "transit_burden": 0.0264,
       "transit_nearest_stop_miles": 0.049,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Logan Square",
@@ -3407,7 +3407,7 @@
       "transit_burden": 0.0627,
       "transit_nearest_stop_miles": 0.117,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Logan Square",
@@ -3420,7 +3420,7 @@
       "transit_burden": 0.0669,
       "transit_nearest_stop_miles": 0.125,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Logan Square",
@@ -3433,7 +3433,7 @@
       "transit_burden": 0.0371,
       "transit_nearest_stop_miles": 0.07,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Logan Square",
@@ -3459,7 +3459,7 @@
       "transit_burden": 0.0681,
       "transit_nearest_stop_miles": 0.128,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Logan Square",
@@ -3472,7 +3472,7 @@
       "transit_burden": 0.1182,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Logan Square",
@@ -3485,7 +3485,7 @@
       "transit_burden": 0.1422,
       "transit_nearest_stop_miles": 0.126,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Logan Square",
@@ -3511,7 +3511,7 @@
       "transit_burden": 0.0637,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Humboldt Park",
@@ -3524,7 +3524,7 @@
       "transit_burden": 0.1185,
       "transit_nearest_stop_miles": 0.082,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Humboldt Park",
@@ -3537,7 +3537,7 @@
       "transit_burden": 0.1368,
       "transit_nearest_stop_miles": 0.116,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Humboldt Park",
@@ -3602,7 +3602,7 @@
       "transit_burden": 0.0882,
       "transit_nearest_stop_miles": 0.165,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Humboldt Park",
@@ -3615,7 +3615,7 @@
       "transit_burden": 0.0397,
       "transit_nearest_stop_miles": 0.074,
       "transit_route_count": 4,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Humboldt Park",
@@ -3628,7 +3628,7 @@
       "transit_burden": 0.0761,
       "transit_nearest_stop_miles": 0.143,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "Humboldt Park",
@@ -3667,7 +3667,7 @@
       "transit_burden": 0.0645,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 7,
-      "transit_weekday_trips": 210.0
+      "transit_weekday_trips": 210
     },
     {
       "community_area": "West Town",
@@ -3693,7 +3693,7 @@
       "transit_burden": 0.0646,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Town",
@@ -3706,7 +3706,7 @@
       "transit_burden": 0.065,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Town",
@@ -3719,7 +3719,7 @@
       "transit_burden": 0.0635,
       "transit_nearest_stop_miles": 0.119,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Town",
@@ -3758,7 +3758,7 @@
       "transit_burden": 0.0671,
       "transit_nearest_stop_miles": 0.126,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Town",
@@ -3771,7 +3771,7 @@
       "transit_burden": 0.0638,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Town",
@@ -3784,7 +3784,7 @@
       "transit_burden": 0.0636,
       "transit_nearest_stop_miles": 0.119,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Town",
@@ -3797,7 +3797,7 @@
       "transit_burden": 0.0997,
       "transit_nearest_stop_miles": 0.187,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Town",
@@ -3836,7 +3836,7 @@
       "transit_burden": 0.061,
       "transit_nearest_stop_miles": 0.114,
       "transit_route_count": 7,
-      "transit_weekday_trips": 210.0
+      "transit_weekday_trips": 210
     },
     {
       "community_area": "West Town",
@@ -3849,7 +3849,7 @@
       "transit_burden": 0.0638,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 6,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3862,7 +3862,7 @@
       "transit_burden": 0.0637,
       "transit_nearest_stop_miles": 0.119,
       "transit_route_count": 7,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3875,7 +3875,7 @@
       "transit_burden": 0.0647,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 7,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3888,7 +3888,7 @@
       "transit_burden": 0.0651,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3901,7 +3901,7 @@
       "transit_burden": 0.0641,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3914,7 +3914,7 @@
       "transit_burden": 0.0622,
       "transit_nearest_stop_miles": 0.117,
       "transit_route_count": 6,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3927,7 +3927,7 @@
       "transit_burden": 0.072,
       "transit_nearest_stop_miles": 0.135,
       "transit_route_count": 6,
-      "transit_weekday_trips": 274.0
+      "transit_weekday_trips": 274
     },
     {
       "community_area": "West Town",
@@ -3940,7 +3940,7 @@
       "transit_burden": 0.0639,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 5,
-      "transit_weekday_trips": 274.0
+      "transit_weekday_trips": 274
     },
     {
       "community_area": "West Town",
@@ -3953,7 +3953,7 @@
       "transit_burden": 0.0348,
       "transit_nearest_stop_miles": 0.065,
       "transit_route_count": 5,
-      "transit_weekday_trips": 265.0
+      "transit_weekday_trips": 265
     },
     {
       "community_area": "West Town",
@@ -3966,7 +3966,7 @@
       "transit_burden": 0.0523,
       "transit_nearest_stop_miles": 0.098,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3979,7 +3979,7 @@
       "transit_burden": 0.0519,
       "transit_nearest_stop_miles": 0.097,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -3992,7 +3992,7 @@
       "transit_burden": 0.0517,
       "transit_nearest_stop_miles": 0.097,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -4005,7 +4005,7 @@
       "transit_burden": 0.052,
       "transit_nearest_stop_miles": 0.097,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -4018,7 +4018,7 @@
       "transit_burden": 0.0544,
       "transit_nearest_stop_miles": 0.102,
       "transit_route_count": 4,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "West Town",
@@ -4031,7 +4031,7 @@
       "transit_burden": 0.0609,
       "transit_nearest_stop_miles": 0.114,
       "transit_route_count": 7,
-      "transit_weekday_trips": 394.0
+      "transit_weekday_trips": 394
     },
     {
       "community_area": "West Town",
@@ -4044,7 +4044,7 @@
       "transit_burden": 0.0473,
       "transit_nearest_stop_miles": 0.089,
       "transit_route_count": 7,
-      "transit_weekday_trips": 394.0
+      "transit_weekday_trips": 394
     },
     {
       "community_area": "Austin",
@@ -4187,7 +4187,7 @@
       "transit_burden": 0.1307,
       "transit_nearest_stop_miles": 0.245,
       "transit_route_count": 4,
-      "transit_weekday_trips": 435.0
+      "transit_weekday_trips": 435
     },
     {
       "community_area": "Austin",
@@ -4200,7 +4200,7 @@
       "transit_burden": 0.132,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 4,
-      "transit_weekday_trips": 435.0
+      "transit_weekday_trips": 435
     },
     {
       "community_area": "Austin",
@@ -4252,7 +4252,7 @@
       "transit_burden": 0.0652,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 4,
-      "transit_weekday_trips": 174.0
+      "transit_weekday_trips": 174
     },
     {
       "community_area": "Austin",
@@ -4265,7 +4265,7 @@
       "transit_burden": 0.1251,
       "transit_nearest_stop_miles": 0.234,
       "transit_route_count": 5,
-      "transit_weekday_trips": 174.0
+      "transit_weekday_trips": 174
     },
     {
       "community_area": "Austin",
@@ -4278,7 +4278,7 @@
       "transit_burden": 0.1255,
       "transit_nearest_stop_miles": 0.235,
       "transit_route_count": 5,
-      "transit_weekday_trips": 323.0
+      "transit_weekday_trips": 323
     },
     {
       "community_area": "Austin",
@@ -4317,7 +4317,7 @@
       "transit_burden": 0.0136,
       "transit_nearest_stop_miles": 0.026,
       "transit_route_count": 5,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "Austin",
@@ -4330,7 +4330,7 @@
       "transit_burden": 0.007,
       "transit_nearest_stop_miles": 0.013,
       "transit_route_count": 6,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "West Garfield Park",
@@ -4343,7 +4343,7 @@
       "transit_burden": 0.0662,
       "transit_nearest_stop_miles": 0.124,
       "transit_route_count": 4,
-      "transit_weekday_trips": 181.0
+      "transit_weekday_trips": 181
     },
     {
       "community_area": "West Garfield Park",
@@ -4356,7 +4356,7 @@
       "transit_burden": 0.0715,
       "transit_nearest_stop_miles": 0.134,
       "transit_route_count": 4,
-      "transit_weekday_trips": 181.0
+      "transit_weekday_trips": 181
     },
     {
       "community_area": "West Garfield Park",
@@ -4369,7 +4369,7 @@
       "transit_burden": 0.1299,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 4,
-      "transit_weekday_trips": 181.0
+      "transit_weekday_trips": 181
     },
     {
       "community_area": "West Garfield Park",
@@ -4382,7 +4382,7 @@
       "transit_burden": 0.1296,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 4,
-      "transit_weekday_trips": 174.0
+      "transit_weekday_trips": 174
     },
     {
       "community_area": "West Garfield Park",
@@ -4395,7 +4395,7 @@
       "transit_burden": 0.009,
       "transit_nearest_stop_miles": 0.017,
       "transit_route_count": 5,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "West Garfield Park",
@@ -4408,7 +4408,7 @@
       "transit_burden": 0.0067,
       "transit_nearest_stop_miles": 0.013,
       "transit_route_count": 5,
-      "transit_weekday_trips": 181.0
+      "transit_weekday_trips": 181
     },
     {
       "community_area": "West Garfield Park",
@@ -4421,7 +4421,7 @@
       "transit_burden": 0.0052,
       "transit_nearest_stop_miles": 0.01,
       "transit_route_count": 5,
-      "transit_weekday_trips": 181.0
+      "transit_weekday_trips": 181
     },
     {
       "community_area": "West Garfield Park",
@@ -4434,7 +4434,7 @@
       "transit_burden": 0.0038,
       "transit_nearest_stop_miles": 0.007,
       "transit_route_count": 5,
-      "transit_weekday_trips": 181.0
+      "transit_weekday_trips": 181
     },
     {
       "community_area": "West Garfield Park",
@@ -4551,7 +4551,7 @@
       "transit_burden": 0.023,
       "transit_nearest_stop_miles": 0.043,
       "transit_route_count": 21,
-      "transit_weekday_trips": 607.0
+      "transit_weekday_trips": 607
     },
     {
       "community_area": "Near West Side",
@@ -4564,7 +4564,7 @@
       "transit_burden": 0.1314,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 7,
-      "transit_weekday_trips": 250.0
+      "transit_weekday_trips": 250
     },
     {
       "community_area": "Near West Side",
@@ -4577,7 +4577,7 @@
       "transit_burden": 0.0372,
       "transit_nearest_stop_miles": 0.07,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Near West Side",
@@ -4590,7 +4590,7 @@
       "transit_burden": 0.0386,
       "transit_nearest_stop_miles": 0.072,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Near West Side",
@@ -4603,7 +4603,7 @@
       "transit_burden": 0.0232,
       "transit_nearest_stop_miles": 0.044,
       "transit_route_count": 28,
-      "transit_weekday_trips": 607.0
+      "transit_weekday_trips": 607
     },
     {
       "community_area": "Near West Side",
@@ -4616,7 +4616,7 @@
       "transit_burden": 0.0667,
       "transit_nearest_stop_miles": 0.125,
       "transit_route_count": 9,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "Near West Side",
@@ -4629,7 +4629,7 @@
       "transit_burden": 0.0441,
       "transit_nearest_stop_miles": 0.083,
       "transit_route_count": 8,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "Near West Side",
@@ -4655,7 +4655,7 @@
       "transit_burden": 0.005,
       "transit_nearest_stop_miles": 0.009,
       "transit_route_count": 8,
-      "transit_weekday_trips": 188.0
+      "transit_weekday_trips": 188
     },
     {
       "community_area": "Near West Side",
@@ -4707,7 +4707,7 @@
       "transit_burden": 0.092,
       "transit_nearest_stop_miles": 0.172,
       "transit_route_count": 7,
-      "transit_weekday_trips": 234.0
+      "transit_weekday_trips": 234
     },
     {
       "community_area": "North Lawndale",
@@ -4733,7 +4733,7 @@
       "transit_burden": 0.065,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 6,
-      "transit_weekday_trips": 224.0
+      "transit_weekday_trips": 224
     },
     {
       "community_area": "North Lawndale",
@@ -4746,7 +4746,7 @@
       "transit_burden": 0.059,
       "transit_nearest_stop_miles": 0.111,
       "transit_route_count": 5,
-      "transit_weekday_trips": 224.0
+      "transit_weekday_trips": 224
     },
     {
       "community_area": "South Lawndale",
@@ -4759,7 +4759,7 @@
       "transit_burden": 0.0775,
       "transit_nearest_stop_miles": 0.145,
       "transit_route_count": 6,
-      "transit_weekday_trips": 224.0
+      "transit_weekday_trips": 224
     },
     {
       "community_area": "South Lawndale",
@@ -4772,7 +4772,7 @@
       "transit_burden": 0.0651,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 6,
-      "transit_weekday_trips": 224.0
+      "transit_weekday_trips": 224
     },
     {
       "community_area": "South Lawndale",
@@ -4811,7 +4811,7 @@
       "transit_burden": 0.0654,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 5,
-      "transit_weekday_trips": 127.0
+      "transit_weekday_trips": 127
     },
     {
       "community_area": "South Lawndale",
@@ -4824,7 +4824,7 @@
       "transit_burden": 0.0743,
       "transit_nearest_stop_miles": 0.139,
       "transit_route_count": 4,
-      "transit_weekday_trips": 127.0
+      "transit_weekday_trips": 127
     },
     {
       "community_area": "South Lawndale",
@@ -4837,7 +4837,7 @@
       "transit_burden": 0.1043,
       "transit_nearest_stop_miles": 0.196,
       "transit_route_count": 6,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "South Lawndale",
@@ -4889,7 +4889,7 @@
       "transit_burden": 0.09,
       "transit_nearest_stop_miles": 0.169,
       "transit_route_count": 4,
-      "transit_weekday_trips": 154.0
+      "transit_weekday_trips": 154
     },
     {
       "community_area": "South Lawndale",
@@ -4902,7 +4902,7 @@
       "transit_burden": 0.042,
       "transit_nearest_stop_miles": 0.079,
       "transit_route_count": 4,
-      "transit_weekday_trips": 224.0
+      "transit_weekday_trips": 224
     },
     {
       "community_area": "South Lawndale",
@@ -4967,7 +4967,7 @@
       "transit_burden": 0.1036,
       "transit_nearest_stop_miles": 0.194,
       "transit_route_count": 5,
-      "transit_weekday_trips": 202.0
+      "transit_weekday_trips": 202
     },
     {
       "community_area": "Lower West Side",
@@ -4980,7 +4980,7 @@
       "transit_burden": 0.0584,
       "transit_nearest_stop_miles": 0.109,
       "transit_route_count": 5,
-      "transit_weekday_trips": 202.0
+      "transit_weekday_trips": 202
     },
     {
       "community_area": "Lower West Side",
@@ -4993,7 +4993,7 @@
       "transit_burden": 0.0411,
       "transit_nearest_stop_miles": 0.077,
       "transit_route_count": 6,
-      "transit_weekday_trips": 202.0
+      "transit_weekday_trips": 202
     },
     {
       "community_area": "Lower West Side",
@@ -5006,7 +5006,7 @@
       "transit_burden": 0.0657,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 7,
-      "transit_weekday_trips": 202.0
+      "transit_weekday_trips": 202
     },
     {
       "community_area": "Lower West Side",
@@ -5136,7 +5136,7 @@
       "transit_burden": 0.1491,
       "transit_nearest_stop_miles": 0.203,
       "transit_route_count": 4,
-      "transit_weekday_trips": 83.0
+      "transit_weekday_trips": 83
     },
     {
       "community_area": "Armour Square",
@@ -5149,7 +5149,7 @@
       "transit_burden": 0.0211,
       "transit_nearest_stop_miles": 0.039,
       "transit_route_count": 7,
-      "transit_weekday_trips": 185.0
+      "transit_weekday_trips": 185
     },
     {
       "community_area": "Armour Square",
@@ -5201,7 +5201,7 @@
       "transit_burden": 0.0403,
       "transit_nearest_stop_miles": 0.076,
       "transit_route_count": 8,
-      "transit_weekday_trips": 269.0
+      "transit_weekday_trips": 269
     },
     {
       "community_area": "Douglas",
@@ -5214,7 +5214,7 @@
       "transit_burden": 0.1582,
       "transit_nearest_stop_miles": 0.297,
       "transit_route_count": 4,
-      "transit_weekday_trips": 272.0
+      "transit_weekday_trips": 272
     },
     {
       "community_area": "Douglas",
@@ -5227,7 +5227,7 @@
       "transit_burden": 0.0763,
       "transit_nearest_stop_miles": 0.143,
       "transit_route_count": 7,
-      "transit_weekday_trips": 272.0
+      "transit_weekday_trips": 272
     },
     {
       "community_area": "Douglas",
@@ -5240,7 +5240,7 @@
       "transit_burden": 0.0629,
       "transit_nearest_stop_miles": 0.118,
       "transit_route_count": 11,
-      "transit_weekday_trips": 272.0
+      "transit_weekday_trips": 272
     },
     {
       "community_area": "Douglas",
@@ -5253,7 +5253,7 @@
       "transit_burden": 0.0314,
       "transit_nearest_stop_miles": 0.059,
       "transit_route_count": 11,
-      "transit_weekday_trips": 266.0
+      "transit_weekday_trips": 266
     },
     {
       "community_area": "Oakland",
@@ -5266,7 +5266,7 @@
       "transit_burden": 0.0423,
       "transit_nearest_stop_miles": 0.079,
       "transit_route_count": 5,
-      "transit_weekday_trips": 272.0
+      "transit_weekday_trips": 272
     },
     {
       "community_area": "Grand Boulevard",
@@ -5279,7 +5279,7 @@
       "transit_burden": 0.0903,
       "transit_nearest_stop_miles": 0.169,
       "transit_route_count": 5,
-      "transit_weekday_trips": 161.0
+      "transit_weekday_trips": 161
     },
     {
       "community_area": "Grand Boulevard",
@@ -5292,7 +5292,7 @@
       "transit_burden": 0.0491,
       "transit_nearest_stop_miles": 0.092,
       "transit_route_count": 6,
-      "transit_weekday_trips": 161.0
+      "transit_weekday_trips": 161
     },
     {
       "community_area": "Grand Boulevard",
@@ -5305,7 +5305,7 @@
       "transit_burden": 0.0432,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 6,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Grand Boulevard",
@@ -5318,7 +5318,7 @@
       "transit_burden": 0.0314,
       "transit_nearest_stop_miles": 0.059,
       "transit_route_count": 6,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Grand Boulevard",
@@ -5344,12 +5344,12 @@
       "transit_burden": 0.0314,
       "transit_nearest_stop_miles": 0.059,
       "transit_route_count": 9,
-      "transit_weekday_trips": 255.0
+      "transit_weekday_trips": 255
     },
     {
       "community_area": "Grand Boulevard",
       "food_insecurity_population": 0,
-      "food_insecurity_rate": 0.0,
+      "food_insecurity_rate": null,
       "food_insecurity_universe": 0,
       "is_chicago": true,
       "scoring_context_version": "food-access-advisor-urban-context-v1",
@@ -5357,7 +5357,7 @@
       "transit_burden": 0.0384,
       "transit_nearest_stop_miles": 0.072,
       "transit_route_count": 7,
-      "transit_weekday_trips": 255.0
+      "transit_weekday_trips": 255
     },
     {
       "community_area": "Grand Boulevard",
@@ -5383,7 +5383,7 @@
       "transit_burden": 0.067,
       "transit_nearest_stop_miles": 0.126,
       "transit_route_count": 7,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Kenwood",
@@ -5422,7 +5422,7 @@
       "transit_burden": 0.065,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 4,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Kenwood",
@@ -5435,7 +5435,7 @@
       "transit_burden": 0.0646,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 6,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Kenwood",
@@ -5487,7 +5487,7 @@
       "transit_burden": 0.1246,
       "transit_nearest_stop_miles": 0.234,
       "transit_route_count": 7,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "Washington Park",
@@ -5526,7 +5526,7 @@
       "transit_burden": 0.0382,
       "transit_nearest_stop_miles": 0.072,
       "transit_route_count": 6,
-      "transit_weekday_trips": 144.0
+      "transit_weekday_trips": 144
     },
     {
       "community_area": "Hyde Park",
@@ -5565,7 +5565,7 @@
       "transit_burden": 0.0734,
       "transit_nearest_stop_miles": 0.138,
       "transit_route_count": 8,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "Hyde Park",
@@ -5578,7 +5578,7 @@
       "transit_burden": 0.0836,
       "transit_nearest_stop_miles": 0.157,
       "transit_route_count": 7,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "Hyde Park",
@@ -5695,7 +5695,7 @@
       "transit_burden": 0.0371,
       "transit_nearest_stop_miles": 0.069,
       "transit_route_count": 9,
-      "transit_weekday_trips": 221.0
+      "transit_weekday_trips": 221
     },
     {
       "community_area": "Woodlawn",
@@ -5708,7 +5708,7 @@
       "transit_burden": 0.037,
       "transit_nearest_stop_miles": 0.069,
       "transit_route_count": 9,
-      "transit_weekday_trips": 221.0
+      "transit_weekday_trips": 221
     },
     {
       "community_area": "Woodlawn",
@@ -5721,7 +5721,7 @@
       "transit_burden": 0.0318,
       "transit_nearest_stop_miles": 0.06,
       "transit_route_count": 10,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "Woodlawn",
@@ -5734,7 +5734,7 @@
       "transit_burden": 0.0317,
       "transit_nearest_stop_miles": 0.059,
       "transit_route_count": 7,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Woodlawn",
@@ -5747,7 +5747,7 @@
       "transit_burden": 0.1301,
       "transit_nearest_stop_miles": 0.244,
       "transit_route_count": 9,
-      "transit_weekday_trips": 161.0
+      "transit_weekday_trips": 161
     },
     {
       "community_area": "Woodlawn",
@@ -5760,7 +5760,7 @@
       "transit_burden": 0.0687,
       "transit_nearest_stop_miles": 0.129,
       "transit_route_count": 7,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Woodlawn",
@@ -5851,7 +5851,7 @@
       "transit_burden": 0.0643,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 6,
-      "transit_weekday_trips": 211.0
+      "transit_weekday_trips": 211
     },
     {
       "community_area": "South Shore",
@@ -5864,7 +5864,7 @@
       "transit_burden": 0.0611,
       "transit_nearest_stop_miles": 0.115,
       "transit_route_count": 7,
-      "transit_weekday_trips": 211.0
+      "transit_weekday_trips": 211
     },
     {
       "community_area": "South Shore",
@@ -5877,7 +5877,7 @@
       "transit_burden": 0.039,
       "transit_nearest_stop_miles": 0.073,
       "transit_route_count": 5,
-      "transit_weekday_trips": 190.0
+      "transit_weekday_trips": 190
     },
     {
       "community_area": "South Shore",
@@ -5890,7 +5890,7 @@
       "transit_burden": 0.0647,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 7,
-      "transit_weekday_trips": 211.0
+      "transit_weekday_trips": 211
     },
     {
       "community_area": "South Shore",
@@ -5903,7 +5903,7 @@
       "transit_burden": 0.0643,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 6,
-      "transit_weekday_trips": 211.0
+      "transit_weekday_trips": 211
     },
     {
       "community_area": "South Shore",
@@ -5929,7 +5929,7 @@
       "transit_burden": 0.0686,
       "transit_nearest_stop_miles": 0.129,
       "transit_route_count": 6,
-      "transit_weekday_trips": 244.0
+      "transit_weekday_trips": 244
     },
     {
       "community_area": "South Shore",
@@ -5942,7 +5942,7 @@
       "transit_burden": 0.0217,
       "transit_nearest_stop_miles": 0.041,
       "transit_route_count": 6,
-      "transit_weekday_trips": 244.0
+      "transit_weekday_trips": 244
     },
     {
       "community_area": "South Shore",
@@ -5981,7 +5981,7 @@
       "transit_burden": 0.1781,
       "transit_nearest_stop_miles": 0.193,
       "transit_route_count": 3,
-      "transit_weekday_trips": 158.0
+      "transit_weekday_trips": 158
     },
     {
       "community_area": "Chatham",
@@ -6007,7 +6007,7 @@
       "transit_burden": 0.1321,
       "transit_nearest_stop_miles": 0.248,
       "transit_route_count": 4,
-      "transit_weekday_trips": 158.0
+      "transit_weekday_trips": 158
     },
     {
       "community_area": "Chatham",
@@ -6046,7 +6046,7 @@
       "transit_burden": 0.0661,
       "transit_nearest_stop_miles": 0.124,
       "transit_route_count": 4,
-      "transit_weekday_trips": 158.0
+      "transit_weekday_trips": 158
     },
     {
       "community_area": "Chatham",
@@ -6059,7 +6059,7 @@
       "transit_burden": 0.0408,
       "transit_nearest_stop_miles": 0.077,
       "transit_route_count": 5,
-      "transit_weekday_trips": 244.0
+      "transit_weekday_trips": 244
     },
     {
       "community_area": "Chatham",
@@ -6072,7 +6072,7 @@
       "transit_burden": 0.1176,
       "transit_nearest_stop_miles": 0.221,
       "transit_route_count": 7,
-      "transit_weekday_trips": 278.0
+      "transit_weekday_trips": 278
     },
     {
       "community_area": "Avalon Park",
@@ -6085,7 +6085,7 @@
       "transit_burden": 0.0883,
       "transit_nearest_stop_miles": 0.166,
       "transit_route_count": 5,
-      "transit_weekday_trips": 201.0
+      "transit_weekday_trips": 201
     },
     {
       "community_area": "South Chicago",
@@ -6098,7 +6098,7 @@
       "transit_burden": 0.8701,
       "transit_nearest_stop_miles": 0.506,
       "transit_route_count": 0,
-      "transit_weekday_trips": 0.0
+      "transit_weekday_trips": 0
     },
     {
       "community_area": "South Chicago",
@@ -6202,7 +6202,7 @@
       "transit_burden": 0.0887,
       "transit_nearest_stop_miles": 0.166,
       "transit_route_count": 5,
-      "transit_weekday_trips": 244.0
+      "transit_weekday_trips": 244
     },
     {
       "community_area": "Calumet Heights",
@@ -6215,7 +6215,7 @@
       "transit_burden": 0.0032,
       "transit_nearest_stop_miles": 0.006,
       "transit_route_count": 5,
-      "transit_weekday_trips": 200.0
+      "transit_weekday_trips": 200
     },
     {
       "community_area": "Calumet Heights",
@@ -6254,7 +6254,7 @@
       "transit_burden": 0.0164,
       "transit_nearest_stop_miles": 0.031,
       "transit_route_count": 6,
-      "transit_weekday_trips": 200.0
+      "transit_weekday_trips": 200
     },
     {
       "community_area": "Calumet Heights",
@@ -6345,7 +6345,7 @@
       "transit_burden": 0.0748,
       "transit_nearest_stop_miles": 0.14,
       "transit_route_count": 6,
-      "transit_weekday_trips": 224.0
+      "transit_weekday_trips": 224
     },
     {
       "community_area": "Roseland",
@@ -6423,7 +6423,7 @@
       "transit_burden": 0.1001,
       "transit_nearest_stop_miles": 0.188,
       "transit_route_count": 6,
-      "transit_weekday_trips": 262.0
+      "transit_weekday_trips": 262
     },
     {
       "community_area": "Pullman",
@@ -6449,7 +6449,7 @@
       "transit_burden": 0.1705,
       "transit_nearest_stop_miles": 0.32,
       "transit_route_count": 4,
-      "transit_weekday_trips": 183.0
+      "transit_weekday_trips": 183
     },
     {
       "community_area": "Pullman",
@@ -6462,7 +6462,7 @@
       "transit_burden": 0.1296,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 4,
-      "transit_weekday_trips": 262.0
+      "transit_weekday_trips": 262
     },
     {
       "community_area": "South Deering",
@@ -6475,7 +6475,7 @@
       "transit_burden": 0.1829,
       "transit_nearest_stop_miles": 0.062,
       "transit_route_count": 2,
-      "transit_weekday_trips": 96.0
+      "transit_weekday_trips": 96
     },
     {
       "community_area": "South Deering",
@@ -6488,7 +6488,7 @@
       "transit_burden": 0.0227,
       "transit_nearest_stop_miles": 0.042,
       "transit_route_count": 5,
-      "transit_weekday_trips": 200.0
+      "transit_weekday_trips": 200
     },
     {
       "community_area": "South Deering",
@@ -6501,7 +6501,7 @@
       "transit_burden": 0.103,
       "transit_nearest_stop_miles": 0.053,
       "transit_route_count": 3,
-      "transit_weekday_trips": 200.0
+      "transit_weekday_trips": 200
     },
     {
       "community_area": "East Side",
@@ -6514,7 +6514,7 @@
       "transit_burden": 0.3085,
       "transit_nearest_stop_miles": 0.297,
       "transit_route_count": 2,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "East Side",
@@ -6527,7 +6527,7 @@
       "transit_burden": 0.2967,
       "transit_nearest_stop_miles": 0.275,
       "transit_route_count": 2,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "East Side",
@@ -6540,7 +6540,7 @@
       "transit_burden": 0.136,
       "transit_nearest_stop_miles": 0.114,
       "transit_route_count": 3,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "East Side",
@@ -6553,7 +6553,7 @@
       "transit_burden": 0.0876,
       "transit_nearest_stop_miles": 0.024,
       "transit_route_count": 3,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "East Side",
@@ -6566,7 +6566,7 @@
       "transit_burden": 0.381,
       "transit_nearest_stop_miles": 0.199,
       "transit_route_count": 2,
-      "transit_weekday_trips": 56.0
+      "transit_weekday_trips": 56
     },
     {
       "community_area": "East Side",
@@ -6579,7 +6579,7 @@
       "transit_burden": 0.2953,
       "transit_nearest_stop_miles": 0.038,
       "transit_route_count": 2,
-      "transit_weekday_trips": 56.0
+      "transit_weekday_trips": 56
     },
     {
       "community_area": "West Pullman",
@@ -6592,7 +6592,7 @@
       "transit_burden": 0.0733,
       "transit_nearest_stop_miles": 0.138,
       "transit_route_count": 5,
-      "transit_weekday_trips": 262.0
+      "transit_weekday_trips": 262
     },
     {
       "community_area": "West Pullman",
@@ -6618,7 +6618,7 @@
       "transit_burden": 0.1322,
       "transit_nearest_stop_miles": 0.248,
       "transit_route_count": 5,
-      "transit_weekday_trips": 142.0
+      "transit_weekday_trips": 142
     },
     {
       "community_area": "West Pullman",
@@ -6709,7 +6709,7 @@
       "transit_burden": 0.9369,
       "transit_nearest_stop_miles": 0.632,
       "transit_route_count": 0,
-      "transit_weekday_trips": 0.0
+      "transit_weekday_trips": 0
     },
     {
       "community_area": "Hegewisch",
@@ -6722,7 +6722,7 @@
       "transit_burden": 0.4602,
       "transit_nearest_stop_miles": 0.195,
       "transit_route_count": 1,
-      "transit_weekday_trips": 54.0
+      "transit_weekday_trips": 54
     },
     {
       "community_area": "Hegewisch",
@@ -6735,7 +6735,7 @@
       "transit_burden": 0.9593,
       "transit_nearest_stop_miles": 0.674,
       "transit_route_count": 0,
-      "transit_weekday_trips": 0.0
+      "transit_weekday_trips": 0
     },
     {
       "community_area": "Garfield Ridge",
@@ -6748,7 +6748,7 @@
       "transit_burden": 0.4032,
       "transit_nearest_stop_miles": 0.094,
       "transit_route_count": 1,
-      "transit_weekday_trips": 55.0
+      "transit_weekday_trips": 55
     },
     {
       "community_area": "Garfield Ridge",
@@ -6761,7 +6761,7 @@
       "transit_burden": 0.2728,
       "transit_nearest_stop_miles": 0.23,
       "transit_route_count": 2,
-      "transit_weekday_trips": 173.0
+      "transit_weekday_trips": 173
     },
     {
       "community_area": "Garfield Ridge",
@@ -6774,7 +6774,7 @@
       "transit_burden": 0.1317,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 4,
-      "transit_weekday_trips": 174.0
+      "transit_weekday_trips": 174
     },
     {
       "community_area": "Garfield Ridge",
@@ -6787,7 +6787,7 @@
       "transit_burden": 0.0631,
       "transit_nearest_stop_miles": 0.118,
       "transit_route_count": 4,
-      "transit_weekday_trips": 214.0
+      "transit_weekday_trips": 214
     },
     {
       "community_area": "Garfield Ridge",
@@ -6800,7 +6800,7 @@
       "transit_burden": 0.0048,
       "transit_nearest_stop_miles": 0.009,
       "transit_route_count": 4,
-      "transit_weekday_trips": 133.0
+      "transit_weekday_trips": 133
     },
     {
       "community_area": "Garfield Ridge",
@@ -6813,7 +6813,7 @@
       "transit_burden": 0.0723,
       "transit_nearest_stop_miles": 0.136,
       "transit_route_count": 4,
-      "transit_weekday_trips": 133.0
+      "transit_weekday_trips": 133
     },
     {
       "community_area": "Garfield Ridge",
@@ -6826,7 +6826,7 @@
       "transit_burden": 0.279,
       "transit_nearest_stop_miles": 0.242,
       "transit_route_count": 2,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Garfield Ridge",
@@ -6839,7 +6839,7 @@
       "transit_burden": 0.2818,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 2,
-      "transit_weekday_trips": 133.0
+      "transit_weekday_trips": 133
     },
     {
       "community_area": "Garfield Ridge",
@@ -6852,7 +6852,7 @@
       "transit_burden": 0.0645,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 4,
-      "transit_weekday_trips": 133.0
+      "transit_weekday_trips": 133
     },
     {
       "community_area": "Archer Heights",
@@ -6865,7 +6865,7 @@
       "transit_burden": 0.3599,
       "transit_nearest_stop_miles": 0.253,
       "transit_route_count": 1,
-      "transit_weekday_trips": 157.0
+      "transit_weekday_trips": 157
     },
     {
       "community_area": "Archer Heights",
@@ -6878,7 +6878,7 @@
       "transit_burden": 0.335,
       "transit_nearest_stop_miles": 0.347,
       "transit_route_count": 2,
-      "transit_weekday_trips": 157.0
+      "transit_weekday_trips": 157
     },
     {
       "community_area": "Archer Heights",
@@ -6930,7 +6930,7 @@
       "transit_burden": 0.0789,
       "transit_nearest_stop_miles": 0.148,
       "transit_route_count": 7,
-      "transit_weekday_trips": 194.0
+      "transit_weekday_trips": 194
     },
     {
       "community_area": "Brighton Park",
@@ -6943,7 +6943,7 @@
       "transit_burden": 0.0211,
       "transit_nearest_stop_miles": 0.04,
       "transit_route_count": 4,
-      "transit_weekday_trips": 198.0
+      "transit_weekday_trips": 198
     },
     {
       "community_area": "Brighton Park",
@@ -6956,7 +6956,7 @@
       "transit_burden": 0.1089,
       "transit_nearest_stop_miles": 0.064,
       "transit_route_count": 3,
-      "transit_weekday_trips": 198.0
+      "transit_weekday_trips": 198
     },
     {
       "community_area": "Brighton Park",
@@ -6969,7 +6969,7 @@
       "transit_burden": 0.1163,
       "transit_nearest_stop_miles": 0.218,
       "transit_route_count": 4,
-      "transit_weekday_trips": 115.0
+      "transit_weekday_trips": 115
     },
     {
       "community_area": "Brighton Park",
@@ -6982,7 +6982,7 @@
       "transit_burden": 0.0868,
       "transit_nearest_stop_miles": 0.163,
       "transit_route_count": 4,
-      "transit_weekday_trips": 97.0
+      "transit_weekday_trips": 97
     },
     {
       "community_area": "Brighton Park",
@@ -6995,7 +6995,7 @@
       "transit_burden": 0.0735,
       "transit_nearest_stop_miles": 0.138,
       "transit_route_count": 4,
-      "transit_weekday_trips": 125.0
+      "transit_weekday_trips": 125
     },
     {
       "community_area": "Brighton Park",
@@ -7008,7 +7008,7 @@
       "transit_burden": 0.0638,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Brighton Park",
@@ -7021,7 +7021,7 @@
       "transit_burden": 0.0844,
       "transit_nearest_stop_miles": 0.158,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Brighton Park",
@@ -7034,7 +7034,7 @@
       "transit_burden": 0.0653,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 6,
-      "transit_weekday_trips": 235.0
+      "transit_weekday_trips": 235
     },
     {
       "community_area": "Mckinley Park",
@@ -7047,7 +7047,7 @@
       "transit_burden": 0.0658,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 7,
-      "transit_weekday_trips": 596.0
+      "transit_weekday_trips": 596
     },
     {
       "community_area": "Mckinley Park",
@@ -7060,7 +7060,7 @@
       "transit_burden": 0.1306,
       "transit_nearest_stop_miles": 0.245,
       "transit_route_count": 7,
-      "transit_weekday_trips": 596.0
+      "transit_weekday_trips": 596
     },
     {
       "community_area": "Mckinley Park",
@@ -7086,7 +7086,7 @@
       "transit_burden": 0.0638,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 5,
-      "transit_weekday_trips": 257.0
+      "transit_weekday_trips": 257
     },
     {
       "community_area": "Bridgeport",
@@ -7099,7 +7099,7 @@
       "transit_burden": 0.0169,
       "transit_nearest_stop_miles": 0.032,
       "transit_route_count": 5,
-      "transit_weekday_trips": 140.0
+      "transit_weekday_trips": 140
     },
     {
       "community_area": "Bridgeport",
@@ -7125,7 +7125,7 @@
       "transit_burden": 0.0532,
       "transit_nearest_stop_miles": 0.1,
       "transit_route_count": 4,
-      "transit_weekday_trips": 134.0
+      "transit_weekday_trips": 134
     },
     {
       "community_area": "New City",
@@ -7138,7 +7138,7 @@
       "transit_burden": 0.3283,
       "transit_nearest_stop_miles": 0.475,
       "transit_route_count": 3,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "New City",
@@ -7164,7 +7164,7 @@
       "transit_burden": 0.1338,
       "transit_nearest_stop_miles": 0.251,
       "transit_route_count": 8,
-      "transit_weekday_trips": 255.0
+      "transit_weekday_trips": 255
     },
     {
       "community_area": "New City",
@@ -7216,7 +7216,7 @@
       "transit_burden": 0.1131,
       "transit_nearest_stop_miles": 0.212,
       "transit_route_count": 7,
-      "transit_weekday_trips": 264.0
+      "transit_weekday_trips": 264
     },
     {
       "community_area": "New City",
@@ -7229,7 +7229,7 @@
       "transit_burden": 0.0664,
       "transit_nearest_stop_miles": 0.125,
       "transit_route_count": 6,
-      "transit_weekday_trips": 264.0
+      "transit_weekday_trips": 264
     },
     {
       "community_area": "New City",
@@ -7307,7 +7307,7 @@
       "transit_burden": 0.0662,
       "transit_nearest_stop_miles": 0.124,
       "transit_route_count": 4,
-      "transit_weekday_trips": 184.0
+      "transit_weekday_trips": 184
     },
     {
       "community_area": "West Elsdon",
@@ -7372,7 +7372,7 @@
       "transit_burden": 0.1331,
       "transit_nearest_stop_miles": 0.25,
       "transit_route_count": 6,
-      "transit_weekday_trips": 552.0
+      "transit_weekday_trips": 552
     },
     {
       "community_area": "Gage Park",
@@ -7385,7 +7385,7 @@
       "transit_burden": 0.1321,
       "transit_nearest_stop_miles": 0.248,
       "transit_route_count": 5,
-      "transit_weekday_trips": 215.0
+      "transit_weekday_trips": 215
     },
     {
       "community_area": "Gage Park",
@@ -7398,7 +7398,7 @@
       "transit_burden": 0.1314,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 5,
-      "transit_weekday_trips": 264.0
+      "transit_weekday_trips": 264
     },
     {
       "community_area": "Gage Park",
@@ -7411,7 +7411,7 @@
       "transit_burden": 0.0062,
       "transit_nearest_stop_miles": 0.012,
       "transit_route_count": 7,
-      "transit_weekday_trips": 264.0
+      "transit_weekday_trips": 264
     },
     {
       "community_area": "Gage Park",
@@ -7424,7 +7424,7 @@
       "transit_burden": 0.1304,
       "transit_nearest_stop_miles": 0.244,
       "transit_route_count": 5,
-      "transit_weekday_trips": 166.0
+      "transit_weekday_trips": 166
     },
     {
       "community_area": "Gage Park",
@@ -7437,7 +7437,7 @@
       "transit_burden": 0.1316,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 4,
-      "transit_weekday_trips": 166.0
+      "transit_weekday_trips": 166
     },
     {
       "community_area": "Clearing",
@@ -7463,7 +7463,7 @@
       "transit_burden": 0.1945,
       "transit_nearest_stop_miles": 0.007,
       "transit_route_count": 3,
-      "transit_weekday_trips": 59.0
+      "transit_weekday_trips": 59
     },
     {
       "community_area": "Clearing",
@@ -7476,7 +7476,7 @@
       "transit_burden": 0.3975,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 2,
-      "transit_weekday_trips": 59.0
+      "transit_weekday_trips": 59
     },
     {
       "community_area": "Clearing",
@@ -7489,7 +7489,7 @@
       "transit_burden": 0.1892,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 3,
-      "transit_weekday_trips": 80.0
+      "transit_weekday_trips": 80
     },
     {
       "community_area": "Clearing",
@@ -7502,7 +7502,7 @@
       "transit_burden": 0.194,
       "transit_nearest_stop_miles": 0.006,
       "transit_route_count": 3,
-      "transit_weekday_trips": 59.0
+      "transit_weekday_trips": 59
     },
     {
       "community_area": "Clearing",
@@ -7515,7 +7515,7 @@
       "transit_burden": 0.2364,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 3,
-      "transit_weekday_trips": 65.0
+      "transit_weekday_trips": 65
     },
     {
       "community_area": "Clearing",
@@ -7619,7 +7619,7 @@
       "transit_burden": 0.0305,
       "transit_nearest_stop_miles": 0.057,
       "transit_route_count": 5,
-      "transit_weekday_trips": 189.0
+      "transit_weekday_trips": 189
     },
     {
       "community_area": "Chicago Lawn",
@@ -7632,7 +7632,7 @@
       "transit_burden": 0.0992,
       "transit_nearest_stop_miles": 0.186,
       "transit_route_count": 5,
-      "transit_weekday_trips": 189.0
+      "transit_weekday_trips": 189
     },
     {
       "community_area": "Chicago Lawn",
@@ -7645,7 +7645,7 @@
       "transit_burden": 0.1296,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 4,
-      "transit_weekday_trips": 189.0
+      "transit_weekday_trips": 189
     },
     {
       "community_area": "Chicago Lawn",
@@ -7658,7 +7658,7 @@
       "transit_burden": 0.2067,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 3,
-      "transit_weekday_trips": 189.0
+      "transit_weekday_trips": 189
     },
     {
       "community_area": "Chicago Lawn",
@@ -7671,7 +7671,7 @@
       "transit_burden": 0.0786,
       "transit_nearest_stop_miles": 0.007,
       "transit_route_count": 3,
-      "transit_weekday_trips": 150.0
+      "transit_weekday_trips": 150
     },
     {
       "community_area": "Chicago Lawn",
@@ -7697,7 +7697,7 @@
       "transit_burden": 0.079,
       "transit_nearest_stop_miles": 0.008,
       "transit_route_count": 3,
-      "transit_weekday_trips": 150.0
+      "transit_weekday_trips": 150
     },
     {
       "community_area": "Chicago Lawn",
@@ -7801,7 +7801,7 @@
       "transit_burden": 0.0069,
       "transit_nearest_stop_miles": 0.013,
       "transit_route_count": 6,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "West Englewood",
@@ -7996,7 +7996,7 @@
       "transit_burden": 0.0648,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 4,
-      "transit_weekday_trips": 145.0
+      "transit_weekday_trips": 145
     },
     {
       "community_area": "Englewood",
@@ -8022,7 +8022,7 @@
       "transit_burden": 0.1308,
       "transit_nearest_stop_miles": 0.245,
       "transit_route_count": 5,
-      "transit_weekday_trips": 145.0
+      "transit_weekday_trips": 145
     },
     {
       "community_area": "Englewood",
@@ -8035,7 +8035,7 @@
       "transit_burden": 0.0031,
       "transit_nearest_stop_miles": 0.006,
       "transit_route_count": 4,
-      "transit_weekday_trips": 124.0
+      "transit_weekday_trips": 124
     },
     {
       "community_area": "Englewood",
@@ -8048,7 +8048,7 @@
       "transit_burden": 0.033,
       "transit_nearest_stop_miles": 0.062,
       "transit_route_count": 4,
-      "transit_weekday_trips": 124.0
+      "transit_weekday_trips": 124
     },
     {
       "community_area": "Englewood",
@@ -8061,7 +8061,7 @@
       "transit_burden": 0.1265,
       "transit_nearest_stop_miles": 0.097,
       "transit_route_count": 3,
-      "transit_weekday_trips": 119.0
+      "transit_weekday_trips": 119
     },
     {
       "community_area": "Englewood",
@@ -8074,7 +8074,7 @@
       "transit_burden": 0.0673,
       "transit_nearest_stop_miles": 0.126,
       "transit_route_count": 4,
-      "transit_weekday_trips": 155.0
+      "transit_weekday_trips": 155
     },
     {
       "community_area": "Greater Grand Crossing",
@@ -8126,7 +8126,7 @@
       "transit_burden": 0.1311,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 6,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Greater Grand Crossing",
@@ -8139,7 +8139,7 @@
       "transit_burden": 0.1295,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 8,
-      "transit_weekday_trips": 251.0
+      "transit_weekday_trips": 251
     },
     {
       "community_area": "Greater Grand Crossing",
@@ -8152,7 +8152,7 @@
       "transit_burden": 0.0103,
       "transit_nearest_stop_miles": 0.019,
       "transit_route_count": 4,
-      "transit_weekday_trips": 251.0
+      "transit_weekday_trips": 251
     },
     {
       "community_area": "Greater Grand Crossing",
@@ -8178,7 +8178,7 @@
       "transit_burden": 0.1302,
       "transit_nearest_stop_miles": 0.244,
       "transit_route_count": 7,
-      "transit_weekday_trips": 251.0
+      "transit_weekday_trips": 251
     },
     {
       "community_area": "Greater Grand Crossing",
@@ -8217,7 +8217,7 @@
       "transit_burden": 0.2085,
       "transit_nearest_stop_miles": 0.25,
       "transit_route_count": 3,
-      "transit_weekday_trips": 168.0
+      "transit_weekday_trips": 168
     },
     {
       "community_area": "Ashburn",
@@ -8243,7 +8243,7 @@
       "transit_burden": 0.3586,
       "transit_nearest_stop_miles": 0.251,
       "transit_route_count": 1,
-      "transit_weekday_trips": 162.0
+      "transit_weekday_trips": 162
     },
     {
       "community_area": "Ashburn",
@@ -8269,7 +8269,7 @@
       "transit_burden": 0.2988,
       "transit_nearest_stop_miles": 0.279,
       "transit_route_count": 2,
-      "transit_weekday_trips": 163.0
+      "transit_weekday_trips": 163
     },
     {
       "community_area": "Ashburn",
@@ -8282,7 +8282,7 @@
       "transit_burden": 0.3037,
       "transit_nearest_stop_miles": 0.212,
       "transit_route_count": 2,
-      "transit_weekday_trips": 83.0
+      "transit_weekday_trips": 83
     },
     {
       "community_area": "Ashburn",
@@ -8295,7 +8295,7 @@
       "transit_burden": 0.21,
       "transit_nearest_stop_miles": 0.253,
       "transit_route_count": 3,
-      "transit_weekday_trips": 252.0
+      "transit_weekday_trips": 252
     },
     {
       "community_area": "Ashburn",
@@ -8321,7 +8321,7 @@
       "transit_burden": 0.0672,
       "transit_nearest_stop_miles": 0.126,
       "transit_route_count": 6,
-      "transit_weekday_trips": 295.0
+      "transit_weekday_trips": 295
     },
     {
       "community_area": "Auburn Gresham",
@@ -8334,7 +8334,7 @@
       "transit_burden": 0.0752,
       "transit_nearest_stop_miles": 0.141,
       "transit_route_count": 5,
-      "transit_weekday_trips": 213.0
+      "transit_weekday_trips": 213
     },
     {
       "community_area": "Auburn Gresham",
@@ -8360,7 +8360,7 @@
       "transit_burden": 0.0618,
       "transit_nearest_stop_miles": 0.116,
       "transit_route_count": 7,
-      "transit_weekday_trips": 291.0
+      "transit_weekday_trips": 291
     },
     {
       "community_area": "Auburn Gresham",
@@ -8373,7 +8373,7 @@
       "transit_burden": 0.0686,
       "transit_nearest_stop_miles": 0.129,
       "transit_route_count": 6,
-      "transit_weekday_trips": 291.0
+      "transit_weekday_trips": 291
     },
     {
       "community_area": "Auburn Gresham",
@@ -8412,7 +8412,7 @@
       "transit_burden": 0.0988,
       "transit_nearest_stop_miles": 0.185,
       "transit_route_count": 5,
-      "transit_weekday_trips": 279.0
+      "transit_weekday_trips": 279
     },
     {
       "community_area": "Auburn Gresham",
@@ -8438,7 +8438,7 @@
       "transit_burden": 0.1305,
       "transit_nearest_stop_miles": 0.245,
       "transit_route_count": 4,
-      "transit_weekday_trips": 204.0
+      "transit_weekday_trips": 204
     },
     {
       "community_area": "Auburn Gresham",
@@ -8464,7 +8464,7 @@
       "transit_burden": 0.0831,
       "transit_nearest_stop_miles": 0.156,
       "transit_route_count": 5,
-      "transit_weekday_trips": 290.0
+      "transit_weekday_trips": 290
     },
     {
       "community_area": "Auburn Gresham",
@@ -8477,7 +8477,7 @@
       "transit_burden": 0.0815,
       "transit_nearest_stop_miles": 0.153,
       "transit_route_count": 5,
-      "transit_weekday_trips": 290.0
+      "transit_weekday_trips": 290
     },
     {
       "community_area": "Auburn Gresham",
@@ -8490,7 +8490,7 @@
       "transit_burden": 0.0847,
       "transit_nearest_stop_miles": 0.159,
       "transit_route_count": 4,
-      "transit_weekday_trips": 204.0
+      "transit_weekday_trips": 204
     },
     {
       "community_area": "Auburn Gresham",
@@ -8503,7 +8503,7 @@
       "transit_burden": 0.2047,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 3,
-      "transit_weekday_trips": 162.0
+      "transit_weekday_trips": 162
     },
     {
       "community_area": "Beverly",
@@ -8516,7 +8516,7 @@
       "transit_burden": 0.4303,
       "transit_nearest_stop_miles": 0.385,
       "transit_route_count": 1,
-      "transit_weekday_trips": 113.0
+      "transit_weekday_trips": 113
     },
     {
       "community_area": "Beverly",
@@ -8529,7 +8529,7 @@
       "transit_burden": 0.4307,
       "transit_nearest_stop_miles": 0.339,
       "transit_route_count": 2,
-      "transit_weekday_trips": 64.0
+      "transit_weekday_trips": 64
     },
     {
       "community_area": "Beverly",
@@ -8542,7 +8542,7 @@
       "transit_burden": 0.4822,
       "transit_nearest_stop_miles": 0.482,
       "transit_route_count": 1,
-      "transit_weekday_trips": 113.0
+      "transit_weekday_trips": 113
     },
     {
       "community_area": "Beverly",
@@ -8555,7 +8555,7 @@
       "transit_burden": 0.4551,
       "transit_nearest_stop_miles": 0.244,
       "transit_route_count": 1,
-      "transit_weekday_trips": 64.0
+      "transit_weekday_trips": 64
     },
     {
       "community_area": "Beverly",
@@ -8568,7 +8568,7 @@
       "transit_burden": 0.453,
       "transit_nearest_stop_miles": 0.24,
       "transit_route_count": 1,
-      "transit_weekday_trips": 64.0
+      "transit_weekday_trips": 64
     },
     {
       "community_area": "Beverly",
@@ -8581,7 +8581,7 @@
       "transit_burden": 0.4591,
       "transit_nearest_stop_miles": 0.251,
       "transit_route_count": 1,
-      "transit_weekday_trips": 64.0
+      "transit_weekday_trips": 64
     },
     {
       "community_area": "Beverly",
@@ -8594,7 +8594,7 @@
       "transit_burden": 0.2062,
       "transit_nearest_stop_miles": 0.246,
       "transit_route_count": 3,
-      "transit_weekday_trips": 169.0
+      "transit_weekday_trips": 169
     },
     {
       "community_area": "Washington Heights",
@@ -8633,7 +8633,7 @@
       "transit_burden": 0.1419,
       "transit_nearest_stop_miles": 0.266,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "Washington Heights",
@@ -8659,7 +8659,7 @@
       "transit_burden": 0.0231,
       "transit_nearest_stop_miles": 0.043,
       "transit_route_count": 5,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "Washington Heights",
@@ -8698,7 +8698,7 @@
       "transit_burden": 0.137,
       "transit_nearest_stop_miles": 0.257,
       "transit_route_count": 5,
-      "transit_weekday_trips": 169.0
+      "transit_weekday_trips": 169
     },
     {
       "community_area": "Mount Greenwood",
@@ -8711,7 +8711,7 @@
       "transit_burden": 0.2936,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 2,
-      "transit_weekday_trips": 71.0
+      "transit_weekday_trips": 71
     },
     {
       "community_area": "Mount Greenwood",
@@ -8737,7 +8737,7 @@
       "transit_burden": 0.3228,
       "transit_nearest_stop_miles": 0.248,
       "transit_route_count": 2,
-      "transit_weekday_trips": 83.0
+      "transit_weekday_trips": 83
     },
     {
       "community_area": "Mount Greenwood",
@@ -8776,7 +8776,7 @@
       "transit_burden": 0.285,
       "transit_nearest_stop_miles": 0.253,
       "transit_route_count": 2,
-      "transit_weekday_trips": 137.0
+      "transit_weekday_trips": 137
     },
     {
       "community_area": "Morgan Park",
@@ -8789,7 +8789,7 @@
       "transit_burden": 0.4479,
       "transit_nearest_stop_miles": 0.248,
       "transit_route_count": 1,
-      "transit_weekday_trips": 67.0
+      "transit_weekday_trips": 67
     },
     {
       "community_area": "Morgan Park",
@@ -8802,7 +8802,7 @@
       "transit_burden": 0.5394,
       "transit_nearest_stop_miles": 0.42,
       "transit_route_count": 1,
-      "transit_weekday_trips": 67.0
+      "transit_weekday_trips": 67
     },
     {
       "community_area": "Morgan Park",
@@ -8815,7 +8815,7 @@
       "transit_burden": 0.1064,
       "transit_nearest_stop_miles": 0.199,
       "transit_route_count": 4,
-      "transit_weekday_trips": 141.0
+      "transit_weekday_trips": 141
     },
     {
       "community_area": "Morgan Park",
@@ -8828,7 +8828,7 @@
       "transit_burden": 0.1319,
       "transit_nearest_stop_miles": 0.247,
       "transit_route_count": 4,
-      "transit_weekday_trips": 102.0
+      "transit_weekday_trips": 102
     },
     {
       "community_area": "O'Hare",
@@ -8854,7 +8854,7 @@
       "transit_burden": 0.425,
       "transit_nearest_stop_miles": 0.375,
       "transit_route_count": 1,
-      "transit_weekday_trips": 176.0
+      "transit_weekday_trips": 176
     },
     {
       "community_area": "O'Hare",
@@ -8867,7 +8867,7 @@
       "transit_burden": 0.4522,
       "transit_nearest_stop_miles": 0.121,
       "transit_route_count": 1,
-      "transit_weekday_trips": 44.0
+      "transit_weekday_trips": 44
     },
     {
       "community_area": null,
@@ -15887,7 +15887,7 @@
       "transit_burden": 0.3552,
       "transit_nearest_stop_miles": 0.244,
       "transit_route_count": 1,
-      "transit_weekday_trips": 157.0
+      "transit_weekday_trips": 157
     },
     {
       "community_area": "Rogers Park",
@@ -15926,7 +15926,7 @@
       "transit_burden": 0.0665,
       "transit_nearest_stop_miles": 0.125,
       "transit_route_count": 5,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "Logan Square",
@@ -15939,7 +15939,7 @@
       "transit_burden": 0.0818,
       "transit_nearest_stop_miles": 0.153,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Logan Square",
@@ -16004,7 +16004,7 @@
       "transit_burden": 0.1539,
       "transit_nearest_stop_miles": 0.148,
       "transit_route_count": 3,
-      "transit_weekday_trips": 126.0
+      "transit_weekday_trips": 126
     },
     {
       "community_area": "Belmont Cragin",
@@ -16056,7 +16056,7 @@
       "transit_burden": 0.1553,
       "transit_nearest_stop_miles": 0.151,
       "transit_route_count": 3,
-      "transit_weekday_trips": 139.0
+      "transit_weekday_trips": 139
     },
     {
       "community_area": "Lake View",
@@ -16108,7 +16108,7 @@
       "transit_burden": 0.0678,
       "transit_nearest_stop_miles": 0.127,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Logan Square",
@@ -16134,7 +16134,7 @@
       "transit_burden": 0.0642,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Lincoln Park",
@@ -16186,7 +16186,7 @@
       "transit_burden": 0.1336,
       "transit_nearest_stop_miles": 0.25,
       "transit_route_count": 7,
-      "transit_weekday_trips": 250.0
+      "transit_weekday_trips": 250
     },
     {
       "community_area": "Near West Side",
@@ -16199,7 +16199,7 @@
       "transit_burden": 0.0499,
       "transit_nearest_stop_miles": 0.094,
       "transit_route_count": 6,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "Near West Side",
@@ -16277,7 +16277,7 @@
       "transit_burden": 0.1296,
       "transit_nearest_stop_miles": 0.243,
       "transit_route_count": 5,
-      "transit_weekday_trips": 144.0
+      "transit_weekday_trips": 144
     },
     {
       "community_area": "Washington Park",
@@ -16329,7 +16329,7 @@
       "transit_burden": 0.0179,
       "transit_nearest_stop_miles": 0.034,
       "transit_route_count": 5,
-      "transit_weekday_trips": 145.0
+      "transit_weekday_trips": 145
     },
     {
       "community_area": "West Englewood",
@@ -16355,7 +16355,7 @@
       "transit_burden": 0.0599,
       "transit_nearest_stop_miles": 0.112,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Gage Park",
@@ -16368,7 +16368,7 @@
       "transit_burden": 0.0601,
       "transit_nearest_stop_miles": 0.113,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Garfield Ridge",
@@ -16381,7 +16381,7 @@
       "transit_burden": 0.058,
       "transit_nearest_stop_miles": 0.109,
       "transit_route_count": 7,
-      "transit_weekday_trips": 217.0
+      "transit_weekday_trips": 217
     },
     {
       "community_area": "Fuller Park",
@@ -16394,7 +16394,7 @@
       "transit_burden": 0.0207,
       "transit_nearest_stop_miles": 0.039,
       "transit_route_count": 9,
-      "transit_weekday_trips": 255.0
+      "transit_weekday_trips": 255
     },
     {
       "community_area": "Fuller Park",
@@ -16407,7 +16407,7 @@
       "transit_burden": 0.0035,
       "transit_nearest_stop_miles": 0.007,
       "transit_route_count": 7,
-      "transit_weekday_trips": 236.0
+      "transit_weekday_trips": 236
     },
     {
       "community_area": "Grand Boulevard",
@@ -16433,7 +16433,7 @@
       "transit_burden": 0.0987,
       "transit_nearest_stop_miles": 0.185,
       "transit_route_count": 6,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Washington Park",
@@ -16459,7 +16459,7 @@
       "transit_burden": 0.0315,
       "transit_nearest_stop_miles": 0.059,
       "transit_route_count": 8,
-      "transit_weekday_trips": 221.0
+      "transit_weekday_trips": 221
     },
     {
       "community_area": "Hyde Park",
@@ -16472,7 +16472,7 @@
       "transit_burden": 0.0327,
       "transit_nearest_stop_miles": 0.061,
       "transit_route_count": 7,
-      "transit_weekday_trips": 177.0
+      "transit_weekday_trips": 177
     },
     {
       "community_area": "Oakland",
@@ -16485,7 +16485,7 @@
       "transit_burden": 0.248,
       "transit_nearest_stop_miles": 0.184,
       "transit_route_count": 2,
-      "transit_weekday_trips": 112.0
+      "transit_weekday_trips": 112
     },
     {
       "community_area": "Oakland",
@@ -16498,7 +16498,7 @@
       "transit_burden": 0.1994,
       "transit_nearest_stop_miles": 0.233,
       "transit_route_count": 3,
-      "transit_weekday_trips": 161.0
+      "transit_weekday_trips": 161
     },
     {
       "community_area": "Humboldt Park",
@@ -16511,7 +16511,7 @@
       "transit_burden": 0.0138,
       "transit_nearest_stop_miles": 0.026,
       "transit_route_count": 6,
-      "transit_weekday_trips": 191.0
+      "transit_weekday_trips": 191
     },
     {
       "community_area": "Humboldt Park",
@@ -16524,7 +16524,7 @@
       "transit_burden": 0.0083,
       "transit_nearest_stop_miles": 0.016,
       "transit_route_count": 5,
-      "transit_weekday_trips": 274.0
+      "transit_weekday_trips": 274
     },
     {
       "community_area": "East Garfield Park",
@@ -16537,7 +16537,7 @@
       "transit_burden": 0.0432,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 4,
-      "transit_weekday_trips": 156.0
+      "transit_weekday_trips": 156
     },
     {
       "community_area": "East Garfield Park",
@@ -16550,7 +16550,7 @@
       "transit_burden": 0.0255,
       "transit_nearest_stop_miles": 0.048,
       "transit_route_count": 7,
-      "transit_weekday_trips": 156.0
+      "transit_weekday_trips": 156
     },
     {
       "community_area": "East Garfield Park",
@@ -16576,7 +16576,7 @@
       "transit_burden": 0.03,
       "transit_nearest_stop_miles": 0.056,
       "transit_route_count": 4,
-      "transit_weekday_trips": 156.0
+      "transit_weekday_trips": 156
     },
     {
       "community_area": "East Garfield Park",
@@ -16602,7 +16602,7 @@
       "transit_burden": 0.0525,
       "transit_nearest_stop_miles": 0.098,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Near West Side",
@@ -16615,7 +16615,7 @@
       "transit_burden": 0.0627,
       "transit_nearest_stop_miles": 0.118,
       "transit_route_count": 7,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Near West Side",
@@ -16628,7 +16628,7 @@
       "transit_burden": 0.0184,
       "transit_nearest_stop_miles": 0.035,
       "transit_route_count": 8,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Near West Side",
@@ -16703,10 +16703,10 @@
       "is_chicago": true,
       "scoring_context_version": "food-access-advisor-urban-context-v1",
       "tract_fips": "17031838800",
-      "transit_burden": 1.0,
+      "transit_burden": 1,
       "transit_nearest_stop_miles": 0.989,
       "transit_route_count": 0,
-      "transit_weekday_trips": 0.0
+      "transit_weekday_trips": 0
     },
     {
       "community_area": "Loop",
@@ -16745,7 +16745,7 @@
       "transit_burden": 0.0335,
       "transit_nearest_stop_miles": 0.063,
       "transit_route_count": 8,
-      "transit_weekday_trips": 269.0
+      "transit_weekday_trips": 269
     },
     {
       "community_area": "Douglas",
@@ -16758,7 +16758,7 @@
       "transit_burden": 0.0584,
       "transit_nearest_stop_miles": 0.11,
       "transit_route_count": 8,
-      "transit_weekday_trips": 272.0
+      "transit_weekday_trips": 272
     },
     {
       "community_area": "Douglas",
@@ -16771,7 +16771,7 @@
       "transit_burden": 0.0567,
       "transit_nearest_stop_miles": 0.106,
       "transit_route_count": 9,
-      "transit_weekday_trips": 272.0
+      "transit_weekday_trips": 272
     },
     {
       "community_area": "Bridgeport",
@@ -16784,7 +16784,7 @@
       "transit_burden": 0.1858,
       "transit_nearest_stop_miles": 0.208,
       "transit_route_count": 3,
-      "transit_weekday_trips": 134.0
+      "transit_weekday_trips": 134
     },
     {
       "community_area": "Bridgeport",
@@ -16797,7 +16797,7 @@
       "transit_burden": 0.0521,
       "transit_nearest_stop_miles": 0.098,
       "transit_route_count": 4,
-      "transit_weekday_trips": 134.0
+      "transit_weekday_trips": 134
     },
     {
       "community_area": "Bridgeport",
@@ -16810,7 +16810,7 @@
       "transit_burden": 0.064,
       "transit_nearest_stop_miles": 0.12,
       "transit_route_count": 4,
-      "transit_weekday_trips": 134.0
+      "transit_weekday_trips": 134
     },
     {
       "community_area": "Bridgeport",
@@ -16836,7 +16836,7 @@
       "transit_burden": 0.0613,
       "transit_nearest_stop_miles": 0.115,
       "transit_route_count": 4,
-      "transit_weekday_trips": 134.0
+      "transit_weekday_trips": 134
     },
     {
       "community_area": "Bridgeport",
@@ -16849,7 +16849,7 @@
       "transit_burden": 0.0426,
       "transit_nearest_stop_miles": 0.08,
       "transit_route_count": 5,
-      "transit_weekday_trips": 257.0
+      "transit_weekday_trips": 257
     },
     {
       "community_area": "Mckinley Park",
@@ -16862,7 +16862,7 @@
       "transit_burden": 0.0655,
       "transit_nearest_stop_miles": 0.123,
       "transit_route_count": 7,
-      "transit_weekday_trips": 596.0
+      "transit_weekday_trips": 596
     },
     {
       "community_area": "Mckinley Park",
@@ -16888,7 +16888,7 @@
       "transit_burden": 0.043,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 5,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "South Lawndale",
@@ -16901,7 +16901,7 @@
       "transit_burden": 0.0648,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 4,
-      "transit_weekday_trips": 198.0
+      "transit_weekday_trips": 198
     },
     {
       "community_area": "Near South Side",
@@ -16940,7 +16940,7 @@
       "transit_burden": 0.0695,
       "transit_nearest_stop_miles": 0.13,
       "transit_route_count": 6,
-      "transit_weekday_trips": 234.0
+      "transit_weekday_trips": 234
     },
     {
       "community_area": "Lower West Side",
@@ -16953,7 +16953,7 @@
       "transit_burden": 0.0407,
       "transit_nearest_stop_miles": 0.076,
       "transit_route_count": 4,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "North Lawndale",
@@ -16979,7 +16979,7 @@
       "transit_burden": 0.0456,
       "transit_nearest_stop_miles": 0.085,
       "transit_route_count": 6,
-      "transit_weekday_trips": 122.0
+      "transit_weekday_trips": 122
     },
     {
       "community_area": "Greater Grand Crossing",
@@ -16992,7 +16992,7 @@
       "transit_burden": 0.0292,
       "transit_nearest_stop_miles": 0.055,
       "transit_route_count": 6,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "Near West Side",
@@ -17005,7 +17005,7 @@
       "transit_burden": 0.0432,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 11,
-      "transit_weekday_trips": 353.0
+      "transit_weekday_trips": 353
     },
     {
       "community_area": "Douglas",
@@ -17018,7 +17018,7 @@
       "transit_burden": 0.0348,
       "transit_nearest_stop_miles": 0.065,
       "transit_route_count": 11,
-      "transit_weekday_trips": 266.0
+      "transit_weekday_trips": 266
     },
     {
       "community_area": "Humboldt Park",
@@ -17044,7 +17044,7 @@
       "transit_burden": 0.045,
       "transit_nearest_stop_miles": 0.084,
       "transit_route_count": 6,
-      "transit_weekday_trips": 219.0
+      "transit_weekday_trips": 219
     },
     {
       "community_area": "West Town",
@@ -17057,7 +17057,7 @@
       "transit_burden": 0.0375,
       "transit_nearest_stop_miles": 0.07,
       "transit_route_count": 6,
-      "transit_weekday_trips": 219.0
+      "transit_weekday_trips": 219
     },
     {
       "community_area": "Chatham",
@@ -17096,7 +17096,7 @@
       "transit_burden": 0.1616,
       "transit_nearest_stop_miles": 0.303,
       "transit_route_count": 4,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "Brighton Park",
@@ -17109,7 +17109,7 @@
       "transit_burden": 0.0311,
       "transit_nearest_stop_miles": 0.058,
       "transit_route_count": 6,
-      "transit_weekday_trips": 552.0
+      "transit_weekday_trips": 552
     },
     {
       "community_area": "Near West Side",
@@ -17161,7 +17161,7 @@
       "transit_burden": 0.0554,
       "transit_nearest_stop_miles": 0.104,
       "transit_route_count": 4,
-      "transit_weekday_trips": 202.0
+      "transit_weekday_trips": 202
     },
     {
       "community_area": "North Lawndale",
@@ -17174,7 +17174,7 @@
       "transit_burden": 0.0536,
       "transit_nearest_stop_miles": 0.101,
       "transit_route_count": 6,
-      "transit_weekday_trips": 245.0
+      "transit_weekday_trips": 245
     },
     {
       "community_area": "North Lawndale",
@@ -17187,7 +17187,7 @@
       "transit_burden": 0.0732,
       "transit_nearest_stop_miles": 0.137,
       "transit_route_count": 5,
-      "transit_weekday_trips": 224.0
+      "transit_weekday_trips": 224
     },
     {
       "community_area": "South Lawndale",
@@ -17200,7 +17200,7 @@
       "transit_burden": 0.0649,
       "transit_nearest_stop_miles": 0.122,
       "transit_route_count": 4,
-      "transit_weekday_trips": 198.0
+      "transit_weekday_trips": 198
     },
     {
       "community_area": "Grand Boulevard",
@@ -17213,7 +17213,7 @@
       "transit_burden": 0.0755,
       "transit_nearest_stop_miles": 0.141,
       "transit_route_count": 6,
-      "transit_weekday_trips": 160.0
+      "transit_weekday_trips": 160
     },
     {
       "community_area": "North Center",
@@ -17226,7 +17226,7 @@
       "transit_burden": 0.0433,
       "transit_nearest_stop_miles": 0.081,
       "transit_route_count": 6,
-      "transit_weekday_trips": 179.0
+      "transit_weekday_trips": 179
     },
     {
       "community_area": "New City",
@@ -17239,7 +17239,7 @@
       "transit_burden": 0.0258,
       "transit_nearest_stop_miles": 0.048,
       "transit_route_count": 5,
-      "transit_weekday_trips": 172.0
+      "transit_weekday_trips": 172
     },
     {
       "community_area": "South Shore",
@@ -17265,7 +17265,7 @@
       "transit_burden": 0.0177,
       "transit_nearest_stop_miles": 0.033,
       "transit_route_count": 9,
-      "transit_weekday_trips": 255.0
+      "transit_weekday_trips": 255
     },
     {
       "community_area": "North Lawndale",
@@ -17283,7 +17283,7 @@
     {
       "community_area": "O'Hare",
       "food_insecurity_population": 0,
-      "food_insecurity_rate": 0.0,
+      "food_insecurity_rate": null,
       "food_insecurity_universe": 0,
       "is_chicago": true,
       "scoring_context_version": "food-access-advisor-urban-context-v1",
@@ -17296,7 +17296,7 @@
     {
       "community_area": "Garfield Ridge",
       "food_insecurity_population": 0,
-      "food_insecurity_rate": 0.0,
+      "food_insecurity_rate": null,
       "food_insecurity_universe": 0,
       "is_chicago": true,
       "scoring_context_version": "food-access-advisor-urban-context-v1",
