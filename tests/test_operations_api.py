@@ -44,17 +44,23 @@ def test_complete_api_path_requires_explicit_approval(monkeypatch):
         f"/api/missions/{mission['mission_id']}/plan",
         json={"approved_substitutions": {"MILK-COLD": "MILK-UHT"}},
     ).json()
-    assert ready["status"] == "ready_for_approval"
+    assert ready["status"] == "blocked"
+
+    routed = http.post(
+        f"/api/missions/{mission['mission_id']}/route-approval",
+        json={"expected_version": ready["version"], "route_id": "ROUTE-API-001", "distance_miles": 14.2, "duration_minutes": 38},
+    ).json()
+    assert routed["status"] == "ready_for_approval"
 
     premature = http.post(
         f"/api/missions/{mission['mission_id']}/dispatch",
-        json={"expected_version": ready["version"]},
+        json={"expected_version": routed["version"]},
     )
     assert premature.status_code == 422
 
     approved = http.post(
         f"/api/missions/{mission['mission_id']}/approve",
-        json={"expected_version": ready["version"], "note": "Approved demo mission"},
+        json={"expected_version": routed["version"], "note": "Approved demo mission"},
     )
     assert approved.status_code == 200
     approved_mission = approved.json()
