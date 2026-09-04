@@ -55,6 +55,16 @@ def _rate(value):
     return number
 
 
+def _rate_for_universe(rate, universe):
+    """Treat rates without a positive measurement universe as missing."""
+    if universe in (None, "", "null"):
+        return None
+    population = float(universe)
+    if population < 0:
+        raise ValueError(f"food-insecurity universe cannot be negative, found {population}")
+    return _rate(rate) if population > 0 else None
+
+
 def load_food_insecurity_snapshot(path):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     features = payload.get("features")
@@ -71,10 +81,13 @@ def load_food_insecurity_snapshot(path):
         community = str(attributes.get("CookCountyCommunityArea") or "").strip()
         if community.lower() in {"", "na", "n/a", "none"}:
             community = None
+        universe = attributes.get("PopPovDetermined")
         records[geoid] = {
-            "food_insecurity_rate": _rate(attributes.get("Rate200FPL")),
+            "food_insecurity_rate": _rate_for_universe(
+                attributes.get("Rate200FPL"), universe
+            ),
             "food_insecurity_population": attributes.get("Count200FPL"),
-            "food_insecurity_universe": attributes.get("PopPovDetermined"),
+            "food_insecurity_universe": universe,
             "community_area": community,
             "is_chicago": community is not None,
         }
