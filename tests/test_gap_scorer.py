@@ -124,9 +124,20 @@ def test_missing_prepared_food_insecurity_does_not_fall_back_to_poverty():
         scoring_context_version="food-access-advisor-urban-context-v1",
     )
 
-    result = score_gaps([tract], [], top_n=1)[0]
+    weights = {
+        "food_access_gap": 1,
+        "poverty": 1,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 0,
+    }
+
+    result = score_gaps([tract], [], top_n=1, weights=weights)[0]
 
     assert result["score_components"]["poverty"] is None
+    assert result["score_contributions"]["food_access_gap"] == 50.0
+    assert result["need_score"] == 50.0
     assert "poverty" in result["missing_components"]
     assert "missing evidence: food-insecurity risk" in result["score_explanation"]
 
