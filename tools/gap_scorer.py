@@ -140,6 +140,32 @@ def _coverage(nearest, *, enhanced=False):
     return max(0.0, (1.0 - burden) * quality)
 
 
+def _best_coverage(tract, resources, nearest, *, enhanced=False):
+    """Return the strongest nearby coverage, not merely the closest point.
+
+    In the urban model, a garden that is a few feet closer must not hide a
+    nearby full-service grocery. The nearest point is still returned for map
+    evidence, while coverage evaluates every candidate's distance and quality.
+    """
+    if not enhanced:
+        return _coverage(nearest)
+    if tract.get("centroid_lat") is None or tract.get("centroid_lon") is None:
+        return 0.0
+    strongest = 0.0
+    for resource in resources or []:
+        if resource.get("lat") is None or resource.get("lon") is None:
+            continue
+        distance = haversine_miles(
+            tract["centroid_lat"],
+            tract["centroid_lon"],
+            resource["lat"],
+            resource["lon"],
+        )
+        candidate = {**resource, "distance_miles": distance}
+        strongest = max(strongest, _coverage(candidate, enhanced=True))
+    return strongest
+
+
 def _coerce_weights(weights):
     if weights is None:
         return DEFAULT_WEIGHTS
@@ -198,7 +224,9 @@ def _score_all(tracts, resources, weights):
         components = {"food_access_gap": _severity_component(tract), "poverty": poverty[index],
                       "no_vehicle": no_vehicle[index], "population_served": population[index],
                       "transit_burden": _tract_transit_burden(tract, nearest[index]),
-                      "existing_coverage": _coverage(
+                      "existing_coverage": _best_coverage(
+                          tract,
+                          resources,
                           nearest[index],
                           enhanced=bool(tract.get("scoring_context_version")),
                       )}
