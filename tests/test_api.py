@@ -206,6 +206,19 @@ def test_site_scores_default_to_chicago_and_can_include_cook_county(monkeypatch)
     assert chicago.json()[0]["score_components"]["transit_burden"] == 70.0
     assert county.status_code == 200
     assert len(county.json()) == 2
+    assert all(
+        row["weights_used"]["transit_burden"] == 0 for row in county.json()
+    )
+
+
+def test_cook_county_rejects_nonzero_chicago_only_transit_weight(monkeypatch):
+    response = client.get(
+        "/api/site-advisor/tract-scores",
+        params={"study_area": "cook_county", "transit_burden": 1},
+    )
+
+    assert response.status_code == 422
+    assert "available only for Chicago" in response.json()["detail"]
 
 
 def test_site_ranked_tracts_rejects_all_zero_weights(monkeypatch):
@@ -366,7 +379,11 @@ def test_route_directions_returns_road_geometry(monkeypatch):
 
 
 def test_site_evidence_returns_brief_text(monkeypatch):
-    monkeypatch.setattr(api_main, "write_evidence_brief", lambda tract: "This tract has high need...")
+    monkeypatch.setattr(
+        api_main,
+        "write_site_evidence_brief",
+        lambda tract: "This tract has high need...",
+    )
 
     response = client.post(
         "/api/site-advisor/evidence",
