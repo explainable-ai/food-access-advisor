@@ -159,11 +159,21 @@ def _load_urban_context():
         problems.append("transportation coverage does not match its manifest")
     if len(transit) != len(chicago):
         problems.append("one or more Chicago tracts are missing transportation evidence")
-    if any(
-        record.get("food_insecurity_rate") is None
-        or not 0 <= float(record["food_insecurity_rate"]) <= 1
-        for record in records
-    ):
+    invalid_food = False
+    for record in records:
+        rate = record.get("food_insecurity_rate")
+        universe = record.get("food_insecurity_universe")
+        try:
+            universe = float(universe) if universe is not None else None
+            valid = (
+                rate is None
+                if universe is not None and universe <= 0
+                else rate is not None and 0 <= float(rate) <= 1
+            )
+        except (TypeError, ValueError):
+            valid = False
+        invalid_food = invalid_food or not valid
+    if invalid_food:
         problems.append("one or more tracts have invalid food-insecurity evidence")
     if problems:
         raise PreparedTractDataError(
