@@ -110,6 +110,8 @@ def _economic_need(tract):
     if prepared is not None:
         value = float(prepared)
         return max(0.0, min(value / 100 if value > 1 else value, 1.0))
+    if tract.get("scoring_context_version"):
+        return None
     return _rate(
         tract,
         "poverty_rate",
@@ -251,7 +253,7 @@ def _score_all(tracts, resources, weights, *, prepared_inputs=None):
         missing = [name for name, value in components.items() if value is None]
         economic_label = (
             "food-insecurity risk"
-            if tract.get("food_insecurity_rate") is not None
+            if tract.get("scoring_context_version")
             else "poverty"
         )
         entry = {**tract, "need_score": score, "score_components": {name: round(value * 100, 1) if value is not None else None for name, value in components.items()},
