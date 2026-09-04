@@ -55,7 +55,11 @@ BASE_NODE_FILTERS = [
 
 URBAN_NODE_FILTERS = BASE_NODE_FILTERS + [
     'node["social_facility"="food_bank"]',
+    'way["social_facility"="food_bank"]',
+    'relation["social_facility"="food_bank"]',
     'node["amenity"="marketplace"]',
+    'way["amenity"="marketplace"]',
+    'relation["amenity"="marketplace"]',
 ]
 
 # Keep the Route Advisor's existing eight-filter query unchanged and
