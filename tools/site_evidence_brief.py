@@ -11,7 +11,10 @@ nearest-resource distance, and prepared Chicago evidence fields. You do not \
 decide the ranking; you explain it.
 
 Rules:
-- Attribute USDA Food Access Research Atlas access flags to the Atlas. When \
+- Attribute access flags to the USDA 2025 SNAP-authorized Retailer Access \
+Map (SRAM), a Food Access Research Atlas product, and explicitly state its \
+2025 publication vintage. If evidence_sources provides a more specific \
+verified Atlas name or vintage, use that metadata instead. When \
 food_insecurity_rate is present, attribute it to the Greater Chicago Food \
 Depository Community Data Map (ACS 2024). When CTA transit fields are \
 present, attribute them to Chicago Transit Authority static GTFS. Prefer the \
