@@ -11,7 +11,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from data.prep_urban_context import CONTEXT_FORMAT, build_context  # noqa: E402
+from data.prep_urban_context import (  # noqa: E402
+    CONTEXT_FORMAT,
+    build_context,
+    load_food_insecurity_snapshot,
+)
 
 
 def _write_database(path):
@@ -119,3 +123,30 @@ def test_build_context_fails_when_food_snapshot_omits_prepared_tract(tmp_path):
 
     with pytest.raises(ValueError, match="missing 1 prepared tracts"):
         build_context(database, food, gtfs, service_date=date(2026, 9, 4))
+
+
+def test_zero_universe_food_insecurity_rate_is_missing(tmp_path):
+    snapshot = tmp_path / "food.json"
+    snapshot.write_text(
+        json.dumps(
+            {
+                "features": [
+                    {
+                        "attributes": {
+                            "GEOID": "17031381700",
+                            "Rate200FPL": 0,
+                            "Count200FPL": 0,
+                            "PopPovDetermined": 0,
+                            "CookCountyCommunityArea": "Grand Boulevard",
+                        }
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    record = load_food_insecurity_snapshot(snapshot)["17031381700"]
+
+    assert record["food_insecurity_rate"] is None
+    assert record["food_insecurity_universe"] == 0
