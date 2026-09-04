@@ -37,6 +37,13 @@ class MissionActionRequest(BaseModel):
     note: str = Field(default="", max_length=2000)
 
 
+class RouteApprovalRequest(BaseModel):
+    expected_version: int = Field(gt=0)
+    route_id: str = Field(min_length=3)
+    distance_miles: float = Field(gt=0)
+    duration_minutes: float = Field(gt=0)
+
+
 class MissionReconcileRequest(MissionActionRequest):
     households_served: int = Field(ge=0)
     inventory_distributed: dict[str, float] = Field(default_factory=dict)
@@ -101,6 +108,23 @@ def approve_mission(
         expected_version=request.expected_version,
         actor=_actor(staff_user),
         note=request.note,
+    )
+
+
+@router.post("/missions/{mission_id}/route-approval")
+def record_route_approval(
+    mission_id: str,
+    request: RouteApprovalRequest,
+    staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    return _call(
+        mission_operations.record_route_approval,
+        mission_id,
+        expected_version=request.expected_version,
+        actor=_actor(staff_user),
+        route_id=request.route_id,
+        distance_miles=request.distance_miles,
+        duration_minutes=request.duration_minutes,
     )
 
 
