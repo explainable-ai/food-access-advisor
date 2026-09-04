@@ -4,6 +4,7 @@ import json
 import sqlite3
 import sys
 import zipfile
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -62,8 +63,8 @@ def _write_gtfs(path):
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(
             "calendar.txt",
-            "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday\n"
-            "WK,1,1,1,1,1,0,0\n",
+            "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"
+            "WK,1,1,1,1,1,0,0,20260801,20261031\n",
         )
         archive.writestr("trips.txt", "route_id,service_id,trip_id\n82,WK,T1\n")
         archive.writestr(
@@ -85,7 +86,13 @@ def test_build_context_includes_real_transportation_for_chicago(tmp_path):
     _write_food_snapshot(food)
     _write_gtfs(gtfs)
 
-    payload = build_context(database, food, gtfs, generated_at="2026-09-04T00:00:00Z")
+    payload = build_context(
+        database,
+        food,
+        gtfs,
+        generated_at="2026-09-04T00:00:00Z",
+        service_date=date(2026, 9, 4),
+    )
 
     assert payload["context_format"] == CONTEXT_FORMAT
     assert payload["tract_count"] == 2
@@ -111,4 +118,4 @@ def test_build_context_fails_when_food_snapshot_omits_prepared_tract(tmp_path):
     _write_gtfs(gtfs)
 
     with pytest.raises(ValueError, match="missing 1 prepared tracts"):
-        build_context(database, food, gtfs)
+        build_context(database, food, gtfs, service_date=date(2026, 9, 4))
