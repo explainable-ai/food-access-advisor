@@ -91,6 +91,77 @@ def test_acs_components_are_visible_and_explainable():
     assert result["score_explanation"]
 
 
+def test_food_insecurity_context_replaces_below_poverty_measure():
+    tract = make_tract("A", population=3000)
+    tract.update(
+        food_insecurity_rate=0.80,
+        population_below_poverty=100,
+        poverty_universe=1000,
+        scoring_context_version="food-access-advisor-urban-context-v1",
+    )
+    weights = {
+        "food_access_gap": 0,
+        "poverty": 1,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 0,
+    }
+
+    result = score_gaps([tract], [], top_n=1, weights=weights)[0]
+
+    assert result["score_components"]["poverty"] == 80.0
+    assert "food-insecurity risk" in result["score_explanation"]
+
+
+def test_prepared_transportation_is_a_distinct_scored_component():
+    high_burden = make_tract("A", population=1000)
+    high_burden.update(transit_burden=0.9, households_no_vehicle=10, households_total=100)
+    low_burden = make_tract("B", population=1000)
+    low_burden.update(transit_burden=0.1, households_no_vehicle=10, households_total=100)
+    weights = {
+        "food_access_gap": 0,
+        "poverty": 0,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 1,
+        "existing_coverage": 0,
+    }
+
+    result = score_gaps([low_burden, high_burden], [], top_n=2, weights=weights)
+
+    assert [row["tract_fips"] for row in result] == ["A", "B"]
+    assert result[0]["score_components"]["transit_burden"] == 90.0
+    assert "transit_burden" not in result[0]["missing_components"]
+
+
+def test_urban_coverage_distinguishes_garden_from_full_grocery():
+    tract = make_tract("A", population=3000)
+    tract["scoring_context_version"] = "food-access-advisor-urban-context-v1"
+    weights = {
+        "food_access_gap": 1,
+        "poverty": 0,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 1,
+    }
+    garden = score_gaps(
+        [tract],
+        [{"kind": "garden", "name": "G", "lat": 41.801, "lon": -87.631}],
+        top_n=1,
+        weights=weights,
+    )[0]
+    grocery = score_gaps(
+        [tract],
+        [{"kind": "grocery", "name": "M", "lat": 41.801, "lon": -87.631}],
+        top_n=1,
+        weights=weights,
+    )[0]
+
+    assert garden["need_score"] > grocery["need_score"]
+
+
 def test_adjustable_weights_can_change_ranking():
     high_poverty = make_tract("A", population=1000, half=0, one=1)
     high_poverty["poverty_rate"] = 0.8
@@ -100,7 +171,7 @@ def test_adjustable_weights_can_change_ranking():
                "population_served": 0, "transit_burden": 0, "existing_coverage": 0}
     result = score_gaps([high_population, high_poverty], [], top_n=2, weights=weights)
     assert result[0]["tract_fips"] == "A"
-    assert "poverty" in result[0]["score_explanation"]
+    assert "food-insecurity risk" in result[0]["score_explanation"]
     assert "food-access gap" not in result[0]["score_explanation"]
 
 
