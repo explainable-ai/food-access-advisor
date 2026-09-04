@@ -194,8 +194,8 @@ def _weighted_score(components, normalized_weights):
     return round(max(0.0, min(score * 100, 100.0)), 1), contributions
 
 
-def _explanation(contributions, missing):
-    labels = {"food_access_gap": "food-access gap", "poverty": "food-insecurity risk",
+def _explanation(contributions, missing, *, economic_label):
+    labels = {"food_access_gap": "food-access gap", "poverty": economic_label,
               "no_vehicle": "households without a vehicle", "population_served": "population served",
               "transit_burden": "transit burden", "existing_coverage": "existing coverage"}
     positive = [(name, points) for name, points in contributions.items()
@@ -213,31 +213,55 @@ def _explanation(contributions, missing):
     return text
 
 
-def _score_all(tracts, resources, weights):
+def _prepare_scoring_inputs(tracts, resources):
+    """Compute weight-independent evidence once for baseline/sensitivity runs."""
     nearest = [_nearest_resource(tract, resources) for tract in tracts]
     poverty = [_economic_need(t) for t in tracts]
     no_vehicle = [_rate(t, "no_vehicle_rate", "households_no_vehicle", "households_total") for t in tracts]
     population = _min_max([t.get("population") for t in tracts])
+    prepared = []
+    for index, tract in enumerate(tracts):
+        prepared.append({
+            "nearest": nearest[index],
+            "components": {
+                "food_access_gap": _severity_component(tract),
+                "poverty": poverty[index],
+                "no_vehicle": no_vehicle[index],
+                "population_served": population[index],
+                "transit_burden": _tract_transit_burden(tract, nearest[index]),
+                "existing_coverage": _best_coverage(
+                    tract,
+                    resources,
+                    nearest[index],
+                    enhanced=bool(tract.get("scoring_context_version")),
+                ),
+            },
+        })
+    return prepared
+
+
+def _score_all(tracts, resources, weights, *, prepared_inputs=None):
+    prepared = prepared_inputs or _prepare_scoring_inputs(tracts, resources)
     normalized_weights = weights.normalized()
     scored = []
     for index, tract in enumerate(tracts):
-        components = {"food_access_gap": _severity_component(tract), "poverty": poverty[index],
-                      "no_vehicle": no_vehicle[index], "population_served": population[index],
-                      "transit_burden": _tract_transit_burden(tract, nearest[index]),
-                      "existing_coverage": _best_coverage(
-                          tract,
-                          resources,
-                          nearest[index],
-                          enhanced=bool(tract.get("scoring_context_version")),
-                      )}
+        nearest = prepared[index]["nearest"]
+        components = prepared[index]["components"]
         score, contributions = _weighted_score(components, normalized_weights)
         missing = [name for name, value in components.items() if value is None]
+        economic_label = (
+            "food-insecurity risk"
+            if tract.get("food_insecurity_rate") is not None
+            else "poverty"
+        )
         entry = {**tract, "need_score": score, "score_components": {name: round(value * 100, 1) if value is not None else None for name, value in components.items()},
                  "score_contributions": contributions, "weights_used": {name: round(value, 4) for name, value in normalized_weights.items()},
-                 "missing_components": missing, "score_explanation": _explanation(contributions, missing),
-                 "nearest_resource_kind": nearest[index].get("kind") if nearest[index] else None,
-                 "nearest_resource_miles": nearest[index].get("distance_miles") if nearest[index] else None,
-                 "nearest_resource_minutes": nearest[index].get("transit_minutes") if nearest[index] else None,
+                 "missing_components": missing, "score_explanation": _explanation(
+                     contributions, missing, economic_label=economic_label
+                 ),
+                 "nearest_resource_kind": nearest.get("kind") if nearest else None,
+                 "nearest_resource_miles": nearest.get("distance_miles") if nearest else None,
+                 "nearest_resource_minutes": nearest.get("transit_minutes") if nearest else None,
                  "community_area": tract.get("community_area"),
                  "is_chicago": tract.get("is_chicago"),
                  "food_insecurity_rate": tract.get("food_insecurity_rate"),
@@ -273,13 +297,24 @@ def score_gaps(tracts: list, resources: list, top_n: int = 3, weights: Mapping[s
     if not 0 <= sensitivity_percent <= 1:
         raise ValueError("sensitivity_percent must be between 0 and 1")
     selected_weights = _coerce_weights(weights)
-    baseline = score_all_gaps(tracts, resources, selected_weights)
+    prepared_inputs = _prepare_scoring_inputs(tracts, resources)
+    baseline = _score_all(
+        tracts,
+        resources,
+        selected_weights,
+        prepared_inputs=prepared_inputs,
+    )
     ranges = {item["tract_fips"]: {"scores": [item["need_score"]], "ranks": [item["rank"]]} for item in baseline}
     base_values = asdict(selected_weights)
     for name, value in base_values.items():
         for multiplier in (1 - sensitivity_percent, 1 + sensitivity_percent):
             scenario = PriorityWeights(**{**base_values, name: value * multiplier})
-            for item in _score_all(tracts, resources, scenario):
+            for item in _score_all(
+                tracts,
+                resources,
+                scenario,
+                prepared_inputs=prepared_inputs,
+            ):
                 ranges[item["tract_fips"]]["scores"].append(item["need_score"])
                 ranges[item["tract_fips"]]["ranks"].append(item["rank"])
     for item in baseline:
