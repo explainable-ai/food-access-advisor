@@ -275,7 +275,8 @@ def get_low_access_tracts(limit: int = 25) -> list:
     if not path.exists():
         return _sample_tracts()[:limit]
 
-    return _read_database(path, limit, urban_context=True)
+    rows = _read_database(path, urban_context=True)
+    return [row for row in rows if row.get("is_chicago")][:limit]
 
 
 def _validate_complete_heatmap_database(path):
