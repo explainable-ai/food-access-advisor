@@ -22,6 +22,52 @@ Do not set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or
 `deploy/food-access-runtime-policy.json` to each runtime's IAM role. Local AWS
 testing should use an SSO profile.
 
+## Required index
+
+`GET /api/watchdog/changes` reads the `item_type=change` items directly via a
+Global Secondary Index (`item_type-detected_at-index`) instead of scanning
+the whole table -- the table also holds one `snapshot` item per source per
+refresh cycle, typically far more numerous than change events, so a full
+Scan was the dominant source of latency on this endpoint (frequently over
+the frontend's 20-second read timeout). Create the index once per table:
+
+```bash
+aws dynamodb update-table \
+  --table-name food-access-watchdog-evidence \
+  --attribute-definitions \
+      AttributeName=item_type,AttributeType=S \
+      AttributeName=detected_at,AttributeType=S \
+  --global-secondary-index-updates \
+      '[{"Create":{"IndexName":"item_type-detected_at-index","KeySchema":[{"AttributeName":"item_type","KeyType":"HASH"},{"AttributeName":"detected_at","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}}]'
+```
+
+If the table uses `PROVISIONED` billing mode (rather than the default
+`PAY_PER_REQUEST`), add a `ProvisionedThroughput` block to the `Create`
+object as well. `describe-table` should show the index `ACTIVE` before
+relying on it -- backfilling a GSI on an existing table can take a while
+depending on table size.
+
+**A GSI is a separate IAM resource from its table.** Creating the index
+above is not enough on its own -- `deploy/food-access-runtime-policy.json`
+must also grant `dynamodb:Query` on the index's own ARN
+(`.../table/food-access-watchdog-evidence/index/item_type-detected_at-index`),
+not just the table ARN, or every DynamoDB-backed `/api/watchdog/changes`
+request will get `AccessDeniedException`. Re-attach the updated policy
+document to each runtime's IAM role after creating the index.
+
+`read_all_changes` falls back to the old full-table Scan (logging a
+warning) if the index doesn't exist yet or is still backfilling, so
+deploying this code before running the command above degrades to the
+previous (slower) behavior rather than erroring -- but the whole point of
+this index is to get off that Scan, so create it promptly and confirm the
+warning stops appearing in logs.
+
+Note the index's partition key (`item_type`) only has two values, so all
+change events share one logical partition -- fine at today's evidence
+volume, but if this index itself becomes a bottleneck as history grows, the
+next step is a higher-cardinality key (e.g. bucketed by `source_id` or a
+coarse time window), not a bigger table.
+
 ## Storage boundary
 
 - `food-access-watchdog-evidence` holds snapshot metadata and individual
