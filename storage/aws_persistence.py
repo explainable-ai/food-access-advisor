@@ -1,6 +1,7 @@
 """DynamoDB/S3 persistence used when WATCHDOG_STORAGE_PROVIDER=dynamodb."""
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -13,12 +14,29 @@ from botocore.exceptions import ClientError
 
 SUCCESS_STATUSES = {"complete", "partial", "stale"}
 
+logger = logging.getLogger(__name__)
+
 # GSI required on the evidence table (partition key item_type, sort key
 # detected_at, ALL projection) so `read_all_changes` can Query the much
 # smaller "change" partition directly instead of Scanning every item in the
 # table (which also holds one "snapshot" item per source per refresh cycle).
 # See deploy/AWS_PERSISTENCE_SETUP.md for the index-creation command.
+#
+# item_type only has two values ("change"/"snapshot"), so every change event
+# for every source shares one logical partition in this index -- a known
+# DynamoDB hot-partition shape. That's an accepted tradeoff for now (it still
+# turns an O(table) Scan into an O(change-partition) Query, which is the win
+# this index exists for); if evidence volume grows enough to make this
+# partition itself a bottleneck, the next step is a higher-cardinality key
+# (e.g. bucketed by source_id or a coarse time window), not reverting to Scan.
 CHANGES_BY_DETECTED_AT_INDEX = "item_type-detected_at-index"
+
+# Errors DynamoDB returns for a Query against an index that doesn't exist yet
+# or is still backfilling (see deploy/AWS_PERSISTENCE_SETUP.md) -- treated as
+# "index not ready" rather than a hard failure so a deploy that lands this
+# code before the index-creation step (or during its backfill) degrades to
+# the old, slower Scan instead of taking the endpoint down entirely.
+_INDEX_NOT_READY_ERROR_CODES = {"ValidationException", "ResourceNotFoundException"}
 
 
 class StorageConfigurationError(RuntimeError):
@@ -161,19 +179,34 @@ class AwsEvidenceStore:
         expression = Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
         if source_id:
             expression = expression & Attr("source_id").eq(source_id)
-        items = _query_all(
-            self.table,
-            IndexName=CHANGES_BY_DETECTED_AT_INDEX,
-            KeyConditionExpression=Key("item_type").eq("change"),
-            FilterExpression=expression,
-            ScanIndexForward=False,
-        )
-        ordered = sorted(
-            (_native(item) for item in items if not item.get("suppressed", False)),
-            key=lambda item: item["detected_at"],
-            reverse=True,
-        )
-        return ordered
+        try:
+            items = _query_all(
+                self.table,
+                IndexName=CHANGES_BY_DETECTED_AT_INDEX,
+                KeyConditionExpression=Key("item_type").eq("change"),
+                FilterExpression=expression,
+                ScanIndexForward=False,
+            )
+            # Query with ScanIndexForward=False already returns items
+            # newest-first, and the suppressed check below only excludes
+            # items rather than reordering them, so no re-sort is needed.
+            need_sort = False
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in _INDEX_NOT_READY_ERROR_CODES:
+                raise
+            logger.warning(
+                "CHANGES_BY_DETECTED_AT_INDEX unavailable (%s) -- falling back to a full "
+                "table scan. Create the GSI per deploy/AWS_PERSISTENCE_SETUP.md.",
+                exc.response.get("Error", {}).get("Code"),
+            )
+            items = _scan_all(
+                self.table,
+                FilterExpression=Attr("item_type").eq("change") & expression,
+            )
+            need_sort = True  # Scan makes no ordering guarantee.
+
+        ordered = (_native(item) for item in items if not item.get("suppressed", False))
+        return sorted(ordered, key=lambda item: item["detected_at"], reverse=True) if need_sort else list(ordered)
 
     def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
         return self.read_all_changes(source_id=source_id)[:limit]

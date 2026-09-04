@@ -47,6 +47,19 @@ object as well. `describe-table` should show the index `ACTIVE` before
 relying on it -- backfilling a GSI on an existing table can take a while
 depending on table size.
 
+`read_all_changes` falls back to the old full-table Scan (logging a
+warning) if the index doesn't exist yet or is still backfilling, so
+deploying this code before running the command above degrades to the
+previous (slower) behavior rather than erroring -- but the whole point of
+this index is to get off that Scan, so create it promptly and confirm the
+warning stops appearing in logs.
+
+Note the index's partition key (`item_type`) only has two values, so all
+change events share one logical partition -- fine at today's evidence
+volume, but if this index itself becomes a bottleneck as history grows, the
+next step is a higher-cardinality key (e.g. bucketed by `source_id` or a
+coarse time window), not a bigger table.
+
 ## Storage boundary
 
 - `food-access-watchdog-evidence` holds snapshot metadata and individual
