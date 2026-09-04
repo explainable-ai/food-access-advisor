@@ -42,12 +42,13 @@ def test_approved_substitution_produces_dispatch_ready_plan():
     planned = service.plan_mission(
         mission["mission_id"], approved_substitutions={"MILK-COLD": "MILK-UHT"}
     )
-    assert planned["status"] == "ready_for_approval"
+    assert planned["status"] == "blocked"
     assert planned["inventory"]["status"] == "yes"
     assert planned["vehicle"]["vehicle_id"] == "VEH-REF-01"
     rejected = next(row for row in planned["fleet_evaluation"]["vehicles"] if row["vehicle_id"] == "VEH-CARGO-02")
     assert "temperature zones incompatible" in rejected["reasons"]
     assert planned["site"]["permit"]["status"] == "verified"
+    assert "route_not_approved" in planned["blockers"]
 
 
 def test_dispatch_requires_approval_and_optimistic_version():
@@ -56,11 +57,15 @@ def test_dispatch_requires_approval_and_optimistic_version():
     planned = service.plan_mission(mission["mission_id"], approved_substitutions={"MILK-COLD": "MILK-UHT"})
     with pytest.raises(ValueError, match="approval"):
         service.dispatch_mission(mission["mission_id"], expected_version=planned["version"], actor="ops@example.org")
+    routed = service.record_route_approval(
+        mission["mission_id"], expected_version=planned["version"], actor="ops@example.org",
+        route_id="ROUTE-001", distance_miles=14.2, duration_minutes=38,
+    )
     approved = service.approve_mission(
-        mission["mission_id"], expected_version=planned["version"], actor="ops@example.org"
+        mission["mission_id"], expected_version=routed["version"], actor="ops@example.org"
     )
     with pytest.raises(MissionConflictError):
-        service.dispatch_mission(mission["mission_id"], expected_version=planned["version"], actor="ops@example.org")
+        service.dispatch_mission(mission["mission_id"], expected_version=routed["version"], actor="ops@example.org")
     dispatched = service.dispatch_mission(
         mission["mission_id"], expected_version=approved["version"], actor="ops@example.org"
     )
@@ -95,7 +100,11 @@ def test_reconciliation_closes_the_operational_loop():
     service = MissionOperationsService()
     mission = service.create_mission(mission_payload())
     planned = service.plan_mission(mission["mission_id"], approved_substitutions={"MILK-COLD": "MILK-UHT"})
-    approved = service.approve_mission(mission["mission_id"], expected_version=planned["version"], actor="ops@example.org")
+    routed = service.record_route_approval(
+        mission["mission_id"], expected_version=planned["version"], actor="ops@example.org",
+        route_id="ROUTE-002", distance_miles=14.2, duration_minutes=38,
+    )
+    approved = service.approve_mission(mission["mission_id"], expected_version=routed["version"], actor="ops@example.org")
     dispatched = service.dispatch_mission(mission["mission_id"], expected_version=approved["version"], actor="ops@example.org")
     reconciled = service.reconcile_mission(
         mission["mission_id"], expected_version=dispatched["version"], actor="ops@example.org",
