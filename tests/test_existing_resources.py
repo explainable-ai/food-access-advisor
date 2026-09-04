@@ -114,9 +114,7 @@ def test_a_real_user_agent_is_sent(monkeypatch):
 
 
 def test_rural_query_includes_food_bank_and_marketplace_tags(monkeypatch):
-    """The rural query must extend the urban tag set, not just re-run it —
-    that's the whole point of get_rural_existing_resources existing
-    separately."""
+    """The rural snapshot retains both resource categories."""
     captured = {}
 
     def capturing_post(url, data=None, headers=None, timeout=None):
@@ -131,7 +129,7 @@ def test_rural_query_includes_food_bank_and_marketplace_tags(monkeypatch):
     assert "amenity" in captured["query"] and "marketplace" in captured["query"]
 
 
-def test_urban_query_does_not_include_rural_only_tags(monkeypatch):
+def test_urban_query_includes_food_bank_and_marketplace_tags(monkeypatch):
     captured = {}
 
     def capturing_post(url, data=None, headers=None, timeout=None):
@@ -142,7 +140,30 @@ def test_urban_query_does_not_include_rural_only_tags(monkeypatch):
 
     get_existing_resources()
 
-    assert "social_facility" not in captured["query"]
+    assert "social_facility" in captured["query"] and "food_bank" in captured["query"]
+    assert "amenity" in captured["query"] and "marketplace" in captured["query"]
+    assert 'way["social_facility"="food_bank"]' in captured["query"]
+    assert 'relation["social_facility"="food_bank"]' in captured["query"]
+    assert 'way["amenity"="marketplace"]' in captured["query"]
+    assert 'relation["amenity"="marketplace"]' in captured["query"]
+
+
+def test_urban_kind_classification(monkeypatch):
+    elements = [
+        {"type": "node", "id": 30, "lat": 41.80, "lon": -87.63, "tags": {"social_facility": "food_bank", "name": "Chicago Food Bank"}},
+        {"type": "node", "id": 31, "lat": 41.81, "lon": -87.64, "tags": {"amenity": "marketplace", "name": "Chicago Market"}},
+    ]
+    monkeypatch.setattr(
+        existing_resources.requests, "post", lambda *a, **k: _FakeResponse(elements)
+    )
+
+    result = get_existing_resources()
+
+    kinds = {r["name"]: r["kind"] for r in result}
+    assert kinds == {
+        "Chicago Food Bank": "food_bank",
+        "Chicago Market": "market",
+    }
 
 
 def test_rural_kind_classification(monkeypatch):

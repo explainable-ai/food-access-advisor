@@ -70,6 +70,15 @@ class RankedTract(BaseModel):
     population_below_poverty: Optional[float] = None
     households_total: Optional[float] = None
     households_no_vehicle: Optional[float] = None
+    community_area: Optional[str] = None
+    is_chicago: Optional[bool] = None
+    food_insecurity_rate: Optional[float] = None
+    food_insecurity_population: Optional[float] = None
+    food_insecurity_universe: Optional[float] = None
+    transit_nearest_stop_miles: Optional[float] = None
+    transit_route_count: Optional[int] = None
+    transit_weekday_trips: Optional[float] = None
+    scoring_context_version: Optional[str] = None
     score_components: dict[str, Optional[float]] = Field(default_factory=dict)
     score_contributions: dict[str, float] = Field(default_factory=dict)
     weights_used: dict[str, float] = Field(default_factory=dict)

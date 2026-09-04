@@ -24,8 +24,9 @@ sub-second REST call.
 import asyncio
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,16 +54,16 @@ from tools.access_data import (
     get_all_rural_tracts,
     get_all_tracts,
     get_low_access_rural_tracts,
-    get_low_access_tracts,
 )
-from tools.evidence_brief import write_evidence_brief, write_route_brief
+from tools.evidence_brief import write_route_brief
 from tools.evidence_snapshots import read_change_page, review_change
 from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
-from tools.gap_scorer import score_all_gaps, score_gaps
+from tools.gap_scorer import DEFAULT_WEIGHTS, score_all_gaps, score_gaps
 from tools.impact_metrics import compute_impact_metrics
 from tools.route_optimizer import optimize_route
 from tools.resource_cache import ResourceCacheError, load_resource_cache
+from tools.site_evidence_brief import write_site_evidence_brief
 from tools.travel_time_provider import (
     TravelTimeProviderError,
     get_openrouteservice_directions,
@@ -167,15 +168,41 @@ def _ranked_tracts(get_tracts, get_resources, top_n: int, weights=None) -> list:
     return score_gaps(tracts, resources, top_n=top_n, weights=weights)
 
 
-def _weights(**values):
+def _weights(_forced=None, **values):
     supplied = {name: value for name, value in values.items() if value is not None}
-    if supplied and not any(value > 0 for value in supplied.values()):
+    forced = _forced or {}
+    if not supplied and not forced:
+        return None
+    effective = {**asdict(DEFAULT_WEIGHTS), **supplied, **forced}
+    if not any(value > 0 for value in effective.values()):
         raise HTTPException(status_code=422, detail="At least one priority weight must be greater than zero")
-    return supplied or None
+    return {**supplied, **forced}
+
+
+def _site_weights(study_area, **values):
+    """Use one comparable weight set across every tract in a study area."""
+    transit = values.get("transit_burden")
+    if study_area == "cook_county" and transit not in (None, 0):
+        raise HTTPException(
+            status_code=422,
+            detail="Transit burden is available only for Chicago; use a zero transit weight for Cook County.",
+        )
+    if study_area == "cook_county":
+        values.pop("transit_burden", None)
+        return _weights(_forced={"transit_burden": 0}, **values)
+    return _weights(**values)
+
+
+def _urban_study_area(tracts: list, study_area: Literal["chicago", "cook_county"]):
+    """Keep neighborhood-first Chicago ranking distinct from county context."""
+    if study_area == "chicago":
+        return [tract for tract in tracts if tract.get("is_chicago")]
+    return tracts
 
 
 @app.get("/api/site-advisor/ranked-tracts", response_model=list[RankedTract])
 def site_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
+                       study_area: Literal["chicago", "cook_county"] = "chicago",
                        food_access_gap: float | None = Query(default=None, ge=0),
                        poverty: float | None = Query(default=None, ge=0),
                        no_vehicle: float | None = Query(default=None, ge=0),
@@ -183,16 +210,25 @@ def site_ranked_tracts(top_n: int = Query(default=3, ge=1, le=100),
                        transit_burden: float | None = Query(default=None, ge=0),
                        existing_coverage: float | None = Query(default=None, ge=0)):
     try:
-        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
-                           population_served=population_served, transit_burden=transit_burden,
-                           existing_coverage=existing_coverage)
-        return _ranked_tracts(get_low_access_tracts, lambda: load_resource_cache("urban"), top_n, weights)
-    except ResourceCacheError as exc:
+        weights = _site_weights(
+            study_area,
+            food_access_gap=food_access_gap,
+            poverty=poverty,
+            no_vehicle=no_vehicle,
+            population_served=population_served,
+            transit_burden=transit_burden,
+            existing_coverage=existing_coverage,
+        )
+        tracts = _urban_study_area(get_all_tracts(), study_area)
+        resources = load_resource_cache("urban", require_complete_coverage=True)
+        return score_gaps(tracts, resources, top_n=top_n, weights=weights)
+    except (PreparedTractDataError, ResourceCacheError) as exc:
         raise HTTPException(status_code=503, detail=f"Prepared resource data unavailable: {exc}") from exc
 
 
 @app.get("/api/site-advisor/tract-scores", response_model=list[RankedTract])
 def site_tract_scores(food_access_gap: float | None = Query(default=None, ge=0),
+                      study_area: Literal["chicago", "cook_county"] = "chicago",
                       poverty: float | None = Query(default=None, ge=0),
                       no_vehicle: float | None = Query(default=None, ge=0),
                       population_served: float | None = Query(default=None, ge=0),
@@ -205,11 +241,18 @@ def site_tract_scores(food_access_gap: float | None = Query(default=None, ge=0),
     tracts with illustrative values.
     """
     try:
-        weights = _weights(food_access_gap=food_access_gap, poverty=poverty, no_vehicle=no_vehicle,
-                           population_served=population_served, transit_burden=transit_burden,
-                           existing_coverage=existing_coverage)
+        weights = _site_weights(
+            study_area,
+            food_access_gap=food_access_gap,
+            poverty=poverty,
+            no_vehicle=no_vehicle,
+            population_served=population_served,
+            transit_burden=transit_burden,
+            existing_coverage=existing_coverage,
+        )
         resources = load_resource_cache("urban", require_complete_coverage=True)
-        return score_all_gaps(get_all_tracts(), resources, weights=weights)
+        tracts = _urban_study_area(get_all_tracts(), study_area)
+        return score_all_gaps(tracts, resources, weights=weights)
     except (PreparedTractDataError, ResourceCacheError) as exc:
         raise HTTPException(status_code=503, detail=f"Prepared heatmap data unavailable: {exc}") from exc
 
@@ -321,7 +364,7 @@ async def _run_evidence(write_brief_fn, tract: RankedTract) -> EvidenceResponse:
 
 @app.post("/api/site-advisor/evidence", response_model=EvidenceResponse)
 async def site_evidence(request: EvidenceRequest) -> EvidenceResponse:
-    return await _run_evidence(write_evidence_brief, request.tract)
+    return await _run_evidence(write_site_evidence_brief, request.tract)
 
 
 @app.post("/api/route-advisor/evidence", response_model=EvidenceResponse)

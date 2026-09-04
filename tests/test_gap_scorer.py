@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from tools import gap_scorer  # noqa: E402
 from tools.gap_scorer import PriorityWeights, score_gaps  # noqa: E402
 
 
@@ -91,6 +92,125 @@ def test_acs_components_are_visible_and_explainable():
     assert result["score_explanation"]
 
 
+def test_food_insecurity_context_replaces_below_poverty_measure():
+    tract = make_tract("A", population=3000)
+    tract.update(
+        food_insecurity_rate=0.80,
+        population_below_poverty=100,
+        poverty_universe=1000,
+        scoring_context_version="food-access-advisor-urban-context-v1",
+    )
+    weights = {
+        "food_access_gap": 0,
+        "poverty": 1,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 0,
+    }
+
+    result = score_gaps([tract], [], top_n=1, weights=weights)[0]
+
+    assert result["score_components"]["poverty"] == 80.0
+    assert "food-insecurity risk" in result["score_explanation"]
+
+
+def test_missing_prepared_food_insecurity_does_not_fall_back_to_poverty():
+    tract = make_tract("A", population=3000)
+    tract.update(
+        food_insecurity_rate=None,
+        population_below_poverty=900,
+        poverty_universe=1000,
+        scoring_context_version="food-access-advisor-urban-context-v1",
+    )
+
+    weights = {
+        "food_access_gap": 1,
+        "poverty": 1,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 0,
+    }
+
+    result = score_gaps([tract], [], top_n=1, weights=weights)[0]
+
+    assert result["score_components"]["poverty"] is None
+    assert result["score_contributions"]["food_access_gap"] == 50.0
+    assert result["need_score"] == 50.0
+    assert "poverty" in result["missing_components"]
+    assert "missing evidence: food-insecurity risk" in result["score_explanation"]
+
+
+def test_prepared_transportation_is_a_distinct_scored_component():
+    high_burden = make_tract("A", population=1000)
+    high_burden.update(transit_burden=0.9, households_no_vehicle=10, households_total=100)
+    low_burden = make_tract("B", population=1000)
+    low_burden.update(transit_burden=0.1, households_no_vehicle=10, households_total=100)
+    weights = {
+        "food_access_gap": 0,
+        "poverty": 0,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 1,
+        "existing_coverage": 0,
+    }
+
+    result = score_gaps([low_burden, high_burden], [], top_n=2, weights=weights)
+
+    assert [row["tract_fips"] for row in result] == ["A", "B"]
+    assert result[0]["score_components"]["transit_burden"] == 90.0
+    assert "transit_burden" not in result[0]["missing_components"]
+
+
+def test_urban_coverage_distinguishes_garden_from_full_grocery():
+    tract = make_tract("A", population=3000)
+    tract["scoring_context_version"] = "food-access-advisor-urban-context-v1"
+    weights = {
+        "food_access_gap": 1,
+        "poverty": 0,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 1,
+    }
+    garden = score_gaps(
+        [tract],
+        [{"kind": "garden", "name": "G", "lat": 41.801, "lon": -87.631}],
+        top_n=1,
+        weights=weights,
+    )[0]
+    grocery = score_gaps(
+        [tract],
+        [{"kind": "grocery", "name": "M", "lat": 41.801, "lon": -87.631}],
+        top_n=1,
+        weights=weights,
+    )[0]
+
+    assert garden["need_score"] > grocery["need_score"]
+
+
+def test_closer_garden_does_not_hide_nearby_grocery_coverage():
+    tract = make_tract("A", population=3000)
+    tract["scoring_context_version"] = "food-access-advisor-urban-context-v1"
+    weights = {
+        "food_access_gap": 1,
+        "poverty": 0,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 1,
+    }
+    grocery = {"kind": "grocery", "name": "M", "lat": 41.802, "lon": -87.632}
+    garden = {"kind": "garden", "name": "G", "lat": 41.801, "lon": -87.631}
+
+    grocery_only = score_gaps([tract], [grocery], top_n=1, weights=weights)[0]
+    both = score_gaps([tract], [garden, grocery], top_n=1, weights=weights)[0]
+
+    assert both["nearest_resource_kind"] == "garden"
+    assert both["need_score"] == grocery_only["need_score"]
+
+
 def test_adjustable_weights_can_change_ranking():
     high_poverty = make_tract("A", population=1000, half=0, one=1)
     high_poverty["poverty_rate"] = 0.8
@@ -101,6 +221,7 @@ def test_adjustable_weights_can_change_ranking():
     result = score_gaps([high_population, high_poverty], [], top_n=2, weights=weights)
     assert result[0]["tract_fips"] == "A"
     assert "poverty" in result[0]["score_explanation"]
+    assert "food-insecurity risk" not in result[0]["score_explanation"]
     assert "food-access gap" not in result[0]["score_explanation"]
 
 
@@ -118,6 +239,29 @@ def test_sensitivity_range_contains_baseline_score():
     result = score_gaps([make_tract("A", 2000)], [], top_n=1)[0]
     assert result["sensitivity"]["score_min"] <= result["need_score"] <= result["sensitivity"]["score_max"]
     assert result["sensitivity"]["rank_stable"] is True
+
+
+def test_sensitivity_reuses_weight_independent_resource_evidence(monkeypatch):
+    tracts = [make_tract("A", 2000), make_tract("B", 1000)]
+    resources = [{"kind": "grocery", "name": "G", "lat": 41.81, "lon": -87.64}]
+    calls = {"nearest": 0, "coverage": 0}
+    original_nearest = gap_scorer._nearest_resource
+    original_coverage = gap_scorer._best_coverage
+
+    def counted_nearest(*args, **kwargs):
+        calls["nearest"] += 1
+        return original_nearest(*args, **kwargs)
+
+    def counted_coverage(*args, **kwargs):
+        calls["coverage"] += 1
+        return original_coverage(*args, **kwargs)
+
+    monkeypatch.setattr(gap_scorer, "_nearest_resource", counted_nearest)
+    monkeypatch.setattr(gap_scorer, "_best_coverage", counted_coverage)
+
+    score_gaps(tracts, resources, top_n=2)
+
+    assert calls == {"nearest": len(tracts), "coverage": len(tracts)}
 
 
 def test_continuous_rural_gap_overrides_binary_severity():

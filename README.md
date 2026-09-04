@@ -187,7 +187,28 @@ its `metadata` table. Tool responses label fallback records as
    values as the new vintage.
 
 
-5. **Publish the production heatmap artifacts.** The ECS image intentionally
+5. **Chicago food-insecurity and transportation context.** Export the Greater
+   Chicago Food Depository's current ACS tract layer as ArcGIS JSON and download
+   CTA's official static GTFS ZIP. Then build the checked-in scoring overlay:
+
+   ```bash
+   PYTHONPATH=. python data/prep_urban_context.py \
+     --database data/atlas_pilot_city.db \
+     --food-insecurity-snapshot data/raw/gcfd_acs_2024_tracts.json \
+     --cta-gtfs data/raw/cta_google_transit.zip \
+     --output data/urban_scoring_context.json
+   ```
+
+   The food-insecurity component is the tract share of residents below 200% of
+   the federal poverty level, the Food Depository's documented local proxy for
+   food-insecurity risk. Transportation remains separate from vehicle access:
+   its burden combines CTA stop proximity (40%), nearby route availability
+   (30%), and average scheduled weekday service (30%). Preparation fails when
+   any Chicago tract lacks transportation evidence; missing values are never
+   silently redistributed. The generated manifest records source checksums,
+   tract counts, and the calculation method.
+
+6. **Publish the production heatmap artifacts.** The ECS image intentionally
    excludes generated SQLite files. After the Atlas and ACS preparation steps,
    upload the validated database and publish the county-wide resource snapshot
    from a workstation or scheduled ingestion job that can reach the source APIs:
@@ -208,7 +229,10 @@ its `metadata` table. Tool responses label fallback records as
    refresh inside ECS when its network cannot reach Overpass; publish the
    prepared snapshot before deploying the service.
 
-The ranked-tract endpoints accept non-negative query weights named
+The Site Advisor endpoints default to `study_area=chicago`, so neighborhood
+priorities are not diluted by suburban Cook County tracts. Pass
+`study_area=cook_county` to inspect the wider county context. The ranked-tract
+endpoints accept non-negative query weights named
 `food_access_gap`, `poverty`, `no_vehicle`, `population_served`,
 `transit_burden`, and `existing_coverage`. Weights are normalized to sum to
 one. Every result returns the normalized components, their point
@@ -518,12 +542,11 @@ See [`deploy/AWS_PERSISTENCE_SETUP.md`](deploy/AWS_PERSISTENCE_SETUP.md).
   environment allowed (see above) — running the actual download and
   looking at the actual rendered map is the next step, in a normal
   environment.
-- **Transit-time distance.** Straight-line miles (what's implemented now)
-  understates real access — a tract "0.6 miles" from a grocery store can be
-  a 40-minute bus ride away. Swapping in a GTFS feed + a routing engine
-  (e.g. OSRM) for the pilot city is the single biggest accuracy upgrade
-  available, and the reason this project cites transit-time distance as a
-  stretch goal rather than shipping it as a guess.
+- **Door-to-door transit travel time.** Chicago prioritization now includes
+  real CTA GTFS stop proximity, route availability, and scheduled weekday
+  service. A future routing engine can add walk, wait, transfer, and in-vehicle
+  time to specific food resources without replacing the explainable Phase 1
+  transportation evidence.
 - **Real rural Atlas data.** The Route Advisor's code is built and tested,
   but `data/prep_atlas.py` doesn't yet build `data/atlas_rural_county.db`
   from a real LRAM/SRAM download for Alexander County, IL — it runs on

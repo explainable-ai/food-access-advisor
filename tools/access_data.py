@@ -7,6 +7,7 @@ step — swap in the full download when you're ready (see README > Data setup).
 """
 
 import hashlib
+import json
 import os
 import sqlite3
 import tempfile
@@ -20,6 +21,12 @@ from config import PILOT_CITY, PILOT_RURAL_COUNTY
 DB_PATH = Path(__file__).parent.parent / "data" / "atlas_pilot_city.db"
 DEFAULT_DATABASE_KEY = "prepared-data/atlas_pilot_city.db"
 DEFAULT_CACHE_PATH = Path("/tmp/food-access-advisor/atlas_pilot_city.db")
+URBAN_CONTEXT_PATH = Path(__file__).parent.parent / "data" / "urban_scoring_context.json"
+URBAN_CONTEXT_FORMAT = "food-access-advisor-urban-context-v1"
+EXPECTED_CHICAGO_TRACT_COUNT = 792
+EXPECTED_CHICAGO_TRACT_FIPS_SHA256 = (
+    "783a312067fa1e1188ef1e9e07d5e7601ddf0db2e4cc2e1b3038dd0d5548afd2"
+)
 
 # Separate file, not a second table in the same DB: the urban and rural
 # databases come from different Atlas download runs (see
@@ -116,7 +123,104 @@ def _prepared_rural_database_path():
     )
 
 
-def _read_database(path, limit=None, low_access_only=True, rural_gap_only=False):
+def _load_urban_context():
+    """Read and validate the prepared food-insecurity/transit overlay."""
+    if not URBAN_CONTEXT_PATH.exists():
+        raise PreparedTractDataError(
+            f"prepared Chicago scoring context is unavailable at {URBAN_CONTEXT_PATH}; "
+            "run data/prep_urban_context.py before deployment"
+        )
+    try:
+        payload = json.loads(URBAN_CONTEXT_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise PreparedTractDataError(
+            "prepared Chicago scoring context is unreadable or invalid"
+        ) from error
+    records = payload.get("records")
+    problems = []
+    if payload.get("context_format") != URBAN_CONTEXT_FORMAT:
+        problems.append("unsupported context format")
+    if not isinstance(records, list) or not records:
+        problems.append("context contains no tract records")
+        records = []
+    sources = payload.get("sources") if isinstance(payload.get("sources"), dict) else {}
+    by_fips = {
+        str(record.get("tract_fips")): {
+            **record,
+            "evidence_sources": sources,
+        }
+        for record in records
+    }
+    if len(by_fips) != len(records):
+        problems.append("context contains duplicate tract GEOIDs")
+    if payload.get("tract_count") != len(records):
+        problems.append("context tract count does not match its manifest")
+    chicago = [record for record in records if record.get("is_chicago")]
+    if payload.get("chicago_tract_count") != len(chicago):
+        problems.append("Chicago tract count does not match its manifest")
+    chicago_digest = hashlib.sha256(
+        "\n".join(sorted(str(record.get("tract_fips")) for record in chicago)).encode()
+    ).hexdigest()
+    if (
+        len(chicago) != EXPECTED_CHICAGO_TRACT_COUNT
+        or chicago_digest != EXPECTED_CHICAGO_TRACT_FIPS_SHA256
+    ):
+        problems.append("Chicago tract classification does not match the expected universe")
+    transit = [record for record in chicago if record.get("transit_burden") is not None]
+    if payload.get("transportation_scored_tract_count") != len(transit):
+        problems.append("transportation coverage does not match its manifest")
+    if len(transit) != len(chicago):
+        problems.append("one or more Chicago tracts are missing transportation evidence")
+    invalid_food = False
+    for record in records:
+        rate = record.get("food_insecurity_rate")
+        universe = record.get("food_insecurity_universe")
+        try:
+            universe = float(universe) if universe is not None else None
+            valid = (
+                rate is None
+                if universe is not None and universe <= 0
+                else rate is not None and 0 <= float(rate) <= 1
+            )
+        except (TypeError, ValueError):
+            valid = False
+        invalid_food = invalid_food or not valid
+    if invalid_food:
+        problems.append("one or more tracts have invalid food-insecurity evidence")
+    if problems:
+        raise PreparedTractDataError(
+            "prepared Chicago scoring context is incomplete (" + "; ".join(problems) + ")"
+        )
+    return by_fips
+
+
+def _overlay_urban_context(rows, *, require_complete=False):
+    context = _load_urban_context()
+    row_fips = {str(row["tract_fips"]) for row in rows}
+    missing = sorted(row_fips - set(context))
+    extra = sorted(set(context) - row_fips) if require_complete else []
+    if missing or extra:
+        detail = []
+        if missing:
+            detail.append(f"missing {len(missing)} requested tract GEOIDs")
+        if extra:
+            detail.append(f"contains {len(extra)} unexpected tract GEOIDs")
+        raise PreparedTractDataError(
+            "prepared Chicago scoring context does not match the Atlas tract universe ("
+            + "; ".join(detail)
+            + ")"
+        )
+    return [{**row, **context[str(row["tract_fips"])]} for row in rows]
+
+
+def _read_database(
+    path,
+    limit=None,
+    low_access_only=True,
+    rural_gap_only=False,
+    urban_context=False,
+    require_complete_context=False,
+):
     connection = None
     try:
         connection = sqlite3.connect(path)
@@ -152,7 +256,13 @@ def _read_database(path, limit=None, low_access_only=True, rural_gap_only=False)
                 ORDER BY population DESC {limit_clause}""",
             parameters,
         ).fetchall()
-        return [{**dict(row), "data_mode": "real"} for row in rows]
+        prepared = [{**dict(row), "data_mode": "real"} for row in rows]
+        if urban_context:
+            prepared = _overlay_urban_context(
+                prepared,
+                require_complete=require_complete_context,
+            )
+        return prepared
     except sqlite3.Error as error:
         raise PreparedTractDataError(
             f"prepared tract database is unreadable or has an invalid schema at {path}"
@@ -194,7 +304,8 @@ def get_low_access_tracts(limit: int = 25) -> list:
     if not path.exists():
         return _sample_tracts()[:limit]
 
-    return _read_database(path, limit)
+    rows = _read_database(path, urban_context=True)
+    return [row for row in rows if row.get("is_chicago")][:limit]
 
 
 def _validate_complete_heatmap_database(path):
@@ -297,7 +408,12 @@ def get_all_tracts() -> list:
             f"s3://$EVIDENCE_BUCKET/{DEFAULT_DATABASE_KEY} before deployment"
         )
     _validate_complete_heatmap_database(path)
-    return _read_database(path, low_access_only=False)
+    return _read_database(
+        path,
+        low_access_only=False,
+        urban_context=True,
+        require_complete_context=True,
+    )
 
 
 @tool
