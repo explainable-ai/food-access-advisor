@@ -375,17 +375,19 @@ class MissionOperationsService:
             if not eligible: blockers.append("no_eligible_vehicle")
             if not site or not site["verified"]: blockers.append("site_not_verified")
             if not site or site["permit"]["status"] != "verified": blockers.append("permit_not_verified")
+            existing_route = mission.get("route_handoff") or {}
+            if existing_route.get("status") != "approved": blockers.append("route_not_approved")
 
             mission["inventory"] = inventory
             mission["vehicle"] = eligible
             mission["fleet_evaluation"] = fleet
             mission["site"] = site
-            mission["route_handoff"] = ({
-                "status": "ready_for_route_advisor",
+            mission["route_handoff"] = (existing_route if existing_route.get("status") == "approved" else {
+                "status": "awaiting_route_approval",
                 "origin": VEHICLES[0].depot_name,
                 "destination": site["name"],
                 "message": "Approved site is ready for the existing Route Advisor workflow.",
-            } if site else None)
+            }) if site else None
             mission["blockers"] = blockers
             mission["status"] = "blocked" if blockers else "ready_for_approval"
             mission["version"] += 1
@@ -393,6 +395,43 @@ class MissionOperationsService:
             detail = ("Mission has blocking requirements: " + ", ".join(blockers)
                       if blockers else "All recorded planning checks passed; human approval is required")
             self._event(mission, "mission_planned", actor, detail)
+            return deepcopy(mission)
+
+    def record_route_approval(
+        self,
+        mission_id: str,
+        *,
+        expected_version: int,
+        actor: str,
+        route_id: str,
+        distance_miles: float,
+        duration_minutes: float,
+    ) -> dict[str, Any]:
+        """Record the human-approved output of the unchanged Route Advisor workflow."""
+        with self._lock:
+            mission = self._missions.get(mission_id)
+            if not mission: raise MissionNotFoundError(mission_id)
+            if mission["version"] != expected_version: raise MissionConflictError("Mission version conflict")
+            if not mission.get("inventory") or mission["inventory"]["status"] != "yes":
+                raise ValueError("Resolve inventory before approving the route")
+            if not mission.get("site") or not mission["site"]["verified"]:
+                raise ValueError("A verified community host is required before route approval")
+            mission["route_handoff"] = {
+                "status": "approved",
+                "route_id": route_id,
+                "origin": VEHICLES[0].depot_name,
+                "destination": mission["site"]["name"],
+                "distance_miles": distance_miles,
+                "duration_minutes": duration_minutes,
+                "approved_by": actor,
+                "approved_at": _iso(self._now_fn()),
+                "message": "Human-approved route received from the existing Route Advisor workflow.",
+            }
+            mission["blockers"] = [item for item in mission["blockers"] if item != "route_not_approved"]
+            mission["status"] = "blocked" if mission["blockers"] else "ready_for_approval"
+            mission["version"] += 1
+            mission["updated_at"] = _iso(self._now_fn())
+            self._event(mission, "route_approved", actor, f"Approved Route Advisor result {route_id}")
             return deepcopy(mission)
 
     def approve_mission(self, mission_id: str, *, expected_version: int, actor: str, note: str = "") -> dict[str, Any]:
