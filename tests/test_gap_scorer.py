@@ -115,6 +115,22 @@ def test_food_insecurity_context_replaces_below_poverty_measure():
     assert "food-insecurity risk" in result["score_explanation"]
 
 
+def test_missing_prepared_food_insecurity_does_not_fall_back_to_poverty():
+    tract = make_tract("A", population=3000)
+    tract.update(
+        food_insecurity_rate=None,
+        population_below_poverty=900,
+        poverty_universe=1000,
+        scoring_context_version="food-access-advisor-urban-context-v1",
+    )
+
+    result = score_gaps([tract], [], top_n=1)[0]
+
+    assert result["score_components"]["poverty"] is None
+    assert "poverty" in result["missing_components"]
+    assert "missing evidence: food-insecurity risk" in result["score_explanation"]
+
+
 def test_prepared_transportation_is_a_distinct_scored_component():
     high_burden = make_tract("A", population=1000)
     high_burden.update(transit_burden=0.9, households_no_vehicle=10, households_total=100)
