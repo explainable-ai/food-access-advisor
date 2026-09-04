@@ -86,13 +86,57 @@ def _transit_burden(nearest):
     return min(max(float(nearest["transit_minutes"]) / 45, 0), 1.0)
 
 
-def _coverage(nearest):
+def _tract_transit_burden(tract, nearest):
+    """Use prepared transit service evidence when available.
+
+    Urban context preparation derives this value from CTA GTFS stop proximity,
+    route availability, and average weekday service. The legacy nearest-resource
+    value remains only for callers that already provide an actual transit time.
+    """
+    prepared = tract.get("transit_burden")
+    if prepared is not None:
+        return max(0.0, min(float(prepared), 1.0))
+    return _transit_burden(nearest)
+
+
+def _economic_need(tract):
+    """Return the approved income-based food-insecurity risk measure.
+
+    The prepared Chicago context uses the share of residents below 200% of the
+    federal poverty level. Older/rural rows retain the existing poverty measure
+    so the Route Advisor scoring path is unchanged.
+    """
+    prepared = tract.get("food_insecurity_rate")
+    if prepared is not None:
+        value = float(prepared)
+        return max(0.0, min(value / 100 if value > 1 else value, 1.0))
+    return _rate(
+        tract,
+        "poverty_rate",
+        "population_below_poverty",
+        "poverty_universe",
+    )
+
+
+def _coverage(nearest, *, enhanced=False):
     """Existing coverage (higher is better); it is subtracted in scoring."""
     if nearest is None:
         return 0.0
     minutes = nearest.get("transit_minutes")
     burden = min(float(minutes) / 45, 1.0) if minutes is not None else min(nearest["distance_miles"] / 3, 1.0)
-    quality = 0.45 if nearest.get("kind") == "convenience" else 1.0
+    quality = (
+        {
+            "grocery": 1.0,
+            "supermarket": 1.0,
+            "food_bank": 0.55,
+            "market": 0.55,
+            "convenience": 0.25,
+            "farm": 0.20,
+            "garden": 0.15,
+        }.get(nearest.get("kind"), 0.25)
+        if enhanced
+        else (0.45 if nearest.get("kind") == "convenience" else 1.0)
+    )
     return max(0.0, (1.0 - burden) * quality)
 
 
@@ -125,7 +169,7 @@ def _weighted_score(components, normalized_weights):
 
 
 def _explanation(contributions, missing):
-    labels = {"food_access_gap": "food-access gap", "poverty": "poverty",
+    labels = {"food_access_gap": "food-access gap", "poverty": "food-insecurity risk",
               "no_vehicle": "households without a vehicle", "population_served": "population served",
               "transit_burden": "transit burden", "existing_coverage": "existing coverage"}
     positive = [(name, points) for name, points in contributions.items()
@@ -145,7 +189,7 @@ def _explanation(contributions, missing):
 
 def _score_all(tracts, resources, weights):
     nearest = [_nearest_resource(tract, resources) for tract in tracts]
-    poverty = [_rate(t, "poverty_rate", "population_below_poverty", "poverty_universe") for t in tracts]
+    poverty = [_economic_need(t) for t in tracts]
     no_vehicle = [_rate(t, "no_vehicle_rate", "households_no_vehicle", "households_total") for t in tracts]
     population = _min_max([t.get("population") for t in tracts])
     normalized_weights = weights.normalized()
@@ -153,8 +197,11 @@ def _score_all(tracts, resources, weights):
     for index, tract in enumerate(tracts):
         components = {"food_access_gap": _severity_component(tract), "poverty": poverty[index],
                       "no_vehicle": no_vehicle[index], "population_served": population[index],
-                      "transit_burden": _transit_burden(nearest[index]),
-                      "existing_coverage": _coverage(nearest[index])}
+                      "transit_burden": _tract_transit_burden(tract, nearest[index]),
+                      "existing_coverage": _coverage(
+                          nearest[index],
+                          enhanced=bool(tract.get("scoring_context_version")),
+                      )}
         score, contributions = _weighted_score(components, normalized_weights)
         missing = [name for name, value in components.items() if value is None]
         entry = {**tract, "need_score": score, "score_components": {name: round(value * 100, 1) if value is not None else None for name, value in components.items()},
@@ -162,7 +209,14 @@ def _score_all(tracts, resources, weights):
                  "missing_components": missing, "score_explanation": _explanation(contributions, missing),
                  "nearest_resource_kind": nearest[index].get("kind") if nearest[index] else None,
                  "nearest_resource_miles": nearest[index].get("distance_miles") if nearest[index] else None,
-                 "nearest_resource_minutes": nearest[index].get("transit_minutes") if nearest[index] else None}
+                 "nearest_resource_minutes": nearest[index].get("transit_minutes") if nearest[index] else None,
+                 "community_area": tract.get("community_area"),
+                 "is_chicago": tract.get("is_chicago"),
+                 "food_insecurity_rate": tract.get("food_insecurity_rate"),
+                 "transit_nearest_stop_miles": tract.get("transit_nearest_stop_miles"),
+                 "transit_route_count": tract.get("transit_route_count"),
+                 "transit_weekday_trips": tract.get("transit_weekday_trips"),
+                 "scoring_context_version": tract.get("scoring_context_version")}
         scored.append(entry)
     scored.sort(key=lambda item: (-item["need_score"], item["tract_fips"]))
     for rank, item in enumerate(scored, 1):
