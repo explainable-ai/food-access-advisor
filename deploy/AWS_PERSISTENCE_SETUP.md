@@ -47,6 +47,14 @@ object as well. `describe-table` should show the index `ACTIVE` before
 relying on it -- backfilling a GSI on an existing table can take a while
 depending on table size.
 
+**A GSI is a separate IAM resource from its table.** Creating the index
+above is not enough on its own -- `deploy/food-access-runtime-policy.json`
+must also grant `dynamodb:Query` on the index's own ARN
+(`.../table/food-access-watchdog-evidence/index/item_type-detected_at-index`),
+not just the table ARN, or every DynamoDB-backed `/api/watchdog/changes`
+request will get `AccessDeniedException`. Re-attach the updated policy
+document to each runtime's IAM role after creating the index.
+
 `read_all_changes` falls back to the old full-table Scan (logging a
 warning) if the index doesn't exist yet or is still backfilling, so
 deploying this code before running the command above degrades to the

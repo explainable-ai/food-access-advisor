@@ -11,7 +11,10 @@
         "dynamodb:Query",
         "dynamodb:Scan"
       ],
-      "Resource": "arn:aws:dynamodb:us-east-1:576951331959:table/food-access-watchdog-evidence"
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:576951331959:table/food-access-watchdog-evidence",
+        "arn:aws:dynamodb:us-east-1:576951331959:table/food-access-watchdog-evidence/index/item_type-detected_at-index"
+      ]
     },
     {
       "Sid": "UseFlaggedTracts",
