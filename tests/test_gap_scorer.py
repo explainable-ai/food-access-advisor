@@ -162,6 +162,27 @@ def test_urban_coverage_distinguishes_garden_from_full_grocery():
     assert garden["need_score"] > grocery["need_score"]
 
 
+def test_closer_garden_does_not_hide_nearby_grocery_coverage():
+    tract = make_tract("A", population=3000)
+    tract["scoring_context_version"] = "food-access-advisor-urban-context-v1"
+    weights = {
+        "food_access_gap": 1,
+        "poverty": 0,
+        "no_vehicle": 0,
+        "population_served": 0,
+        "transit_burden": 0,
+        "existing_coverage": 1,
+    }
+    grocery = {"kind": "grocery", "name": "M", "lat": 41.802, "lon": -87.632}
+    garden = {"kind": "garden", "name": "G", "lat": 41.801, "lon": -87.631}
+
+    grocery_only = score_gaps([tract], [grocery], top_n=1, weights=weights)[0]
+    both = score_gaps([tract], [garden, grocery], top_n=1, weights=weights)[0]
+
+    assert both["nearest_resource_kind"] == "garden"
+    assert both["need_score"] == grocery_only["need_score"]
+
+
 def test_adjustable_weights_can_change_ranking():
     high_poverty = make_tract("A", population=1000, half=0, one=1)
     high_poverty["poverty_rate"] = 0.8
