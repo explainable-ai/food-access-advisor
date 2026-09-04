@@ -13,6 +13,13 @@ from botocore.exceptions import ClientError
 
 SUCCESS_STATUSES = {"complete", "partial", "stale"}
 
+# GSI required on the evidence table (partition key item_type, sort key
+# detected_at, ALL projection) so `read_all_changes` can Query the much
+# smaller "change" partition directly instead of Scanning every item in the
+# table (which also holds one "snapshot" item per source per refresh cycle).
+# See deploy/AWS_PERSISTENCE_SETUP.md for the index-creation command.
+CHANGES_BY_DETECTED_AT_INDEX = "item_type-detected_at-index"
+
 
 class StorageConfigurationError(RuntimeError):
     pass
@@ -55,6 +62,17 @@ def _scan_all(table, **kwargs) -> list[dict[str, Any]]:
     items = []
     while True:
         response = table.scan(**kwargs)
+        items.extend(response.get("Items", []))
+        key = response.get("LastEvaluatedKey")
+        if not key:
+            return items
+        kwargs["ExclusiveStartKey"] = key
+
+
+def _query_all(table, **kwargs) -> list[dict[str, Any]]:
+    items = []
+    while True:
+        response = table.query(**kwargs)
         items.extend(response.get("Items", []))
         key = response.get("LastEvaluatedKey")
         if not key:
@@ -136,12 +154,20 @@ class AwsEvidenceStore:
             self.table.put_item(Item=_decimalize(item))
 
     def read_all_changes(self, *, source_id: str | None = None) -> list[dict[str, Any]]:
-        expression = Attr("item_type").eq("change") & (
-            Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
-        )
+        # Query the item_type=change partition of CHANGES_BY_DETECTED_AT_INDEX
+        # instead of Scanning the whole table (which also holds one
+        # "snapshot" item per source per refresh cycle, typically far more
+        # numerous than change events) -- see the index's docstring above.
+        expression = Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
         if source_id:
             expression = expression & Attr("source_id").eq(source_id)
-        items = _scan_all(self.table, FilterExpression=expression)
+        items = _query_all(
+            self.table,
+            IndexName=CHANGES_BY_DETECTED_AT_INDEX,
+            KeyConditionExpression=Key("item_type").eq("change"),
+            FilterExpression=expression,
+            ScanIndexForward=False,
+        )
         ordered = sorted(
             (_native(item) for item in items if not item.get("suppressed", False)),
             key=lambda item: item["detected_at"],

@@ -22,6 +22,31 @@ Do not set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or
 `deploy/food-access-runtime-policy.json` to each runtime's IAM role. Local AWS
 testing should use an SSO profile.
 
+## Required index
+
+`GET /api/watchdog/changes` reads the `item_type=change` items directly via a
+Global Secondary Index (`item_type-detected_at-index`) instead of scanning
+the whole table -- the table also holds one `snapshot` item per source per
+refresh cycle, typically far more numerous than change events, so a full
+Scan was the dominant source of latency on this endpoint (frequently over
+the frontend's 20-second read timeout). Create the index once per table:
+
+```bash
+aws dynamodb update-table \
+  --table-name food-access-watchdog-evidence \
+  --attribute-definitions \
+      AttributeName=item_type,AttributeType=S \
+      AttributeName=detected_at,AttributeType=S \
+  --global-secondary-index-updates \
+      '[{"Create":{"IndexName":"item_type-detected_at-index","KeySchema":[{"AttributeName":"item_type","KeyType":"HASH"},{"AttributeName":"detected_at","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}}]'
+```
+
+If the table uses `PROVISIONED` billing mode (rather than the default
+`PAY_PER_REQUEST`), add a `ProvisionedThroughput` block to the `Create`
+object as well. `describe-table` should show the index `ACTIVE` before
+relying on it -- backfilling a GSI on an existing table can take a while
+depending on table size.
+
 ## Storage boundary
 
 - `food-access-watchdog-evidence` holds snapshot metadata and individual

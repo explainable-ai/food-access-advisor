@@ -6,7 +6,8 @@ import pytest
 from botocore.exceptions import ClientError
 
 from storage.aws_persistence import (AwsEvidenceStore, AwsFlaggedTractStore,
-                                     StorageConfigurationError, _scan_all)
+                                     CHANGES_BY_DETECTED_AT_INDEX,
+                                     StorageConfigurationError, _query_all, _scan_all)
 
 
 class FakeS3:
@@ -21,10 +22,11 @@ class FakeEvidenceTable:
     def __init__(self): self.items = []
     def put_item(self, Item): self.items.append(Item)
     def query(self, **kwargs):
+        if kwargs.get("IndexName") == CHANGES_BY_DETECTED_AT_INDEX:
+            changes = [item for item in self.items if item.get("item_type") == "change"]
+            return {"Items": sorted(changes, key=lambda item: item["detected_at"], reverse=True)}
         successes = [item for item in self.items if item["record_key"].startswith("SNAPSHOT_SUCCESS#")]
         return {"Items": sorted(successes, key=lambda item: item["record_key"], reverse=True)}
-    def scan(self, **kwargs):
-        return {"Items": [item for item in self.items if item.get("item_type") == "change"]}
 
 
 class FakeFlagTable:
@@ -106,6 +108,15 @@ def test_paginated_scan_reads_all_pages():
                 return {"Items": [{"id": 1}], "LastEvaluatedKey": {"id": 1}}
             return {"Items": [{"id": 2}]}
     assert _scan_all(Table()) == [{"id": 1}, {"id": 2}]
+
+
+def test_paginated_query_reads_all_pages():
+    class Table:
+        def query(self, **kwargs):
+            if "ExclusiveStartKey" not in kwargs:
+                return {"Items": [{"id": 1}], "LastEvaluatedKey": {"id": 1}}
+            return {"Items": [{"id": 2}]}
+    assert _query_all(Table()) == [{"id": 1}, {"id": 2}]
 
 
 def test_suppressed_changes_are_hidden_from_normal_reads():
