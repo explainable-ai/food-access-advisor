@@ -48,6 +48,14 @@ def _tract(fips, population, low_access=0):
         "population_below_poverty": 20,
         "households_total": 100,
         "households_no_vehicle": 10,
+        "is_chicago": True,
+    }
+
+
+def _urban_context(fipses):
+    return {
+        fips: {"tract_fips": fips, "is_chicago": True}
+        for fips in fipses
     }
 
 
@@ -85,6 +93,7 @@ def test_get_all_tracts_includes_non_low_access_rows(tmp_path, monkeypatch):
         "expected_atlas_tract_fips_sha256",
         _complete_metadata(fipses)[-1][1],
     )
+    monkeypatch.setattr(access_data, "_load_urban_context", lambda: _urban_context(fipses))
 
     result = access_data.get_all_tracts()
 
@@ -209,6 +218,7 @@ def test_get_all_tracts_materializes_prepared_database_from_s3(tmp_path, monkeyp
         "expected_atlas_tract_fips_sha256",
         _complete_metadata((fips,))[-1][1],
     )
+    monkeypatch.setattr(access_data, "_load_urban_context", lambda: _urban_context((fips,)))
 
     result = access_data.get_all_tracts()
 
