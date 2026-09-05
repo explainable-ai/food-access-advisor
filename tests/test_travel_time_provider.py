@@ -59,11 +59,9 @@ def test_waypoint_route_returns_color_coded_route_choices():
 
     primary = feature([[-89.2, 37.0], [-89.15, 37.05], [-89.2, 37.0]], 9)
     shortest = feature([[-89.2, 37.0], [-89.14, 37.04], [-89.2, 37.0]], 8)
-    reverse = feature([[-89.2, 37.0], [-89.1, 37.1], [-89.15, 37.05], [-89.2, 37.0]], 11)
     session = SequencedSession([
         {"features": [primary]},
         {"features": [shortest]},
-        {"features": [reverse]},
     ])
     provider = OpenRouteServiceProvider(api_key="test", session=session)
     routes = provider.directions([
@@ -73,9 +71,13 @@ def test_waypoint_route_returns_color_coded_route_choices():
         {"lat": 37.0, "lon": -89.2},
     ])
 
-    assert len(routes) == 3
+    assert len(routes) == 2
     assert session.calls[1][1]["json"]["preference"] == "shortest"
-    assert session.calls[2][1]["json"]["coordinates"][1] == [-89.1, 37.1]
+    assert all(
+        call[1]["json"]["coordinates"]
+        == [[-89.2, 37.0], [-89.15, 37.05], [-89.1, 37.1], [-89.2, 37.0]]
+        for call in session.calls
+    )
 
 
 def test_missing_key_is_explicit(monkeypatch):
