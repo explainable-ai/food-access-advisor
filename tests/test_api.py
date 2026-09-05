@@ -55,6 +55,22 @@ def test_health_endpoint_has_no_dependencies():
     assert response.json() == {"status": "ok"}
 
 
+def test_tract_boundaries_returns_filtered_feature_collection_for_county_17063():
+    response = client.get("/api/tract-boundaries", params={"county": "17063"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["type"] == "FeatureCollection"
+    assert len(body["features"]) > 0
+    assert all(feature["properties"]["tract_fips"].startswith("17063") for feature in body["features"])
+
+
+def test_tract_boundaries_rejects_unknown_county():
+    response = client.get("/api/tract-boundaries", params={"county": "99999"})
+
+    assert response.status_code == 404
+
+
 def test_cors_allows_local_and_lovable_frontends_but_not_unknown_origin():
     origins = [
         "http://localhost:5173",
