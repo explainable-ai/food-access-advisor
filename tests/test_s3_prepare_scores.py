@@ -94,6 +94,7 @@ def _database(path, rows):
         )
         connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         connection.execute("INSERT INTO metadata VALUES ('geography_vintage', '2020')")
+        connection.commit()
 
 
 def test_rural_feature_surface_and_scores_are_deterministic(tmp_path, monkeypatch):
