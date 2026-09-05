@@ -29,6 +29,16 @@
       "Resource": "arn:aws:dynamodb:us-east-1:576951331959:table/food-access-flagged-tracts"
     },
     {
+      "Sid": "ReadMissionOperationsDemo",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeTable",
+        "dynamodb:GetItem",
+        "dynamodb:Query"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:576951331959:table/food-access-demo-operations"
+    },
+    {
       "Sid": "ReadWriteEvidenceObjects",
       "Effect": "Allow",
       "Action": [
