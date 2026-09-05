@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -11,6 +13,20 @@ from data.s3_prepare_scores import (
     safe_extract,
     sha256_file,
 )
+
+
+def test_direct_script_entry_point_can_import_project_modules():
+    script = Path(__file__).parents[1] / "data" / "s3_prepare_scores.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=script.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--evidence-date" in result.stdout
 
 
 class FakeS3:
