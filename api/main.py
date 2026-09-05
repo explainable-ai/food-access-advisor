@@ -462,4 +462,23 @@ def tract_boundaries(county: str = Query(..., description="Configured Illinois c
             detail=f"{boundary_path.name} doesn't exist yet -- run "
             "`python data/prep_tract_boundaries.py` first.",
         )
-    return json.loads(boundary_path.read_text())
+
+    boundary_data = json.loads(boundary_path.read_text())
+    features = boundary_data.get("features")
+
+    if not isinstance(features, list):
+        raise HTTPException(
+            status_code=500,
+            detail=f"{boundary_path.name} is not a valid GeoJSON FeatureCollection.",
+        )
+
+    filtered_features = [
+        feature
+        for feature in features
+        if str(feature.get("properties", {}).get("tract_fips", ""))[:5] == county
+    ]
+
+    return {
+        **boundary_data,
+        "features": filtered_features,
+    }

@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient  # noqa: E402
 
 import api.main as api_main  # noqa: E402
+from config import PILOT_RURAL_COUNTY  # noqa: E402
 import tools.flagged_tracts as flagged_tracts  # noqa: E402
 from tools.existing_resources import OverpassQueryError  # noqa: E402
 
@@ -53,6 +54,72 @@ def test_health_endpoint_has_no_dependencies():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_tract_boundaries_returns_filtered_feature_collection_for_county_17063():
+    response = client.get("/api/tract-boundaries", params={"county": "17063"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["type"] == "FeatureCollection"
+    assert len(body["features"]) > 0
+    assert all(feature["properties"]["tract_fips"].startswith("17063") for feature in body["features"])
+
+
+def test_tract_boundaries_rejects_unknown_county():
+    response = client.get("/api/tract-boundaries", params={"county": "99999"})
+
+    assert response.status_code == 404
+
+
+def test_rural_scored_tracts_have_boundaries_across_configured_counties(monkeypatch):
+    county_boundaries = {}
+    merged_boundary_fips = {}
+    for county_fips in PILOT_RURAL_COUNTY["county_fips"]:
+        response = client.get("/api/tract-boundaries", params={"county": county_fips})
+        assert response.status_code == 200
+        features = response.json()["features"]
+        assert len(features) > 0
+        county_boundaries[county_fips] = features
+        for feature in features:
+            merged_boundary_fips.setdefault(feature["properties"]["tract_fips"], feature)
+
+    sampled_fips = [county_boundaries[county_fips][0]["properties"]["tract_fips"] for county_fips in PILOT_RURAL_COUNTY["county_fips"]]
+    for tract_fips in merged_boundary_fips:
+        if tract_fips not in sampled_fips:
+            sampled_fips.append(tract_fips)
+        if len(sampled_fips) == 72:
+            break
+    assert len(sampled_fips) == 72
+
+    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope, require_complete_coverage=False: [])
+    monkeypatch.setattr(
+        api_main,
+        "get_all_rural_tracts",
+        lambda: [
+            {
+                "tract_fips": tract_fips,
+                "population": 1000,
+                "low_access_half_mile": 0,
+                "low_access_one_mile": 0,
+                "centroid_lat": 41.0,
+                "centroid_lon": -88.0,
+                "low_income_low_access_share": 0.25,
+                "data_mode": "real",
+            }
+            for tract_fips in sampled_fips
+        ],
+    )
+
+    scored = client.get("/api/route-advisor/tract-scores")
+    assert scored.status_code == 200
+    scored_fips = {row["tract_fips"] for row in scored.json()}
+    assert scored_fips == set(sampled_fips)
+    assert not scored_fips.issubset({
+        feature["properties"]["tract_fips"]
+        for feature in county_boundaries["17089"]
+    })
+    assert scored_fips.issubset(set(merged_boundary_fips))
 
 
 def test_cors_allows_local_and_lovable_frontends_but_not_unknown_origin():
