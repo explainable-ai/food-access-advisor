@@ -124,3 +124,8 @@ def test_rural_feature_surface_and_scores_are_deterministic(tmp_path, monkeypatc
     assert scores["tract_count"] == 2
     assert [row["rank"] for row in scores["scores"]] == [1, 2]
     assert scores["weights"]["food_access_gap"] == 0.25
+
+    # This fails with WinError 32 when the SQLite connection remains open.
+    moved = tmp_path / "released.db"
+    database.rename(moved)
+    assert moved.exists()
