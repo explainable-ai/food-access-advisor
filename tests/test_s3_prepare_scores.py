@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import sqlite3
 import subprocess
@@ -76,7 +77,7 @@ def test_safe_extract_rejects_path_traversal(tmp_path):
 
 
 def _database(path, rows):
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         connection.execute(
             """CREATE TABLE tracts (
                tract_fips TEXT PRIMARY KEY, population INTEGER,
@@ -93,6 +94,7 @@ def _database(path, rows):
         )
         connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         connection.execute("INSERT INTO metadata VALUES ('geography_vintage', '2020')")
+        connection.commit()
 
 
 def test_rural_feature_surface_and_scores_are_deterministic(tmp_path, monkeypatch):
