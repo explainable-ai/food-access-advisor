@@ -13,12 +13,19 @@ import json
 import os
 import shutil
 import sqlite3
+import sys
 import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
+
+# Support both ``python -m data.s3_prepare_scores`` and the documented
+# Windows invocation ``python .\data\s3_prepare_scores.py``.
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from tools.gap_scorer import DEFAULT_WEIGHTS, score_all_gaps
