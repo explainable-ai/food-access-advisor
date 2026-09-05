@@ -17,7 +17,6 @@ router = APIRouter(prefix="/api", tags=["mission-operations"])
 
 class MissionCreateRequest(BaseModel):
     investigation_id: str = Field(min_length=3)
-    investigation_status: str
     tract_fips: str = Field(min_length=11, max_length=11)
     community: str = Field(min_length=2)
     study_area: str = "chicago"
