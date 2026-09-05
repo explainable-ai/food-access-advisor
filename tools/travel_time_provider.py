@@ -65,19 +65,15 @@ class OpenRouteServiceProvider:
             raise TravelTimeProviderError("openrouteservice returned no road geometry")
         routes = [_parse_feature(feature) for feature in features]
 
-        # ORS' built-in alternative_routes option applies to a simple
-        # origin/destination trip. A service route normally has waypoints, so
-        # produce honest alternatives by comparing a shortest-path request and
-        # (when possible) the reverse stop order while preserving both ends.
-        # Each option is still a real ORS road route; no straight connector is
-        # synthesized.
+        # ORS' built-in alternative_routes option applies only to a simple
+        # origin/destination trip. For a service route with waypoints, request
+        # a shortest-road variant while preserving the optimizer's exact stop
+        # sequence. Reordering waypoints here would make the returned geometry
+        # disagree with the selected stops and trip schedule.
         if len(coordinates) > 2 and alternatives:
             variants = [
                 {**body, "preference": "shortest"},
             ]
-            interior = coordinates[1:-1]
-            if len(interior) > 1:
-                variants.append({**body, "coordinates": [coordinates[0], *reversed(interior), coordinates[-1]]})
             for variant in variants[: int(alternatives)]:
                 try:
                     candidate_payload = self._post("/v2/directions/driving-car/geojson", variant)
