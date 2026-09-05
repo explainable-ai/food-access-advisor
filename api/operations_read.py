@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from services.mission_preview import build_mission_preview
 from storage.operations_repository import (
     OperationsDataError,
     OperationsRepository,
@@ -85,3 +86,17 @@ def scenario(scenario_id: str, repository: OperationsRepository = Depends(get_op
     if item is None:
         raise HTTPException(status_code=404, detail=f"Scenario {scenario_id} was not found")
     return item
+
+
+@router.get("/scenarios/{scenario_id}/preview")
+def mission_preview(
+    scenario_id: str,
+    repository: OperationsRepository = Depends(get_operations_repository),
+):
+    try:
+        item = repository.get_entity("demo_scenario", scenario_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail=f"Scenario {scenario_id} was not found")
+        return build_mission_preview(item, repository)
+    except OperationsDataError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
