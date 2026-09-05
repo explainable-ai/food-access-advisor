@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListEvidencePipelinePrefixes",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::food-access-evidence-576951331959-us-east-1",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "raw/*",
+            "prepared/*",
+            "resource-cache/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ReadVerifiedEvidence",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/raw/*",
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/prepared/*",
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/resource-cache/*"
+      ]
+    },
+    {
+      "Sid": "PublishPreparedEvidence",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": [
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/prepared/*",
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/resource-cache/*"
+      ]
+    }
+  ]
+}

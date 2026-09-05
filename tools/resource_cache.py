@@ -1,5 +1,6 @@
 """Prepared existing-resource cache for API reads and scheduled refreshes."""
 
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -137,7 +138,17 @@ def refresh_resource_cache(scope):
     encoded = json.dumps(payload, separators=(",", ":")).encode()
     bucket = _bucket()
     if bucket:
-        boto3.client("s3").put_object(Bucket=bucket, Key=_key(scope), Body=encoded, ContentType="application/json")
+        boto3.client("s3").put_object(
+            Bucket=bucket,
+            Key=_key(scope),
+            Body=encoded,
+            ContentType="application/json",
+            ServerSideEncryption="AES256",
+            Metadata={
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+                "data-classification": "public_aggregate",
+            },
+        )
     else:
         path = Path(os.getenv("RESOURCE_CACHE_DIR", CACHE_DIR)) / f"{scope}.json"
         path.parent.mkdir(parents=True, exist_ok=True)

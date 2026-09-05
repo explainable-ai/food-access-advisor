@@ -20,3 +20,8 @@ docs/Geospatial_Prioritization_and_Route_Optimization_Requirements.md
 agentcore-staging-*/
 agentcore-preview/
 agentcore-preview-*/
+
+# S3 ingestion outputs; raw ACS evidence stays versioned in S3
+data/acs_*_snapshot.json
+acs_*_snapshot.json
+tract-score-pipeline-report.json
