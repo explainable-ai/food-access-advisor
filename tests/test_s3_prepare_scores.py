@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import sqlite3
 import subprocess
@@ -76,7 +77,7 @@ def test_safe_extract_rejects_path_traversal(tmp_path):
 
 
 def _database(path, rows):
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         connection.execute(
             """CREATE TABLE tracts (
                tract_fips TEXT PRIMARY KEY, population INTEGER,
