@@ -91,3 +91,99 @@ def test_read_only_api_lists_and_gets_scenarios():
     assert client.get("/api/operations/scenarios").status_code == 200
     assert client.get("/api/operations/scenarios/DEMO-READY-001").json()["expected_mission_status"] == "Ready for approval"
     assert client.get("/api/operations/scenarios/missing").status_code == 404
+
+
+
+@pytest.mark.parametrize(
+    "scenario_id,inventory_answer,expected_status,explanation,canonical_status",
+    [
+        (
+            "DEMO-READY-001",
+            "Yes",
+            "Ready for approval",
+            "All required inventory is current and sufficient; vehicle, driver, site, and demo permit checks pass.",
+            "Ready",
+        ),
+        (
+            "DEMO-PARTIAL-002",
+            "Partial",
+            "Needs substitution approval",
+            "Whole milk availability is below the policy requirement; an authorized person must approve a substitution or reduce household count.",
+            "Partial",
+        ),
+        (
+            "DEMO-BLOCKED-003",
+            "Yes",
+            "Blocked",
+            "Assigned vehicle is unavailable for overdue maintenance, driver credentials are invalid, and the demo permit is missing.",
+            "Blocked",
+        ),
+        (
+            "DEMO-UNKNOWN-004",
+            "Unknown",
+            "Blocked — refresh required",
+            "Rural inventory was last updated more than 24 hours ago; the agent must not treat stale quantities as available.",
+            "Unknown",
+        ),
+    ],
+)
+def test_mission_preview_normalizes_all_demo_scenarios(
+    scenario_id, inventory_answer, expected_status, explanation, canonical_status
+):
+    references = {
+        "vehicle_id": "VEH-001",
+        "driver_id": "DRV-001",
+        "site_id": "SITE-001",
+        "permit_id": "PERMIT-001",
+    }
+    items = [
+        _item(
+            "demo_scenario",
+            scenario_id,
+            scenario_name=scenario_id,
+            inventory_answer=inventory_answer,
+            expected_mission_status=expected_status,
+            expected_agent_explanation=explanation,
+            warehouse_id="WH-001",
+            expected_households=60,
+            **references,
+        ),
+        _item("vehicle", references["vehicle_id"]),
+        _item("driver", references["driver_id"]),
+        _item("site_partner", references["site_id"]),
+        _item("permit", references["permit_id"]),
+    ]
+    repository = _repository(items)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_operations_repository] = lambda: repository
+    client = TestClient(app)
+
+    response = client.get(f"/api/operations/scenarios/{scenario_id}/preview")
+
+    assert response.status_code == 200
+    preview = response.json()
+    assert preview["status"] == canonical_status
+    assert preview["not_for_real_dispatch"] is True
+    assert preview["dispatch_enabled"] is False
+    assert preview["explanation"] == explanation
+    assert {check["kind"] for check in preview["checks"]} == {
+        "inventory",
+        "vehicle",
+        "driver",
+        "site",
+        "permit",
+        "policy",
+    }
+
+    checks = {check["kind"]: check for check in preview["checks"]}
+    if canonical_status == "Partial":
+        assert checks["inventory"]["status"] == "Partial"
+        assert checks["policy"]["status"] == "Partial"
+    elif canonical_status == "Blocked":
+        assert checks["vehicle"]["status"] == "Blocked"
+        assert checks["driver"]["status"] == "Blocked"
+        assert checks["permit"]["status"] == "Blocked"
+    elif canonical_status == "Unknown":
+        assert checks["inventory"]["status"] == "Unknown"
+        assert checks["policy"]["status"] == "Unknown"
