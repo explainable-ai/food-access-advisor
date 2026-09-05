@@ -503,11 +503,9 @@ See [`deploy/AWS_PERSISTENCE_SETUP.md`](deploy/AWS_PERSISTENCE_SETUP.md).
   a `score_gaps`-shaped JSON endpoint would let the UI render a real
   clickable ranked table instead.
 - **Verify the real tract-polygon map rendering and Census download.**
-  `data/prep_tract_boundaries.py` and `HomeMap.tsx`'s data pipeline were
-  verified as far as this project's sandboxed, network-restricted testing
-  environment allowed (see above) — running the actual download and
-  looking at the actual rendered map is the next step, in a normal
-  environment.
+  `data/prep_tract_boundaries.py` provides the backend boundary artifacts.
+  The rendered-map implementation and visual QA are maintained in
+  [`explainable-ai/food-equity-navigator`](https://github.com/explainable-ai/food-equity-navigator).
 - **Door-to-door transit travel time.** Chicago prioritization now includes
   real CTA GTFS stop proximity, route availability, and scheduled weekday
   service. A future routing engine can add walk, wait, transfer, and in-vehicle
