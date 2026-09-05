@@ -73,11 +73,10 @@ VITE_COGNITO_LOGOUT_URI=https://YOUR-FINAL-DOMAIN
 These identifiers are not passwords, but they still belong in deployment
 configuration rather than source. Never add a client secret to a browser app.
 
-The same four `VITE_COGNITO_*` variables configure the frontend in this
-repository through `frontend/.env` (copied from `frontend/.env.example`). Its
-Follow-up page displays staff sign-in/sign-out controls, the
-`/auth/callback` route completes the PKCE redirect, and verification requests
-attach the access token. Public pages and read requests remain unauthenticated.
+The same four `VITE_COGNITO_*` variables configure the separate
+`explainable-ai/food-equity-navigator` frontend repository. Its authentication
+callback completes the PKCE redirect, and verification requests attach the access
+token. Public pages and read requests remain unauthenticated.
 
 ## 4. Configure the API task
 
