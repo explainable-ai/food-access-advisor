@@ -31,6 +31,8 @@ from typing import Any, Literal
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.operations import router as operations_router
+
 from api.schemas import (
     AdvisorRequest,
     AdvisorResponse,
@@ -86,6 +88,7 @@ BOUNDARY_FILES_BY_COUNTY_FIPS = {
 }
 
 app = FastAPI(title="Food-Access Advisor API")
+app.include_router(operations_router)
 
 
 def _cors_origins() -> list[str]:
