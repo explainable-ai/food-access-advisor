@@ -63,6 +63,7 @@ def test_cors_allows_local_and_lovable_frontends_but_not_unknown_origin():
         "https://food-equity-navigator.lovable.app",
         "https://food-guide-advisor.lovable.app",
         "https://4edb7a89-80c4-4184-bc69-eb628ea0e136.lovableproject.com",
+        "https://id-preview--4edb7a89-80c4-4184-bc69-eb628ea0e136.lovable.app",
     ]
     for origin in origins:
         allowed = client.options(

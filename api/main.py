@@ -96,7 +96,12 @@ def _cors_origins() -> list[str]:
             "http://localhost:5173,http://localhost:8080,"
             "https://preview--food-equity-navigator.lovable.app,"
             "https://food-equity-navigator.lovable.app,https://food-guide-advisor.lovable.app,"
-            "https://4edb7a89-80c4-4184-bc69-eb628ea0e136.lovableproject.com"
+            "https://4edb7a89-80c4-4184-bc69-eb628ea0e136.lovableproject.com,"
+            # Lovable's in-editor live preview iframe uses this domain
+            # (id-preview--<project-id>.lovable.app), distinct from the
+            # published-preview domain above (same project ID, different
+            # host) -- both are needed, not just one.
+            "https://id-preview--4edb7a89-80c4-4184-bc69-eb628ea0e136.lovable.app"
         ),
     )
     origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
