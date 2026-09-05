@@ -19,9 +19,15 @@ def mission_payload(**overrides):
 
 
 def test_mission_requires_approved_investigation():
+    service = MissionOperationsService(investigation_lookup=lambda _: {"status": "monitoring"})
+    with pytest.raises(ValueError, match="approved investigation"):
+        service.create_mission(mission_payload())
+
+
+def test_caller_cannot_forge_investigation_approval():
     service = MissionOperationsService()
     with pytest.raises(ValueError, match="approved investigation"):
-        service.create_mission(mission_payload(investigation_status="monitoring"))
+        service.create_mission(mission_payload(investigation_id="INV-NOT-FOUND", investigation_status="approved"))
 
 
 def test_inventory_reports_partial_and_never_hides_shortage():
@@ -112,4 +118,64 @@ def test_reconciliation_closes_the_operational_loop():
     )
     assert reconciled["status"] == "reconciled"
     assert reconciled["outcome"]["households_served"] == 112
+    pantry_reservations = [row for row in reconciled["reservations"] if row["sku"] == "PANTRY-BOX"]
+    assert sum(row["returned_quantity"] for row in pantry_reservations) == 8
+    assert all(row["status"] == "reconciled" for row in reconciled["reservations"])
+    pantry_lot = next(lot for lot in service._lots if lot.sku == "PANTRY-BOX")
+    assert pantry_lot.reserved == 0
+    assert pantry_lot.on_hand == 13
     assert reconciled["timeline"][-1]["action"] == "mission_reconciled"
+
+
+def test_dispatched_or_reconciled_mission_cannot_be_replanned():
+    service = MissionOperationsService()
+    mission = service.create_mission(mission_payload(expected_households=10))
+    planned = service.plan_mission(mission["mission_id"])
+    routed = service.record_route_approval(
+        mission["mission_id"], expected_version=planned["version"], actor="ops@example.org",
+        route_id="ROUTE-003", distance_miles=8, duration_minutes=24,
+    )
+    approved = service.approve_mission(
+        mission["mission_id"], expected_version=routed["version"], actor="ops@example.org"
+    )
+    dispatched = service.dispatch_mission(
+        mission["mission_id"], expected_version=approved["version"], actor="ops@example.org"
+    )
+    with pytest.raises(ValueError, match="cannot be replanned"):
+        service.plan_mission(mission["mission_id"])
+    reconciled = service.reconcile_mission(
+        mission["mission_id"], expected_version=dispatched["version"], actor="ops@example.org",
+        outcome={"households_served": 10, "inventory_returned": {}},
+    )
+    with pytest.raises(ValueError, match="cannot be replanned"):
+        service.plan_mission(reconciled["mission_id"])
+
+
+def test_dispatch_atomically_rejects_overlapping_vehicle_and_driver_assignment():
+    service = MissionOperationsService()
+    first = service.create_mission(mission_payload(investigation_id="INV-001", expected_households=10))
+    first = service.plan_mission(first["mission_id"])
+    first = service.record_route_approval(
+        first["mission_id"], expected_version=first["version"], actor="ops@example.org",
+        route_id="ROUTE-004", distance_miles=8, duration_minutes=24,
+    )
+    first = service.approve_mission(first["mission_id"], expected_version=first["version"], actor="ops@example.org")
+
+    service._investigation_lookup = lambda investigation_id: {"investigation_id": investigation_id, "status": "approved"}
+    second = service.create_mission(mission_payload(investigation_id="INV-002", expected_households=10))
+    second = service.plan_mission(second["mission_id"])
+    second = service.record_route_approval(
+        second["mission_id"], expected_version=second["version"], actor="ops@example.org",
+        route_id="ROUTE-005", distance_miles=9, duration_minutes=26,
+    )
+    second = service.approve_mission(second["mission_id"], expected_version=second["version"], actor="ops@example.org")
+    service.dispatch_mission(first["mission_id"], expected_version=first["version"], actor="ops@example.org")
+    with pytest.raises(MissionConflictError, match="already assigned"):
+        service.dispatch_mission(second["mission_id"], expected_version=second["version"], actor="ops@example.org")
+
+
+def test_expired_permit_blocks_service_date():
+    service = MissionOperationsService()
+    mission = service.create_mission(mission_payload(service_date="2027-01-01", expected_households=10))
+    planned = service.plan_mission(mission["mission_id"])
+    assert "permit_expired" in planned["blockers"]
