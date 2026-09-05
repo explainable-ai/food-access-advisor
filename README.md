@@ -356,41 +356,7 @@ already-tested fix for a real `ReadTimeoutError` this project hit earlier,
 so these endpoints don't attempt token-by-token SSE streaming; expect
 several seconds to over a minute per call, not a sub-second REST response.
 
-**`frontend/` — a React + MapLibre planning workspace.** A browser UI
-replacing "three command-line scripts" for the demo: an overview map
-toggling between the two pilot regions (tract polygons colored by
-flagged-tract status), Site Advisor / Route Advisor workspaces (a chat-style
-question box against their respective endpoints), and a Follow-up page
-reusing `/api/impact-metrics`' per-region breakdown (the same data
-`dashboard.py` renders server-side, here as a React table). Run it with:
-
-```bash
-cd frontend
-npm install
-cp .env.example .env   # point VITE_API_BASE_URL at your running API if not localhost:8000
-npm run dev
-```
-
-Two things worth knowing before you rely on this for a demo:
-
-- **v1 renders the advisor's answer as one evidence-panel paragraph, not
-  a clickable ranked table.** The Advisor endpoints return the agent's
-  composed text (the ranked recommendation plus the cited brief, exactly
-  as `write_evidence_brief`/`write_route_brief` produce it) — not
-  `score_gaps`'s structured per-tract JSON, since no endpoint exposes that
-  separately today. A structured ranking endpoint is a natural fast-follow.
-- **The map's real tract-polygon rendering has not been visually verified
-  by this project's own testing.** `data/prep_tract_boundaries.py`
-  (Census TIGER/Line shapefiles → GeoJSON) couldn't be run end-to-end from
-  the sandbox that wrote it — `census.gov` is blocked by that sandbox's
-  network egress policy, the same pattern hit earlier with
-  `docs.aws.amazon.com`. Its GeoJSON-conversion/join logic was verified
-  against a synthetic shapefile (confirmed correct filtering and a correct
-  "N tracts missing a boundary" warning), and `HomeMap.tsx`'s
-  `addSource`/`addLayer` calls were confirmed to receive well-formed
-  GeoJSON with zero runtime errors — but the actual visual result (and the
-  real Census download) needs a run in a normal networked environment
-  with real GPU/WebGL, i.e. your machine, not this sandbox's headless one.
+**Frontend application.** The production React + MapLibre interface is maintained separately in [`explainable-ai/food-equity-navigator`](https://github.com/explainable-ai/food-equity-navigator). This repository contains the backend API, agents, data preparation, and deployment resources only.
 
 ## Test it
 
