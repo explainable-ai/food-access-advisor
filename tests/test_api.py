@@ -324,7 +324,7 @@ def test_route_ranked_tracts_returns_scored_list(monkeypatch):
 
 
 def test_site_ranked_tracts_surfaces_missing_cache_as_503(monkeypatch):
-    def _raise(_scope):
+    def _raise(_scope, **_kwargs):
         raise api_main.ResourceCacheError("cache unavailable")
 
     monkeypatch.setattr(api_main, "load_resource_cache", _raise)
@@ -346,7 +346,7 @@ def test_site_resources_returns_list(monkeypatch):
 
 
 def test_route_resources_surfaces_missing_cache_as_503(monkeypatch):
-    def _raise(_scope):
+    def _raise(_scope, **_kwargs):
         raise api_main.ResourceCacheError("boom")
 
     monkeypatch.setattr(api_main, "load_resource_cache", _raise)
