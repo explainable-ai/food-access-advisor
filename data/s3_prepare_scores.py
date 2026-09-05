@@ -8,6 +8,7 @@ value, and every generated artifact is uploaded with its own checksum.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -115,7 +116,10 @@ def _find_named(root: Path, name: str) -> Path:
 
 
 def _read_database(path: Path) -> tuple[list[dict], dict]:
-    with sqlite3.connect(path) as connection:
+    # sqlite3.Connection's context manager commits/rolls back but does not
+    # close the connection. Explicit closing is required on Windows, where an
+    # open handle prevents TemporaryDirectory from deleting the database.
+    with closing(sqlite3.connect(path)) as connection:
         connection.row_factory = sqlite3.Row
         rows = [dict(row) for row in connection.execute("SELECT * FROM tracts ORDER BY tract_fips")]
         metadata = dict(connection.execute("SELECT key, value FROM metadata"))
