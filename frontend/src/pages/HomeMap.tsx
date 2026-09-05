@@ -21,7 +21,7 @@ const REGIONS: Record<
   RegionKey,
   {
     toggleLabel: string;
-    countyFips: string;
+    countyFips: string[];
     center: [number, number];
     zoom: number;
     getRankedTracts: (topN?: number) => Promise<RankedTract[]>;
@@ -34,7 +34,7 @@ const REGIONS: Record<
   // the wireframe's two separate filters collapse into one real toggle here.
   urban: {
     toggleLabel: "Chicago · Fixed site",
-    countyFips: "17031",
+    countyFips: ["17031"],
     center: [-87.685, 41.825],
     zoom: 9,
     getRankedTracts: getSiteRankedTracts,
@@ -42,7 +42,7 @@ const REGIONS: Record<
   },
   rural: {
     toggleLabel: "Chicagoland rural fringe · Mobile route",
-    countyFips: "17089",
+    countyFips: ["17031", "17089", "17093", "17063", "17197", "17091", "17111"],
     center: [-87.91, 41.75],
     zoom: 7,
     getRankedTracts: getRouteRankedTracts,
@@ -153,26 +153,37 @@ export function HomeMap() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    const mapInstance: MapLibreMap = map;
     const config = REGIONS[region];
     let cancelled = false;
 
-    map.flyTo({ center: config.center, zoom: config.zoom });
+    mapInstance.flyTo({ center: config.center, zoom: config.zoom });
 
     function draw() {
       if (cancelled) return;
-      if (!map.isStyleLoaded()) {
-        map.once("load", draw);
+      if (!mapInstance.isStyleLoaded()) {
+        mapInstance.once("load", draw);
         return;
       }
       setBoundaryError(null);
-      getTractBoundaries(config.countyFips)
-        .then((boundaries) => {
+      Promise.all(config.countyFips.map((countyFips) => getTractBoundaries(countyFips)))
+        .then((boundaryCollections) => {
           if (cancelled) return;
+
+          const dedupedFeatures = new Map(
+            boundaryCollections
+              .flatMap((boundaries) => boundaries.features)
+              .map((feature) => [feature.properties.tract_fips, feature]),
+          );
+          const mergedBoundaries: TractBoundaries = {
+            type: "FeatureCollection",
+            features: [...dedupedFeatures.values()],
+          };
 
           const statusByFips = metrics ? buildStatusByFips(metrics, region) : {};
           const withStatus = {
-            ...boundaries,
-            features: boundaries.features.map((f) => ({
+            ...mergedBoundaries,
+            features: mergedBoundaries.features.map((f) => ({
               ...f,
               properties: {
                 ...f.properties,
@@ -181,16 +192,16 @@ export function HomeMap() {
             })),
           };
 
-          fitMapToBoundaries(map, boundaries);
+          fitMapToBoundaries(mapInstance, mergedBoundaries);
 
-          const existingSource = map.getSource("tracts") as GeoJSONSource | undefined;
+          const existingSource = mapInstance.getSource("tracts") as GeoJSONSource | undefined;
           if (existingSource) {
             existingSource.setData(withStatus as never);
             return;
           }
 
-          map.addSource("tracts", { type: "geojson", data: withStatus as never });
-          map.addLayer({
+          mapInstance.addSource("tracts", { type: "geojson", data: withStatus as never });
+          mapInstance.addLayer({
             id: "tracts-fill",
             type: "fill",
             source: "tracts",
@@ -211,7 +222,7 @@ export function HomeMap() {
               "fill-opacity": 0.55,
             },
           });
-          map.addLayer({
+          mapInstance.addLayer({
             id: "tracts-outline",
             type: "line",
             source: "tracts",
@@ -228,7 +239,7 @@ export function HomeMap() {
     draw();
     return () => {
       cancelled = true;
-      map.off("load", draw);
+      mapInstance.off("load", draw);
     };
   }, [region, metrics]);
 

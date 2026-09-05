@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient  # noqa: E402
 
 import api.main as api_main  # noqa: E402
+from config import PILOT_RURAL_COUNTY  # noqa: E402
 import tools.flagged_tracts as flagged_tracts  # noqa: E402
 from tools.existing_resources import OverpassQueryError  # noqa: E402
 
@@ -69,6 +70,43 @@ def test_tract_boundaries_rejects_unknown_county():
     response = client.get("/api/tract-boundaries", params={"county": "99999"})
 
     assert response.status_code == 404
+
+
+def test_rural_ranked_tracts_have_boundaries_across_configured_counties(monkeypatch):
+    boundary_fips = set()
+    rural_tracts = []
+
+    for index, county_fips in enumerate(PILOT_RURAL_COUNTY["county_fips"]):
+        response = client.get("/api/tract-boundaries", params={"county": county_fips})
+        assert response.status_code == 200
+        features = response.json()["features"]
+        assert len(features) > 0
+        boundary_fips.update(feature["properties"]["tract_fips"] for feature in features)
+        rural_tracts.append(
+            {
+                "tract_fips": features[0]["properties"]["tract_fips"],
+                "population": 1000 + index,
+                "low_access_half_mile": 1,
+                "low_access_one_mile": 1,
+                "centroid_lat": 41.0 + (index / 100),
+                "centroid_lon": -88.0,
+                "low_income_low_access_share": 0.4,
+                "data_mode": "real",
+            }
+        )
+
+    monkeypatch.setattr(api_main, "load_resource_cache", lambda scope: [])
+    monkeypatch.setattr(api_main, "get_low_access_rural_tracts", lambda: rural_tracts)
+
+    ranked = client.get(
+        "/api/route-advisor/ranked-tracts",
+        params={"top_n": len(rural_tracts)},
+    )
+
+    assert ranked.status_code == 200
+    ranked_fips = {row["tract_fips"] for row in ranked.json()}
+    assert ranked_fips == {tract["tract_fips"] for tract in rural_tracts}
+    assert ranked_fips.issubset(boundary_fips)
 
 
 def test_cors_allows_local_and_lovable_frontends_but_not_unknown_origin():
