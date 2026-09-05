@@ -11,7 +11,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from threading import RLock
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
 
@@ -146,6 +146,13 @@ SITE_PARTNERS = {
     }
 }
 
+DEFAULT_INVESTIGATIONS = {
+    "INV-001": {"investigation_id": "INV-001", "status": "approved"},
+}
+
+PLANNABLE_STATUSES = {"draft", "planning", "blocked", "ready_for_approval"}
+ACTIVE_ASSIGNMENT_STATUSES = {"dispatched", "in_service", "completed"}
+
 
 class MissionConflictError(ValueError):
     pass
@@ -158,12 +165,21 @@ class MissionNotFoundError(KeyError):
 class MissionOperationsService:
     """Thread-safe MVP repository and deterministic mission coordinator."""
 
-    def __init__(self, *, now_fn=_now, inventory_max_age_hours: int = 24):
+    def __init__(
+        self,
+        *,
+        now_fn=_now,
+        inventory_max_age_hours: int = 24,
+        investigation_lookup: Callable[[str], dict[str, Any] | None] | None = None,
+    ):
         self._now_fn = now_fn
         self.inventory_max_age = timedelta(hours=inventory_max_age_hours)
         self._lots = _seed_lots(now_fn())
         self._missions: dict[str, dict[str, Any]] = {}
         self._lock = RLock()
+        self._investigation_lookup = investigation_lookup or (
+            lambda investigation_id: deepcopy(DEFAULT_INVESTIGATIONS.get(investigation_id))
+        )
 
     def _event(self, mission: dict[str, Any], action: str, actor: str, detail: str) -> None:
         mission["timeline"].append({
@@ -175,14 +191,16 @@ class MissionOperationsService:
         })
 
     def create_mission(self, payload: dict[str, Any], actor: str = "mission-operations-agent") -> dict[str, Any]:
-        if payload.get("investigation_status") != "approved":
+        investigation_id = str(payload["investigation_id"])
+        investigation = self._investigation_lookup(investigation_id)
+        if not investigation or investigation.get("status") != "approved":
             raise ValueError("A mission requires an approved investigation")
         households = int(payload["expected_households"])
         if households < 1:
             raise ValueError("expected_households must be greater than zero")
         with self._lock:
             duplicate = next((m for m in self._missions.values() if
-                              m["investigation_id"] == payload["investigation_id"] and
+                              m["investigation_id"] == investigation_id and
                               m["service_date"] == payload["service_date"] and
                               m["status"] != "cancelled"), None)
             if duplicate:
@@ -190,7 +208,7 @@ class MissionOperationsService:
             mission_id = f"MM-{len(self._missions) + 104}"
             mission = {
                 "mission_id": mission_id,
-                "investigation_id": payload["investigation_id"],
+                "investigation_id": investigation_id,
                 "tract_fips": payload["tract_fips"],
                 "community": payload["community"],
                 "study_area": payload.get("study_area", "chicago"),
@@ -326,7 +344,39 @@ class MissionOperationsService:
         zones = sorted({PRODUCTS[sku].temperature_zone for sku, quantity in selected_skus if quantity > 0})
         return {"payload_weight_lb": round(weight, 1), "cargo_volume_ft3": round(volume, 1), "temperature_zones": zones}
 
-    def eligible_vehicles(self, requirements: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _windows_overlap(left: str, right: str) -> bool:
+        left_start, left_end = left.split("-", 1)
+        right_start, right_end = right.split("-", 1)
+        return left_start < right_end and right_start < left_end
+
+    def _assignment_conflicts(
+        self, vehicle: Vehicle, *, service_date: str, service_window: str, exclude_mission_id: str
+    ) -> list[str]:
+        reasons: list[str] = []
+        for mission in self._missions.values():
+            assigned = mission.get("vehicle") or {}
+            if (
+                mission["mission_id"] == exclude_mission_id
+                or mission["status"] not in ACTIVE_ASSIGNMENT_STATUSES
+                or mission["service_date"] != service_date
+                or not self._windows_overlap(mission["service_window"], service_window)
+            ):
+                continue
+            if assigned.get("vehicle_id") == vehicle.vehicle_id:
+                reasons.append("vehicle already assigned for service window")
+            if vehicle.driver_id and assigned.get("driver_id") == vehicle.driver_id:
+                reasons.append("driver already assigned for service window")
+        return reasons
+
+    def eligible_vehicles(
+        self,
+        requirements: dict[str, Any],
+        *,
+        service_date: str | None = None,
+        service_window: str | None = None,
+        exclude_mission_id: str = "",
+    ) -> dict[str, Any]:
         results = []
         required_zones = set(requirements["temperature_zones"])
         for vehicle in VEHICLES:
@@ -339,6 +389,13 @@ class MissionOperationsService:
             if vehicle.payload_capacity_lb < requirements["payload_weight_lb"]: reasons.append("payload capacity exceeded")
             if vehicle.cargo_volume_ft3 < requirements["cargo_volume_ft3"]: reasons.append("cargo volume exceeded")
             if not required_zones.issubset(vehicle.temperature_zones): reasons.append("temperature zones incompatible")
+            if service_date and service_window:
+                reasons.extend(self._assignment_conflicts(
+                    vehicle,
+                    service_date=service_date,
+                    service_window=service_window,
+                    exclude_mission_id=exclude_mission_id,
+                ))
             results.append({
                 "vehicle_id": vehicle.vehicle_id,
                 "name": vehicle.name,
@@ -362,19 +419,30 @@ class MissionOperationsService:
             mission = self._missions.get(mission_id)
             if not mission:
                 raise MissionNotFoundError(mission_id)
+            if mission["status"] not in PLANNABLE_STATUSES:
+                raise ValueError(f"Mission in {mission['status']} state cannot be replanned")
             inventory = self.inventory_availability(
                 warehouse_id=mission["warehouse_id"], service_date=mission["service_date"],
                 manifest=mission["manifest"], approved_substitutions=approved_substitutions,
             )
             requirements = self._load_requirements(mission["manifest"], inventory)
-            fleet = self.eligible_vehicles(requirements)
+            fleet = self.eligible_vehicles(
+                requirements,
+                service_date=mission["service_date"],
+                service_window=mission["service_window"],
+                exclude_mission_id=mission_id,
+            )
             eligible = next((row for row in fleet["vehicles"] if row["eligible"]), None)
             site = deepcopy(SITE_PARTNERS.get(mission["site_id"]))
             blockers = []
             if inventory["status"] != "yes": blockers.append("inventory_not_fulfilled")
             if not eligible: blockers.append("no_eligible_vehicle")
             if not site or not site["verified"]: blockers.append("site_not_verified")
-            if not site or site["permit"]["status"] != "verified": blockers.append("permit_not_verified")
+            permit = site.get("permit") if site else None
+            if not permit or permit.get("status") != "verified":
+                blockers.append("permit_not_verified")
+            elif date.fromisoformat(permit["valid_through"]) < date.fromisoformat(mission["service_date"]):
+                blockers.append("permit_expired")
             existing_route = mission.get("route_handoff") or {}
             if existing_route.get("status") != "approved": blockers.append("route_not_approved")
 
@@ -493,6 +561,20 @@ class MissionOperationsService:
             if mission["status"] != "approved" or not mission.get("approval"):
                 raise ValueError("Human operations approval is required before dispatch")
             if mission.get("blockers"): raise ValueError("Mission still has blocking requirements")
+            selected_vehicle = next(
+                (vehicle for vehicle in VEHICLES if vehicle.vehicle_id == mission["vehicle"]["vehicle_id"]),
+                None,
+            )
+            if selected_vehicle is None:
+                raise MissionConflictError("Selected vehicle no longer exists")
+            assignment_conflicts = self._assignment_conflicts(
+                selected_vehicle,
+                service_date=mission["service_date"],
+                service_window=mission["service_window"],
+                exclude_mission_id=mission_id,
+            )
+            if assignment_conflicts:
+                raise MissionConflictError("; ".join(assignment_conflicts))
             mission["reservations"] = self._reserve_inventory(mission)
             mission["status"] = "dispatched"
             mission["dispatch"] = {
@@ -513,8 +595,52 @@ class MissionOperationsService:
             if mission["version"] != expected_version: raise MissionConflictError("Mission version conflict")
             if mission["status"] not in {"dispatched", "in_service", "completed"}:
                 raise ValueError("Only an executed mission can be reconciled")
+            returned = {sku: float(quantity) for sku, quantity in outcome.get("inventory_returned", {}).items()}
+            distributed_input = {
+                sku: float(quantity) for sku, quantity in outcome.get("inventory_distributed", {}).items()
+            }
+            reserved_by_sku: dict[str, float] = {}
+            for reservation in mission["reservations"]:
+                reserved_by_sku[reservation["sku"]] = (
+                    reserved_by_sku.get(reservation["sku"], 0) + float(reservation["quantity"])
+                )
+            unknown_skus = (set(returned) | set(distributed_input)) - set(reserved_by_sku)
+            if unknown_skus:
+                raise ValueError(f"Reconciliation contains unreserved SKUs: {sorted(unknown_skus)}")
+            distributed: dict[str, float] = {}
+            for sku, reserved_quantity in reserved_by_sku.items():
+                returned_quantity = returned.get(sku, 0)
+                distributed_quantity = distributed_input.get(sku, reserved_quantity - returned_quantity)
+                if returned_quantity < 0 or distributed_quantity < 0:
+                    raise ValueError("Reconciliation quantities cannot be negative")
+                if abs(returned_quantity + distributed_quantity - reserved_quantity) > 1e-6:
+                    raise ValueError(f"Distributed plus returned quantity must equal reserved quantity for {sku}")
+                distributed[sku] = distributed_quantity
+
+            remaining_returned = dict(returned)
+            for reservation in mission["reservations"]:
+                lot = next(lot for lot in self._lots if lot.lot_id == reservation["lot_id"])
+                quantity = float(reservation["quantity"])
+                returned_quantity = min(quantity, remaining_returned.get(reservation["sku"], 0))
+                distributed_quantity = quantity - returned_quantity
+                lot.reserved -= quantity
+                lot.on_hand -= distributed_quantity
+                remaining_returned[reservation["sku"]] = (
+                    remaining_returned.get(reservation["sku"], 0) - returned_quantity
+                )
+                reservation.update({
+                    "status": "reconciled",
+                    "distributed_quantity": distributed_quantity,
+                    "returned_quantity": returned_quantity,
+                })
             mission["status"] = "reconciled"
-            mission["outcome"] = {**outcome, "reconciled_by": actor, "reconciled_at": _iso(self._now_fn())}
+            mission["outcome"] = {
+                **outcome,
+                "inventory_distributed": distributed,
+                "inventory_returned": returned,
+                "reconciled_by": actor,
+                "reconciled_at": _iso(self._now_fn()),
+            }
             mission["version"] += 1
             mission["updated_at"] = _iso(self._now_fn())
             self._event(mission, "mission_reconciled", actor, f"Recorded {outcome.get('households_served', 0)} households served")
