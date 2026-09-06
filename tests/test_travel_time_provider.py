@@ -48,6 +48,7 @@ def test_directions_parses_geojson_and_alternatives():
     routes = provider.directions([{"lat": 37, "lon": -89.2}, {"lat": 37.1, "lon": -89.1}])
     assert len(routes) == 2
     assert routes[0]["durationMinutes"] == 10
+    assert provider.session.calls[0][1]["json"]["radiuses"] == [5000, 5000]
 
 
 def test_waypoint_route_returns_color_coded_route_choices():
@@ -73,6 +74,7 @@ def test_waypoint_route_returns_color_coded_route_choices():
 
     assert len(routes) == 2
     assert session.calls[1][1]["json"]["preference"] == "shortest"
+    assert all(call[1]["json"]["radiuses"] == [5000] * 4 for call in session.calls)
     assert all(
         call[1]["json"]["coordinates"]
         == [[-89.2, 37.0], [-89.15, 37.05], [-89.1, 37.1], [-89.2, 37.0]]
