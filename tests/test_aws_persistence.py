@@ -5,9 +5,17 @@ from decimal import Decimal
 import pytest
 from botocore.exceptions import ClientError
 
-from storage.aws_persistence import (AwsEvidenceStore, AwsFlaggedTractStore,
-                                     CHANGES_BY_DETECTED_AT_INDEX,
-                                     StorageConfigurationError, _query_all, _scan_all)
+from storage.aws_persistence import (
+    CHANGES_BY_DETECTED_AT_INDEX,
+    AwsEvidenceStore,
+    AwsFlaggedTractStore,
+    StorageConfigurationError,
+    _query_all,
+    _query_up_to,
+    _query_up_to_with_state,
+    _scan_all,
+    _scan_up_to_with_state,
+)
 
 
 class FakeS3:
@@ -119,6 +127,90 @@ def test_paginated_query_reads_all_pages():
     assert _query_all(Table()) == [{"id": 1}, {"id": 2}]
 
 
+def test_bounded_query_stops_after_requested_window():
+    calls = []
+
+    class Table:
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            if "ExclusiveStartKey" not in kwargs:
+                return {
+                    "Items": [{"id": 1}],
+                    "LastEvaluatedKey": {"id": 1},
+                    "ScannedCount": 1,
+                }
+            return {
+                "Items": [{"id": 2}],
+                "LastEvaluatedKey": {"id": 2},
+                "ScannedCount": 1,
+            }
+
+    assert _query_up_to(Table(), item_limit=2) == [{"id": 1}, {"id": 2}]
+    assert len(calls) == 2
+    assert calls[0]["Limit"] == 2
+    assert calls[1]["Limit"] == 1
+
+
+def test_bounded_query_caps_evaluated_items_for_sparse_filter():
+    calls = []
+
+    class Table:
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            return {
+                "Items": [],
+                "LastEvaluatedKey": {"id": len(calls)},
+                "ScannedCount": kwargs["Limit"],
+            }
+
+    assert _query_up_to(Table(), item_limit=200) == []
+    assert len(calls) == 1
+    assert calls[0]["Limit"] == 200
+
+
+def test_bounded_query_reports_truncation_when_budget_exhausted_with_more_pages():
+    class Table:
+        def query(self, **kwargs):
+            return {
+                "Items": [],
+                "LastEvaluatedKey": {"id": 1},
+                "ScannedCount": kwargs["Limit"],
+            }
+
+    items, truncated = _query_up_to_with_state(Table(), item_limit=200)
+    assert items == []
+    assert truncated is True
+
+
+def test_read_changes_window_reports_truncation_for_sparse_matches():
+    class Table:
+        def query(self, **kwargs):
+            return {
+                "Items": [],
+                "LastEvaluatedKey": {"id": 1},
+                "ScannedCount": kwargs["Limit"],
+            }
+
+    store = AwsEvidenceStore(table=Table(), s3_client=FakeS3(), table_name="evidence", bucket="bucket")
+    items, truncated = store.read_changes_window(limit=200)
+    assert items == []
+    assert truncated is True
+
+
+def test_bounded_scan_reports_truncation_when_budget_exhausted():
+    class Table:
+        def scan(self, **kwargs):
+            return {
+                "Items": [],
+                "LastEvaluatedKey": {"id": 1},
+                "ScannedCount": kwargs["Limit"],
+            }
+
+    items, truncated = _scan_up_to_with_state(Table(), item_limit=200)
+    assert items == []
+    assert truncated is True
+
+
 def test_suppressed_changes_are_hidden_from_normal_reads():
     table, s3 = FakeEvidenceTable(), FakeS3()
     store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
@@ -154,6 +246,17 @@ class FakeTableWithMissingIndex:
         return {"Items": [item for item in self.items if item.get("item_type") == "change"]}
 
 
+class FakePaginatedTableWithMissingIndex(FakeTableWithMissingIndex):
+    def scan(self, **kwargs):
+        if "ExclusiveStartKey" not in kwargs:
+            return {
+                "Items": [item for item in self.items if item.get("item_type") == "change"],
+                "LastEvaluatedKey": {"id": 1},
+                "ScannedCount": kwargs["Limit"],
+            }
+        return {"Items": []}
+
+
 def test_missing_changes_index_falls_back_to_scan():
     table, s3 = FakeTableWithMissingIndex(), FakeS3()
     store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
@@ -162,6 +265,30 @@ def test_missing_changes_index_falls_back_to_scan():
         {"item_type": "change", "record_key": "CHANGE#2", "detected_at": "2026-08-30T00:00:00+00:00", "source_id": "osm"},
     ])
     assert [item["record_key"] for item in store.read_changes(limit=10)] == ["CHANGE#2", "CHANGE#1"]
+
+
+def test_read_changes_window_does_not_mark_truncated_when_scan_is_exhausted():
+    table, s3 = FakeTableWithMissingIndex(), FakeS3()
+    store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
+    table.items.extend([
+        {"item_type": "change", "record_key": "CHANGE#1", "detected_at": "2026-08-29T00:00:00+00:00", "source_id": "osm"},
+        {"item_type": "change", "record_key": "CHANGE#2", "detected_at": "2026-08-30T00:00:00+00:00", "source_id": "osm"},
+    ])
+
+    items, truncated = store.read_changes_window(limit=2)
+    assert [item["record_key"] for item in items] == ["CHANGE#2", "CHANGE#1"]
+    assert truncated is False
+
+
+def test_read_changes_window_marks_truncated_when_scan_fallback_has_more_pages():
+    table, s3 = FakePaginatedTableWithMissingIndex(), FakeS3()
+    store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
+    table.items.append(
+        {"item_type": "change", "record_key": "CHANGE#1", "detected_at": "2026-08-29T00:00:00+00:00", "source_id": "osm"}
+    )
+
+    _, truncated = store.read_changes_window(limit=2)
+    assert truncated is True
 
 
 def test_unrelated_query_error_is_not_swallowed_by_the_scan_fallback():

@@ -265,9 +265,15 @@ def _deserialize_change(row: Any) -> dict[str, Any]:
     return item
 
 
-def _all_changes(*, source_id: str | None, db_path: Path) -> list[dict[str, Any]]:
+def _all_changes(*, source_id: str | None, db_path: Path,
+                 limit: int | None = None) -> list[dict[str, Any]]:
     if aws_storage_enabled() and db_path == DB_PATH:
-        return AwsEvidenceStore().read_all_changes(source_id=source_id)
+        store = AwsEvidenceStore()
+        return (
+            store.read_all_changes(source_id=source_id)
+            if limit is None
+            else store.read_changes(limit=limit, source_id=source_id)
+        )
     if not db_path.exists():
         return []
     connection = _connect(db_path)
@@ -313,7 +319,22 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
         raise ValueError("limit must be between 1 and 100")
     if status not in {"open", "all"}:
         raise ValueError("status must be open or all")
-    raw_changes = _all_changes(source_id=source_id, db_path=db_path)
+    # The browser queue only needs a recent review window. Avoid loading and
+    # grouping the entire DynamoDB history (tens of thousands of records) for
+    # every request. SQLite keeps the full deterministic path used by tests.
+    recent_window_limit = max(limit * 25, 200)
+    bounded_aws_read = aws_storage_enabled() and db_path == DB_PATH
+    findings_window_truncated = False
+    if bounded_aws_read:
+        raw_changes, findings_window_truncated = AwsEvidenceStore().read_changes_window(
+            limit=recent_window_limit, source_id=source_id
+        )
+    else:
+        raw_changes = _all_changes(
+            source_id=source_id,
+            db_path=db_path,
+            limit=None,
+        )
     grouped: dict[str, list[dict[str, Any]]] = {}
     for change in raw_changes:
         grouped.setdefault(_finding_key(change), []).append(change)
@@ -353,6 +374,7 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
         "page_size": len(page),
         "open_finding_count": open_finding_count,
         "source_count": len({change["source_id"] for change in raw_changes}),
+        "findings_window_truncated": findings_window_truncated,
     }
 
 

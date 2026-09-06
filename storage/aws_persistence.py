@@ -98,6 +98,58 @@ def _query_all(table, **kwargs) -> list[dict[str, Any]]:
         kwargs["ExclusiveStartKey"] = key
 
 
+def _query_up_to(table, *, item_limit: int, **kwargs) -> list[dict[str, Any]]:
+    return _query_up_to_with_state(table, item_limit=item_limit, **kwargs)[0]
+
+
+def _scan_up_to_with_state(table, *, item_limit: int, **kwargs) -> tuple[list[dict[str, Any]], bool]:
+    items: list[dict[str, Any]] = []
+    evaluated = 0
+    has_more = False
+    while len(items) < item_limit and evaluated < item_limit:
+        remaining_budget = item_limit - evaluated
+        kwargs["Limit"] = remaining_budget
+        response = table.scan(**kwargs)
+        page_items = response.get("Items", [])
+        items.extend(page_items)
+        scanned_count = response.get("ScannedCount")
+        evaluated += int(scanned_count) if scanned_count is not None else remaining_budget
+        key = response.get("LastEvaluatedKey")
+        has_more = bool(key)
+        if not key:
+            break
+        kwargs["ExclusiveStartKey"] = key
+    truncated = has_more
+    return items[:item_limit], truncated
+
+
+def _query_up_to_with_state(table, *, item_limit: int, **kwargs) -> tuple[list[dict[str, Any]], bool]:
+    """Query within a hard evaluated-item budget.
+
+    DynamoDB applies FilterExpression after Limit, so bounding returned matches
+    is insufficient: a sparse filter could otherwise walk the whole partition.
+    """
+    items: list[dict[str, Any]] = []
+    evaluated = 0
+    has_more = False
+    while len(items) < item_limit and evaluated < item_limit:
+        remaining_budget = item_limit - evaluated
+        kwargs["Limit"] = remaining_budget
+        response = table.query(**kwargs)
+        items.extend(response.get("Items", []))
+        scanned_count = response.get("ScannedCount")
+        # Real DynamoDB responses include ScannedCount. Conservative fallback
+        # for test doubles prevents an unreported page from exceeding budget.
+        evaluated += int(scanned_count) if scanned_count is not None else remaining_budget
+        key = response.get("LastEvaluatedKey")
+        has_more = bool(key)
+        if not key:
+            break
+        kwargs["ExclusiveStartKey"] = key
+    truncated = has_more
+    return items[:item_limit], truncated
+
+
 class AwsEvidenceStore:
     def __init__(self, *, table=None, s3_client=None, table_name=None, bucket=None):
         region = os.getenv("AWS_REGION", "us-east-1")
@@ -171,7 +223,8 @@ class AwsEvidenceStore:
                 item["previous_snapshot_id"] = previous_snapshot_id
             self.table.put_item(Item=_decimalize(item))
 
-    def read_all_changes(self, *, source_id: str | None = None) -> list[dict[str, Any]]:
+    def read_all_changes(self, *, source_id: str | None = None,
+                         limit: int | None = None) -> list[dict[str, Any]]:
         # Query the item_type=change partition of CHANGES_BY_DETECTED_AT_INDEX
         # instead of Scanning the whole table (which also holds one
         # "snapshot" item per source per refresh cycle, typically far more
@@ -180,13 +233,17 @@ class AwsEvidenceStore:
         if source_id:
             expression = expression & Attr("source_id").eq(source_id)
         try:
-            items = _query_all(
-                self.table,
-                IndexName=CHANGES_BY_DETECTED_AT_INDEX,
-                KeyConditionExpression=Key("item_type").eq("change"),
-                FilterExpression=expression,
-                ScanIndexForward=False,
-            )
+            query = _query_all if limit is None else _query_up_to
+            query_options: dict[str, Any] = {
+                "IndexName": CHANGES_BY_DETECTED_AT_INDEX,
+                "KeyConditionExpression": Key("item_type").eq("change"),
+                "FilterExpression": expression,
+                "ScanIndexForward": False,
+            }
+            if limit is None:
+                items = query(self.table, **query_options)
+            else:
+                items = query(self.table, item_limit=limit, **query_options)
             # Query with ScanIndexForward=False already returns items
             # newest-first, and the suppressed check below only excludes
             # items rather than reordering them, so no re-sort is needed.
@@ -205,11 +262,46 @@ class AwsEvidenceStore:
             )
             need_sort = True  # Scan makes no ordering guarantee.
 
-        ordered = (_native(item) for item in items if not item.get("suppressed", False))
-        return sorted(ordered, key=lambda item: item["detected_at"], reverse=True) if need_sort else list(ordered)
+        ordered = [_native(item) for item in items if not item.get("suppressed", False)]
+        if need_sort:
+            ordered.sort(key=lambda item: item["detected_at"], reverse=True)
+        return ordered if limit is None else ordered[:limit]
 
     def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
-        return self.read_all_changes(source_id=source_id)[:limit]
+        return self.read_all_changes(source_id=source_id, limit=limit)
+
+    def read_changes_window(self, *, limit: int, source_id: str | None = None) -> tuple[list[dict[str, Any]], bool]:
+        expression = Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
+        if source_id:
+            expression = expression & Attr("source_id").eq(source_id)
+        try:
+            items, query_truncated = _query_up_to_with_state(
+                self.table,
+                item_limit=limit,
+                IndexName=CHANGES_BY_DETECTED_AT_INDEX,
+                KeyConditionExpression=Key("item_type").eq("change"),
+                FilterExpression=expression,
+                ScanIndexForward=False,
+            )
+            need_sort = False
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in _INDEX_NOT_READY_ERROR_CODES:
+                raise
+            logger.warning(
+                "CHANGES_BY_DETECTED_AT_INDEX unavailable (%s) -- falling back to a full "
+                "table scan. Create the GSI per deploy/AWS_PERSISTENCE_SETUP.md.",
+                exc.response.get("Error", {}).get("Code"),
+            )
+            items, query_truncated = _scan_up_to_with_state(
+                self.table,
+                item_limit=limit,
+                FilterExpression=Attr("item_type").eq("change") & expression,
+            )
+            need_sort = True
+        ordered = [_native(item) for item in items if not item.get("suppressed", False)]
+        if need_sort:
+            ordered.sort(key=lambda item: item["detected_at"], reverse=True)
+        return ordered[:limit], query_truncated
 
     def review_change(self, *, source_scope: str, record_key: str, action: str,
                       reviewed_by: str, note: str = "") -> dict[str, Any]:

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from tools.evidence_snapshots import read_change_page, read_changes, record_snapshot, review_change
+from tools.evidence_snapshots import DB_PATH, read_change_page, read_changes, record_snapshot, review_change
 
 
 NOW = datetime(2026, 8, 29, tzinfo=timezone.utc)
@@ -94,6 +94,26 @@ def test_record_changes_remain_individually_auditable(tmp_path):
     page = read_change_page(db_path=db)
     assert page["open_finding_count"] == 2
     assert all(item["occurrence_count"] == 1 for item in page["items"])
+
+
+def test_change_page_exposes_bounded_read_truncation(monkeypatch):
+    class FakeStore:
+        def read_changes_window(self, *, limit: int, source_id=None):
+            assert limit == 200
+            assert source_id is None
+            return ([{
+                "source_id": "licenses",
+                "scope": "urban",
+                "change_type": "added",
+                "detected_at": NOW.isoformat(),
+                "record_key": "CHANGE#1",
+            }], True)
+
+    monkeypatch.setattr("tools.evidence_snapshots.aws_storage_enabled", lambda: True)
+    monkeypatch.setattr("tools.evidence_snapshots.AwsEvidenceStore", lambda: FakeStore())
+
+    page = read_change_page(limit=8, db_path=DB_PATH)
+    assert page["findings_window_truncated"] is True
 
 
 def test_canonicalization_keeps_citation_but_ignores_retrieval_time(tmp_path):
