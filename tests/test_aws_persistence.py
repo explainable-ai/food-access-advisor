@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 
 from storage.aws_persistence import (AwsEvidenceStore, AwsFlaggedTractStore,
                                      CHANGES_BY_DETECTED_AT_INDEX,
-                                     StorageConfigurationError, _query_all, _scan_all)
+                                     StorageConfigurationError, _query_all, _query_up_to, _scan_all)
 
 
 class FakeS3:
@@ -117,6 +117,22 @@ def test_paginated_query_reads_all_pages():
                 return {"Items": [{"id": 1}], "LastEvaluatedKey": {"id": 1}}
             return {"Items": [{"id": 2}]}
     assert _query_all(Table()) == [{"id": 1}, {"id": 2}]
+
+
+def test_bounded_query_stops_after_requested_window():
+    calls = []
+
+    class Table:
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            if "ExclusiveStartKey" not in kwargs:
+                return {"Items": [{"id": 1}], "LastEvaluatedKey": {"id": 1}}
+            return {"Items": [{"id": 2}], "LastEvaluatedKey": {"id": 2}}
+
+    assert _query_up_to(Table(), item_limit=2) == [{"id": 1}, {"id": 2}]
+    assert len(calls) == 2
+    assert calls[0]["Limit"] == 2
+    assert calls[1]["Limit"] == 1
 
 
 def test_suppressed_changes_are_hidden_from_normal_reads():
