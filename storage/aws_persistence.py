@@ -98,6 +98,20 @@ def _query_all(table, **kwargs) -> list[dict[str, Any]]:
         kwargs["ExclusiveStartKey"] = key
 
 
+def _query_up_to(table, *, item_limit: int, **kwargs) -> list[dict[str, Any]]:
+    """Query only enough evaluated pages to return a bounded result window."""
+    items: list[dict[str, Any]] = []
+    while len(items) < item_limit:
+        kwargs["Limit"] = max(item_limit - len(items), 1)
+        response = table.query(**kwargs)
+        items.extend(response.get("Items", []))
+        key = response.get("LastEvaluatedKey")
+        if not key:
+            break
+        kwargs["ExclusiveStartKey"] = key
+    return items[:item_limit]
+
+
 class AwsEvidenceStore:
     def __init__(self, *, table=None, s3_client=None, table_name=None, bucket=None):
         region = os.getenv("AWS_REGION", "us-east-1")
@@ -171,7 +185,8 @@ class AwsEvidenceStore:
                 item["previous_snapshot_id"] = previous_snapshot_id
             self.table.put_item(Item=_decimalize(item))
 
-    def read_all_changes(self, *, source_id: str | None = None) -> list[dict[str, Any]]:
+    def read_all_changes(self, *, source_id: str | None = None,
+                         limit: int | None = None) -> list[dict[str, Any]]:
         # Query the item_type=change partition of CHANGES_BY_DETECTED_AT_INDEX
         # instead of Scanning the whole table (which also holds one
         # "snapshot" item per source per refresh cycle, typically far more
@@ -180,13 +195,17 @@ class AwsEvidenceStore:
         if source_id:
             expression = expression & Attr("source_id").eq(source_id)
         try:
-            items = _query_all(
-                self.table,
-                IndexName=CHANGES_BY_DETECTED_AT_INDEX,
-                KeyConditionExpression=Key("item_type").eq("change"),
-                FilterExpression=expression,
-                ScanIndexForward=False,
-            )
+            query = _query_all if limit is None else _query_up_to
+            query_options: dict[str, Any] = {
+                "IndexName": CHANGES_BY_DETECTED_AT_INDEX,
+                "KeyConditionExpression": Key("item_type").eq("change"),
+                "FilterExpression": expression,
+                "ScanIndexForward": False,
+            }
+            if limit is None:
+                items = query(self.table, **query_options)
+            else:
+                items = query(self.table, item_limit=limit, **query_options)
             # Query with ScanIndexForward=False already returns items
             # newest-first, and the suppressed check below only excludes
             # items rather than reordering them, so no re-sort is needed.
@@ -205,11 +224,13 @@ class AwsEvidenceStore:
             )
             need_sort = True  # Scan makes no ordering guarantee.
 
-        ordered = (_native(item) for item in items if not item.get("suppressed", False))
-        return sorted(ordered, key=lambda item: item["detected_at"], reverse=True) if need_sort else list(ordered)
+        ordered = [_native(item) for item in items if not item.get("suppressed", False)]
+        if need_sort:
+            ordered.sort(key=lambda item: item["detected_at"], reverse=True)
+        return ordered if limit is None else ordered[:limit]
 
     def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
-        return self.read_all_changes(source_id=source_id)[:limit]
+        return self.read_all_changes(source_id=source_id, limit=limit)
 
     def review_change(self, *, source_scope: str, record_key: str, action: str,
                       reviewed_by: str, note: str = "") -> dict[str, Any]:
