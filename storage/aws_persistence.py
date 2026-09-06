@@ -301,6 +301,11 @@ class AwsEvidenceStore:
         ordered = [_native(item) for item in items if not item.get("suppressed", False)]
         if need_sort:
             ordered.sort(key=lambda item: item["detected_at"], reverse=True)
+            if not query_truncated and len(ordered) >= limit:
+                # Scan order is not newest-first, so a full page without an
+                # explicit continuation key still cannot guarantee a complete
+                # "most recent N" window.
+                query_truncated = True
         return ordered[:limit], query_truncated
 
     def review_change(self, *, source_scope: str, record_key: str, action: str,

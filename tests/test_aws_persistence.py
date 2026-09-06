@@ -256,6 +256,19 @@ def test_missing_changes_index_falls_back_to_scan():
     assert [item["record_key"] for item in store.read_changes(limit=10)] == ["CHANGE#2", "CHANGE#1"]
 
 
+def test_read_changes_window_marks_scan_fallback_as_truncated_for_full_page():
+    table, s3 = FakeTableWithMissingIndex(), FakeS3()
+    store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
+    table.items.extend([
+        {"item_type": "change", "record_key": "CHANGE#1", "detected_at": "2026-08-29T00:00:00+00:00", "source_id": "osm"},
+        {"item_type": "change", "record_key": "CHANGE#2", "detected_at": "2026-08-30T00:00:00+00:00", "source_id": "osm"},
+    ])
+
+    items, truncated = store.read_changes_window(limit=2)
+    assert [item["record_key"] for item in items] == ["CHANGE#2", "CHANGE#1"]
+    assert truncated is True
+
+
 def test_unrelated_query_error_is_not_swallowed_by_the_scan_fallback():
     table = FakeTableWithMissingIndex(query_error_code="ProvisionedThroughputExceededException")
     store = AwsEvidenceStore(table=table, s3_client=FakeS3(), table_name="evidence", bucket="bucket")
