@@ -99,12 +99,22 @@ def _query_all(table, **kwargs) -> list[dict[str, Any]]:
 
 
 def _query_up_to(table, *, item_limit: int, **kwargs) -> list[dict[str, Any]]:
-    """Query only enough evaluated pages to return a bounded result window."""
+    """Query within a hard evaluated-item budget.
+
+    DynamoDB applies FilterExpression after Limit, so bounding returned matches
+    is insufficient: a sparse filter could otherwise walk the whole partition.
+    """
     items: list[dict[str, Any]] = []
-    while len(items) < item_limit:
-        kwargs["Limit"] = max(item_limit - len(items), 1)
+    evaluated = 0
+    while len(items) < item_limit and evaluated < item_limit:
+        remaining_budget = item_limit - evaluated
+        kwargs["Limit"] = remaining_budget
         response = table.query(**kwargs)
         items.extend(response.get("Items", []))
+        scanned_count = response.get("ScannedCount")
+        # Real DynamoDB responses include ScannedCount. Conservative fallback
+        # for test doubles prevents an unreported page from exceeding budget.
+        evaluated += int(scanned_count) if scanned_count is not None else remaining_budget
         key = response.get("LastEvaluatedKey")
         if not key:
             break
