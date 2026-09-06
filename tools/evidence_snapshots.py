@@ -324,11 +324,17 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
     # every request. SQLite keeps the full deterministic path used by tests.
     recent_window_limit = max(limit * 25, 200)
     bounded_aws_read = aws_storage_enabled() and db_path == DB_PATH
-    raw_changes = _all_changes(
-        source_id=source_id,
-        db_path=db_path,
-        limit=recent_window_limit if bounded_aws_read else None,
-    )
+    findings_window_truncated = False
+    if bounded_aws_read:
+        raw_changes, findings_window_truncated = AwsEvidenceStore().read_changes_window(
+            limit=recent_window_limit, source_id=source_id
+        )
+    else:
+        raw_changes = _all_changes(
+            source_id=source_id,
+            db_path=db_path,
+            limit=None,
+        )
     grouped: dict[str, list[dict[str, Any]]] = {}
     for change in raw_changes:
         grouped.setdefault(_finding_key(change), []).append(change)
@@ -368,7 +374,7 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
         "page_size": len(page),
         "open_finding_count": open_finding_count,
         "source_count": len({change["source_id"] for change in raw_changes}),
-        "findings_window_truncated": bounded_aws_read and len(raw_changes) >= recent_window_limit,
+        "findings_window_truncated": findings_window_truncated,
     }
 
 

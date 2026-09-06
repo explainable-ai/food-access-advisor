@@ -12,6 +12,7 @@ from storage.aws_persistence import (
     StorageConfigurationError,
     _query_all,
     _query_up_to,
+    _query_up_to_with_state,
     _scan_all,
 )
 
@@ -164,6 +165,35 @@ def test_bounded_query_caps_evaluated_items_for_sparse_filter():
     assert _query_up_to(Table(), item_limit=200) == []
     assert len(calls) == 1
     assert calls[0]["Limit"] == 200
+
+
+def test_bounded_query_reports_truncation_when_budget_exhausted_with_more_pages():
+    class Table:
+        def query(self, **kwargs):
+            return {
+                "Items": [],
+                "LastEvaluatedKey": {"id": 1},
+                "ScannedCount": kwargs["Limit"],
+            }
+
+    items, truncated = _query_up_to_with_state(Table(), item_limit=200)
+    assert items == []
+    assert truncated is True
+
+
+def test_read_changes_window_reports_truncation_for_sparse_matches():
+    class Table:
+        def query(self, **kwargs):
+            return {
+                "Items": [],
+                "LastEvaluatedKey": {"id": 1},
+                "ScannedCount": kwargs["Limit"],
+            }
+
+    store = AwsEvidenceStore(table=Table(), s3_client=FakeS3(), table_name="evidence", bucket="bucket")
+    items, truncated = store.read_changes_window(limit=200)
+    assert items == []
+    assert truncated is True
 
 
 def test_suppressed_changes_are_hidden_from_normal_reads():
