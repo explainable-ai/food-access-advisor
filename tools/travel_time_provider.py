@@ -52,7 +52,16 @@ class OpenRouteServiceProvider:
 
     def directions(self, points, alternatives=2):
         coordinates = [[float(point["lon"]), float(point["lat"])] for point in points]
-        body = {"coordinates": coordinates, "instructions": True, "units": "mi"}
+        # Census-tract centroids can fall inside large rural parcels, beyond
+        # openrouteservice's 350 m default road-search radius. Keep snapping
+        # bounded so planning points can reach a nearby drivable road without
+        # silently moving them an unreasonable distance.
+        body = {
+            "coordinates": coordinates,
+            "instructions": True,
+            "units": "mi",
+            "radiuses": [5000] * len(coordinates),
+        }
         if len(coordinates) == 2 and alternatives:
             body["alternative_routes"] = {
                 "target_count": min(int(alternatives), 2),
