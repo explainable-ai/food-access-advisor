@@ -17,16 +17,13 @@ class Socrata:
     def fetch_farmers_markets(self): return batch("chicago_farmers_markets", EvidenceStatus.STALE_CACHE)
 
 
-class GTFS:
-    def fetch_stops(self): return batch("cta_gtfs")
-
-
 def test_refresh_isolates_failures_and_maps_stale_status():
     calls = []
     def snapshot(source_id, records, **kwargs):
         calls.append((source_id, kwargs["status"]))
         return {"source_id": source_id, "status": kwargs["status"]}
-    results = refresh_additional_sources(socrata=Socrata(), gtfs=GTFS(), snapshot_fn=snapshot)
-    assert len(results) == 4
+    results = refresh_additional_sources(socrata=Socrata(), snapshot_fn=snapshot)
+    assert len(results) == 3
     assert ("chicago_active_business_licenses", "failed") in calls
     assert ("chicago_farmers_markets", "stale") in calls
+    assert all(source_id != "cta_gtfs" for source_id, _status in calls)
