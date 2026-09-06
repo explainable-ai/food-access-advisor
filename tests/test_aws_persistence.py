@@ -5,9 +5,15 @@ from decimal import Decimal
 import pytest
 from botocore.exceptions import ClientError
 
-from storage.aws_persistence import (AwsEvidenceStore, AwsFlaggedTractStore,
-                                     CHANGES_BY_DETECTED_AT_INDEX,
-                                     StorageConfigurationError, _query_all, _query_up_to, _scan_all)
+from storage.aws_persistence import (
+    CHANGES_BY_DETECTED_AT_INDEX,
+    AwsEvidenceStore,
+    AwsFlaggedTractStore,
+    StorageConfigurationError,
+    _query_all,
+    _query_up_to,
+    _scan_all,
+)
 
 
 class FakeS3:
