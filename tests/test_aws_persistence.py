@@ -246,6 +246,17 @@ class FakeTableWithMissingIndex:
         return {"Items": [item for item in self.items if item.get("item_type") == "change"]}
 
 
+class FakePaginatedTableWithMissingIndex(FakeTableWithMissingIndex):
+    def scan(self, **kwargs):
+        if "ExclusiveStartKey" not in kwargs:
+            return {
+                "Items": [item for item in self.items if item.get("item_type") == "change"],
+                "LastEvaluatedKey": {"id": 1},
+                "ScannedCount": kwargs["Limit"],
+            }
+        return {"Items": []}
+
+
 def test_missing_changes_index_falls_back_to_scan():
     table, s3 = FakeTableWithMissingIndex(), FakeS3()
     store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
@@ -256,7 +267,7 @@ def test_missing_changes_index_falls_back_to_scan():
     assert [item["record_key"] for item in store.read_changes(limit=10)] == ["CHANGE#2", "CHANGE#1"]
 
 
-def test_read_changes_window_marks_scan_fallback_as_truncated_for_full_page():
+def test_read_changes_window_does_not_mark_truncated_when_scan_is_exhausted():
     table, s3 = FakeTableWithMissingIndex(), FakeS3()
     store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
     table.items.extend([
@@ -266,6 +277,17 @@ def test_read_changes_window_marks_scan_fallback_as_truncated_for_full_page():
 
     items, truncated = store.read_changes_window(limit=2)
     assert [item["record_key"] for item in items] == ["CHANGE#2", "CHANGE#1"]
+    assert truncated is False
+
+
+def test_read_changes_window_marks_truncated_when_scan_fallback_has_more_pages():
+    table, s3 = FakePaginatedTableWithMissingIndex(), FakeS3()
+    store = AwsEvidenceStore(table=table, s3_client=s3, table_name="evidence", bucket="bucket")
+    table.items.append(
+        {"item_type": "change", "record_key": "CHANGE#1", "detected_at": "2026-08-29T00:00:00+00:00", "source_id": "osm"}
+    )
+
+    _, truncated = store.read_changes_window(limit=2)
     assert truncated is True
 
 

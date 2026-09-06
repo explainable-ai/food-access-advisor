@@ -119,7 +119,7 @@ def _scan_up_to_with_state(table, *, item_limit: int, **kwargs) -> tuple[list[di
         if not key:
             break
         kwargs["ExclusiveStartKey"] = key
-    truncated = has_more and (len(items) >= item_limit or evaluated >= item_limit)
+    truncated = has_more
     return items[:item_limit], truncated
 
 
@@ -146,7 +146,7 @@ def _query_up_to_with_state(table, *, item_limit: int, **kwargs) -> tuple[list[d
         if not key:
             break
         kwargs["ExclusiveStartKey"] = key
-    truncated = has_more and (len(items) >= item_limit or evaluated >= item_limit)
+    truncated = has_more
     return items[:item_limit], truncated
 
 
@@ -301,11 +301,6 @@ class AwsEvidenceStore:
         ordered = [_native(item) for item in items if not item.get("suppressed", False)]
         if need_sort:
             ordered.sort(key=lambda item: item["detected_at"], reverse=True)
-            if not query_truncated and len(ordered) >= limit:
-                # Scan order is not newest-first, so a full page without an
-                # explicit continuation key still cannot guarantee a complete
-                # "most recent N" window.
-                query_truncated = True
         return ordered[:limit], query_truncated
 
     def review_change(self, *, source_scope: str, record_key: str, action: str,
