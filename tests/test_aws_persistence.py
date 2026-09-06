@@ -132,13 +132,38 @@ def test_bounded_query_stops_after_requested_window():
         def query(self, **kwargs):
             calls.append(kwargs)
             if "ExclusiveStartKey" not in kwargs:
-                return {"Items": [{"id": 1}], "LastEvaluatedKey": {"id": 1}}
-            return {"Items": [{"id": 2}], "LastEvaluatedKey": {"id": 2}}
+                return {
+                    "Items": [{"id": 1}],
+                    "LastEvaluatedKey": {"id": 1},
+                    "ScannedCount": 1,
+                }
+            return {
+                "Items": [{"id": 2}],
+                "LastEvaluatedKey": {"id": 2},
+                "ScannedCount": 1,
+            }
 
     assert _query_up_to(Table(), item_limit=2) == [{"id": 1}, {"id": 2}]
     assert len(calls) == 2
     assert calls[0]["Limit"] == 2
     assert calls[1]["Limit"] == 1
+
+
+def test_bounded_query_caps_evaluated_items_for_sparse_filter():
+    calls = []
+
+    class Table:
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            return {
+                "Items": [],
+                "LastEvaluatedKey": {"id": len(calls)},
+                "ScannedCount": kwargs["Limit"],
+            }
+
+    assert _query_up_to(Table(), item_limit=200) == []
+    assert len(calls) == 1
+    assert calls[0]["Limit"] == 200
 
 
 def test_suppressed_changes_are_hidden_from_normal_reads():
