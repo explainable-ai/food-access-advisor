@@ -275,11 +275,12 @@ class AwsEvidenceStore:
                 self.table,
                 FilterExpression=Attr("item_type").eq("change") & expression,
             )
-            query_truncated = len(items) > limit
+            query_truncated = False
             need_sort = True
         ordered = [_native(item) for item in items if not item.get("suppressed", False)]
         if need_sort:
             ordered.sort(key=lambda item: item["detected_at"], reverse=True)
+            query_truncated = len(ordered) > limit
         return ordered[:limit], query_truncated
 
     def review_change(self, *, source_scope: str, record_key: str, action: str,
