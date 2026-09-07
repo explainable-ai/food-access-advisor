@@ -7,6 +7,7 @@ from data_sources.chicago_socrata import ChicagoSocrataClient
 from data_sources.cta_gtfs import CTAGTFSClient
 from data_sources.contracts import ResourceEvidenceBatch
 from tools.evidence_snapshots import record_snapshot
+from services.eventbrite_signals import refresh_eventbrite_events
 
 
 def _snapshot_batch(batch: ResourceEvidenceBatch, snapshot_fn: Callable = record_snapshot) -> dict:
@@ -34,4 +35,15 @@ def refresh_additional_sources(*, socrata: ChicagoSocrataClient | None = None,
         except Exception as exc:  # source isolation is the feature: one outage cannot erase/abort the rest
             results.append(snapshot_fn(source_id, [], scope="urban", status="failed",
                                        error=f"{type(exc).__name__}: {exc}"))
+
+    # Eventbrite is optional and server-side only. When configured, the same
+    # scheduled Watchdog run refreshes organization-owned community events.
+    if os.getenv("EVENTBRITE_API_TOKEN") and os.getenv("EVENTBRITE_ORGANIZATION_ID"):
+        try:
+            results.append(refresh_eventbrite_events(snapshot_fn=snapshot_fn))
+        except Exception as exc:
+            results.append(snapshot_fn(
+                "eventbrite_community_events", [], scope="chicago", status="failed",
+                error=f"{type(exc).__name__}: {exc}",
+            ))
     return results
