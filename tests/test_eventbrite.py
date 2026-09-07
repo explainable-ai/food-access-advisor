@@ -89,10 +89,14 @@ def test_webhook_refetches_event_and_records_human_review_finding():
 
 
 def test_refresh_applies_local_discovery_and_records_snapshot():
+    calls = []
     result = refresh_eventbrite_events(
         client=Client([event()]),
         organization_id="77",
-        snapshot_fn=lambda source_id, records, **kwargs: {"source_id": source_id, "record_count": len(records)},
+        snapshot_fn=lambda source_id, records, **kwargs: calls.append((source_id, records, kwargs))
+        or {"source_id": source_id, "record_count": len(records)},
     )
     assert result["record_count"] == 1
     assert result["matched_event_count"] == 1
+    assert result["baselined_event_count"] == 1
+    assert [call[2]["scope"] for call in calls] == ["chicago", "chicago:event:123456789"]
