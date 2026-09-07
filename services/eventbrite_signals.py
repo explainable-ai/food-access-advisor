@@ -31,11 +31,22 @@ def refresh_eventbrite_events(*, client: EventbriteClient | None = None,
     batch = build_event_batch(client.iter_organization_events(org_id))
     records = [record.model_dump(mode="json") for record in batch.records]
     result = snapshot_fn(batch.source_id, records, scope="chicago", status="complete")
+    # Establish one baseline per event so the next webhook can produce a
+    # meaningful modified/cancelled finding without treating it as first seen.
+    for record in records:
+        event_id = str(record["entity_id"]).split(":", 1)[1]
+        snapshot_fn(
+            batch.source_id,
+            [record],
+            scope=f"chicago:event:{event_id}",
+            status="complete",
+        )
     return {
         **result,
         "source_row_count": batch.quality.source_row_count,
         "matched_event_count": batch.quality.matched_rows,
         "excluded_event_count": batch.quality.excluded_rows,
+        "baselined_event_count": len(records),
         "message": "Eventbrite events refreshed. No ranking, route, or dispatch changed automatically.",
     }
 
