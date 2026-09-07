@@ -22,6 +22,7 @@ sub-second REST call.
 """
 
 import asyncio
+import hmac
 import json
 import os
 from dataclasses import asdict
@@ -59,6 +60,8 @@ from tools.access_data import (
 )
 from tools.evidence_brief import write_route_brief
 from tools.evidence_snapshots import read_change_page, review_change
+from data_sources.eventbrite import EventbriteAPIError
+from services.eventbrite_signals import ingest_eventbrite_webhook, refresh_eventbrite_events
 from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import DEFAULT_WEIGHTS, score_all_gaps, score_gaps
@@ -393,6 +396,44 @@ def flagged_tracts(status: str = Query(default="pending")):
 @app.get("/api/impact-metrics", response_model=ImpactMetrics)
 def impact_metrics() -> ImpactMetrics:
     return compute_impact_metrics()
+
+
+@app.post("/api/community-signals/eventbrite/refresh")
+def refresh_eventbrite_community_signals(
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Refresh authorized Eventbrite organization events for human review."""
+    try:
+        return refresh_eventbrite_events()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except EventbriteAPIError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/integrations/eventbrite/webhook")
+def eventbrite_webhook(payload: dict[str, Any], token: str = Query(..., min_length=24)):
+    """Record a verified Eventbrite event change without changing a plan.
+
+    Eventbrite does not document a signed-webhook header, so the callback URL
+    carries a high-entropy shared token. The payload's API URL is allowlisted
+    and the complete event is fetched again with the private API token.
+    """
+    expected = os.getenv("EVENTBRITE_WEBHOOK_SECRET", "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="EVENTBRITE_WEBHOOK_SECRET is not configured")
+    if not hmac.compare_digest(token, expected):
+        raise HTTPException(status_code=401, detail="Invalid Eventbrite webhook token")
+    try:
+        return ingest_eventbrite_webhook(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except EventbriteAPIError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/watchdog/changes")
