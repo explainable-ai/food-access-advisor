@@ -6,8 +6,8 @@ from typing import Callable
 from data_sources.chicago_socrata import ChicagoSocrataClient
 from data_sources.cta_gtfs import CTAGTFSClient
 from data_sources.contracts import ResourceEvidenceBatch
+from services.direct_source_signals import refresh_direct_sources
 from tools.evidence_snapshots import record_snapshot
-from services.eventbrite_signals import refresh_eventbrite_events
 
 
 def _snapshot_batch(batch: ResourceEvidenceBatch, snapshot_fn: Callable = record_snapshot) -> dict:
@@ -18,8 +18,9 @@ def _snapshot_batch(batch: ResourceEvidenceBatch, snapshot_fn: Callable = record
 
 def refresh_additional_sources(*, socrata: ChicagoSocrataClient | None = None,
                                gtfs: CTAGTFSClient | None = None,
-                               snapshot_fn: Callable = record_snapshot) -> list[dict]:
-    """Fetch each independent source, recording failures without aborting siblings."""
+                               snapshot_fn: Callable = record_snapshot,
+                               include_direct_sources: bool = True) -> list[dict]:
+    """Fetch independent sources, recording failures without aborting siblings."""
     socrata = socrata or ChicagoSocrataClient(app_token=os.getenv("SOCRATA_APP_TOKEN") or None)
     gtfs = gtfs or CTAGTFSClient()
     sources = [
@@ -32,18 +33,11 @@ def refresh_additional_sources(*, socrata: ChicagoSocrataClient | None = None,
     for source_id, fetch in sources:
         try:
             results.append(_snapshot_batch(fetch(), snapshot_fn=snapshot_fn))
-        except Exception as exc:  # source isolation is the feature: one outage cannot erase/abort the rest
+        except Exception as exc:
             results.append(snapshot_fn(source_id, [], scope="urban", status="failed",
                                        error=f"{type(exc).__name__}: {exc}"))
 
-    # Eventbrite is optional and server-side only. When configured, the same
-    # scheduled Watchdog run refreshes organization-owned community events.
-    if os.getenv("EVENTBRITE_API_TOKEN") and os.getenv("EVENTBRITE_ORGANIZATION_ID"):
-        try:
-            results.append(refresh_eventbrite_events(snapshot_fn=snapshot_fn))
-        except Exception as exc:
-            results.append(snapshot_fn(
-                "eventbrite_community_events", [], scope="chicago", status="failed",
-                error=f"{type(exc).__name__}: {exc}",
-            ))
+    if include_direct_sources:
+        direct = refresh_direct_sources(snapshot_fn=snapshot_fn)
+        results.extend(direct["sources"])
     return results
