@@ -26,6 +26,24 @@ class AdvisorResponse(BaseModel):
     answer: str
 
 
+class BriefRequest(BaseModel):
+    request: str = Field(min_length=1)
+    study_area: Optional[Literal["chicago_neighborhoods", "rural_fringe"]] = None
+
+
+class FeedbackRequest(BaseModel):
+    tract_id: str = Field(min_length=1)
+    households_served: int = Field(ge=0)
+
+
+class ScoreContribution(BaseModel):
+    component: str
+    weight: float
+    raw_value: Optional[float] = None
+    contribution: Optional[float] = None
+    source: str
+
+
 class FlaggedTract(BaseModel):
     id: Optional[int] = None
     tract_fips: str
@@ -84,6 +102,7 @@ class RankedTract(BaseModel):
     weights_used: dict[str, float] = Field(default_factory=dict)
     missing_components: list[str] = Field(default_factory=list)
     score_explanation: str = ""
+    contributions: list[ScoreContribution] = Field(default_factory=list)
     sensitivity: dict[str, Any] = Field(default_factory=dict)
     nearest_resource_kind: Optional[str] = None
     nearest_resource_miles: Optional[float] = None
@@ -132,7 +151,7 @@ class RouteOptimizationRequest(BaseModel):
     service_minutes: float = Field(default=20, ge=0)
     travel_time_matrix: Optional[list[list[float]]] = None
     average_speed_mph: float = Field(default=35, gt=0)
-    travel_time_provider: Literal["openrouteservice", "estimate"] = "openrouteservice"
+    travel_time_provider: Literal["aws_location", "openrouteservice", "estimate"] = "aws_location"
 
 
 class RouteOptimizationResponse(BaseModel):

@@ -80,3 +80,10 @@ PILOT_RURAL_COUNTY = {
 }
 
 TOP_N_DEFAULT = 3
+
+OPERATIONS_HUB = {
+    "name": "Greater Chicago Food Depository",
+    "address": "4100 W Ann Lurie Place, Chicago, IL 60632",
+    "lat": 41.816388,
+    "lon": -87.726295,
+}

@@ -20,23 +20,26 @@ from model import build_model
 from tools.site_evidence_brief import write_site_evidence_brief
 from tools.flagged_tracts import flag_tract_for_recheck
 from tools.site_ranker import rank_chicago_tracts
+from tools.access_data import get_all_rural_tracts
+from tools.gap_scorer import score_gaps
+from tools.resource_cache import load_resource_cache
 from tools.telemetry import configure_telemetry, print_metrics
 
 load_dotenv()
 configure_telemetry()
 
-SYSTEM_PROMPT = f"""You are the Food-Access Advisor for {PILOT_CITY['name']}. \
+SYSTEM_PROMPT = f"""You are Scout, LastMile Market's site-prioritization agent for {PILOT_CITY['name']}. \
 Community organizers and city planners ask you where a new food resource \
 (a farm, market, or food-rescue drop point) would do the most good.
 
 For every siting question:
 1. Call rank_chicago_tracts to retrieve the deterministic ranking over the \
 same complete prepared Chicago tract universe and resource snapshot shown in \
-the Site Advisor workspace. Never rank tracts yourself.
+the Prioritize Sites workspace. Never rank tracts yourself.
 2. Call write_site_evidence_brief on the single top-ranked tract and include its \
 output verbatim in your answer.
 3. Call flag_top_tract_for_recheck on that same top-ranked tract. This is \
-what lets the Watchdog agent check back later on whether a resource ever \
+what lets Sentry check back later on whether a resource ever \
 actually appeared — do this every time, not just when asked.
 
 Attribute each measure to the source carried in the scored tract: USDA Food \
@@ -78,7 +81,7 @@ def flag_top_tract_for_recheck(top_tract: dict) -> dict:
         population=top_tract.get("population"),
         centroid_lat=top_tract.get("centroid_lat"),
         centroid_lon=top_tract.get("centroid_lon"),
-        note=f"Flagged from an Advisor recommendation (need_score={top_tract.get('need_score')}).",
+        note=f"Flagged from a Scout recommendation (need_score={top_tract.get('need_score')}).",
     )
 
 
@@ -94,9 +97,20 @@ def build_advisor() -> Agent:
     )
 
 
+def run_site_advisor(study_area: str, scenario: str, top_n: int = 12) -> dict:
+    """Run Scout's existing deterministic ranking path for a Crew brief."""
+    if study_area == "chicago_neighborhoods":
+        ranked = rank_chicago_tracts(top_n=top_n)
+    elif study_area == "rural_fringe":
+        ranked = score_gaps(get_all_rural_tracts(), load_resource_cache("rural", require_complete_coverage=True), top_n=top_n)
+    else:
+        raise ValueError("study_area must be 'chicago_neighborhoods' or 'rural_fringe'")
+    return {"study_area": study_area, "scenario": scenario, "ranked_tracts": ranked, "top_tracts": ranked[:3], "ranked_count": len(ranked)}
+
+
 if __name__ == "__main__":
     advisor = build_advisor()
-    print(f"Food-Access Advisor ready — pilot city: {PILOT_CITY['name']}")
+    print(f"LastMile Market Scout ready — pilot city: {PILOT_CITY['name']}")
     print("Ask a siting question (e.g. \"where's the highest-need spot for a "
           "new food resource?\"), or Ctrl+C to quit.\n")
     while True:

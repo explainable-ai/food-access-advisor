@@ -36,6 +36,7 @@ from api.operations_read import router as operations_read_router
 from api.schemas import (
     AdvisorRequest,
     AdvisorResponse,
+    BriefRequest,
     EvidenceRequest,
     EvidenceReviewRequest,
     EvidenceResponse,
@@ -47,6 +48,7 @@ from api.schemas import (
     RouteOptimizationRequest,
     RouteOptimizationResponse,
     VerifyRequest,
+    FeedbackRequest,
 )
 from api.auth import require_staff_user
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
@@ -71,8 +73,18 @@ from tools.resource_cache import ResourceCacheError, load_resource_cache
 from tools.site_evidence_brief import write_site_evidence_brief
 from tools.travel_time_provider import (
     TravelTimeProviderError,
-    get_openrouteservice_directions,
-    get_openrouteservice_matrix,
+    get_road_route_directions,
+    get_road_route_matrix,
+)
+from crew_lead import run_crew_brief
+from services.feedback_demo import calculate_feedback
+from storage.inventory import (
+    COLD_CHAIN_KEY,
+    ON_HAND_KEY,
+    InventoryConflictError,
+    InventoryStoreError,
+    S3InventoryStore,
+    get_inventory_store,
 )
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -90,7 +102,7 @@ BOUNDARY_FILES_BY_COUNTY_FIPS = {
     },
 }
 
-app = FastAPI(title="Food-Access Advisor API")
+app = FastAPI(title="LastMile Market API")
 app.include_router(operations_read_router)
 
 
@@ -136,6 +148,97 @@ app.add_middleware(
 def health():
     """Load-balancer health check; deliberately performs no paid/network calls."""
     return {"status": "ok"}
+
+
+@app.get("/ping", include_in_schema=False)
+def agentcore_ping():
+    """Bedrock AgentCore Runtime health contract."""
+    return health()
+
+
+async def _run_crew_brief(body: BriefRequest):
+    """Execute the authenticated Crew Lead request shared by HTTP aliases."""
+    try:
+        return await asyncio.to_thread(run_crew_brief, body.request, body.study_area)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Crew Lead failed: {exc}") from exc
+
+
+@app.post("/crew/brief")
+async def brief_crew(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Run the Last Mile Crew without changing any existing advisor route."""
+    return await _run_crew_brief(body)
+
+
+@app.post("/invoke", include_in_schema=False)
+async def agentcore_invoke(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Backward-compatible invocation alias for the Crew Lead flow."""
+    return await _run_crew_brief(body)
+
+
+@app.post("/invocations", include_in_schema=False)
+async def agentcore_invocations(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Bedrock AgentCore Runtime invocation contract."""
+    return await _run_crew_brief(body)
+
+
+def _inventory_read(key: str, store: S3InventoryStore):
+    try:
+        return store.read(key)
+    except InventoryStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _inventory_merge(key: str, updates: list[dict[str, Any]], store: S3InventoryStore):
+    try:
+        return store.merge(key, updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except InventoryConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InventoryStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/inventory")
+def inventory(store: S3InventoryStore = Depends(get_inventory_store)):
+    return _inventory_read(ON_HAND_KEY, store)
+
+
+@app.post("/inventory")
+def update_inventory(updates: list[dict[str, Any]], store: S3InventoryStore = Depends(get_inventory_store), _staff_user: dict[str, Any] = Depends(require_staff_user)):
+    return _inventory_merge(ON_HAND_KEY, updates, store)
+
+
+@app.get("/inventory/cold-chain")
+def cold_chain_inventory(store: S3InventoryStore = Depends(get_inventory_store)):
+    return _inventory_read(COLD_CHAIN_KEY, store)
+
+
+@app.post("/inventory/cold-chain")
+def update_cold_chain_inventory(updates: list[dict[str, Any]], store: S3InventoryStore = Depends(get_inventory_store), _staff_user: dict[str, Any] = Depends(require_staff_user)):
+    return _inventory_merge(COLD_CHAIN_KEY, updates, store)
+
+
+@app.post("/demo/feedback")
+def demo_feedback(body: FeedbackRequest):
+    try:
+        return calculate_feedback(body.tract_id, body.households_served)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _answer_text(graph_result, node_id: str) -> str:
@@ -330,10 +433,10 @@ def optimize_route_scenario(request: RouteOptimizationRequest):
     try:
         matrix = request.travel_time_matrix
         source = None
-        if matrix is None and request.travel_time_provider == "openrouteservice":
+        if matrix is None and request.travel_time_provider != "estimate":
             points = [request.depot.model_dump(), *[candidate.model_dump() for candidate in request.candidates]]
-            matrix = get_openrouteservice_matrix(points)
-            source = "openrouteservice_matrix"
+            matrix = get_road_route_matrix(points, provider_name=request.travel_time_provider)
+            source = "road_network_matrix"
         return optimize_route(
             candidates=[candidate.model_dump() for candidate in request.candidates],
             depot=request.depot.model_dump(), max_route_minutes=request.max_route_minutes,
@@ -356,7 +459,7 @@ def route_directions(request: RouteDirectionsRequest):
         request.destination.model_dump(),
     ]
     try:
-        return get_openrouteservice_directions(points, alternatives=request.alternatives)
+        return get_road_route_directions(points, alternatives=request.alternatives)
     except (ValueError, TravelTimeProviderError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
