@@ -36,7 +36,7 @@ from tools.flagged_tracts import flag_tract_for_recheck
 from tools.gap_scorer import score_gaps
 from tools.telemetry import configure_telemetry, print_metrics
 from tools.route_optimizer import optimize_route
-from tools.travel_time_provider import get_openrouteservice_matrix
+from tools.travel_time_provider import get_road_route_matrix
 
 load_dotenv()
 configure_telemetry()
@@ -128,9 +128,9 @@ def run_route_advisor(top_tracts: list, hub: dict | None, time_window_hours: flo
         demand = load_lbs - allocated if index == min(len(top_tracts), 5) - 1 else round(load_lbs * household_count / total_households, 2)
         allocated += demand
         candidates.append({"stop_id": str(tract.get("tract_fips")), "tract_fips": str(tract.get("tract_fips")), "lat": tract.get("centroid_lat"), "lon": tract.get("centroid_lon"), "demand": max(demand, 0.01), "households": household_count, "need_score": float(tract.get("need_score") or 0), "population": tract.get("population"), "currently_served": False})
-    provider = matrix_fn or get_openrouteservice_matrix
+    provider = matrix_fn or get_road_route_matrix
     matrix = provider([origin, *candidates])
-    route = optimize_route(candidates=candidates, depot={"lat": origin["lat"], "lon": origin["lon"]}, max_route_minutes=time_window_hours * 60, vehicle_capacity=load_lbs, max_stops=min(4, len(candidates)), service_minutes=20, travel_time_matrix=matrix, travel_time_source="openrouteservice_matrix")
+    route = optimize_route(candidates=candidates, depot={"lat": origin["lat"], "lon": origin["lon"]}, max_route_minutes=time_window_hours * 60, vehicle_capacity=load_lbs, max_stops=min(4, len(candidates)), service_minutes=20, travel_time_matrix=matrix, travel_time_source="road_network_matrix")
     return {**route, "hub": origin}
 
 
