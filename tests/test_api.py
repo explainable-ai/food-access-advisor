@@ -56,6 +56,31 @@ def test_health_endpoint_has_no_dependencies():
     assert response.json() == {"status": "ok"}
 
 
+def test_crew_brief_returns_structured_live_steps(monkeypatch):
+    monkeypatch.setattr(api_main, "run_crew_brief", lambda request, study_area: {
+        "steps": [{"agent": "sentry", "status": "failed", "summary": "source unavailable", "data": {}}],
+        "mission_id": None,
+        "final_summary": "source unavailable",
+    })
+    response = client.post("/crew/brief", json={"request": "200 lbs in four hours", "study_area": None})
+    assert response.status_code == 200
+    assert response.json()["steps"][0]["agent"] == "sentry"
+
+
+def test_agentcore_invoke_uses_same_crew_flow(monkeypatch):
+    monkeypatch.setattr(api_main, "run_crew_brief", lambda request, study_area: {"steps": [], "mission_id": None, "final_summary": "done"})
+    response = client.post("/invoke", json={"request": "brief the crew"})
+    assert response.status_code == 200
+    assert response.json()["final_summary"] == "done"
+
+
+def test_demo_feedback_does_not_claim_persistence(monkeypatch):
+    monkeypatch.setattr(api_main, "calculate_feedback", lambda tract_id, households: {"tract_id": tract_id, "households_served": households, "persisted": False})
+    response = client.post("/demo/feedback", json={"tract_id": "17031010100", "households_served": 20})
+    assert response.status_code == 200
+    assert response.json()["persisted"] is False
+
+
 def test_tract_boundaries_returns_filtered_feature_collection_for_county_17063():
     response = client.get("/api/tract-boundaries", params={"county": "17063"})
 

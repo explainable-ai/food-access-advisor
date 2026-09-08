@@ -23,6 +23,21 @@ def make_tract(fips, population, half=1, one=1, lat=41.80, lon=-87.63):
     }
 
 
+def test_explainability_keeps_missing_component_values_null():
+    tract = make_tract("A", 1000)
+    tract.update({
+        "food_insecurity_rate": 0.5,
+        "households_total": 100,
+        "households_no_vehicle": 20,
+        "transit_burden": None,
+        "scoring_context_version": "urban-v1",
+    })
+    row = score_gaps([tract], [], top_n=1)[0]
+    transit = next(item for item in row["contributions"] if item["component"] == "transit_burden")
+    assert transit["raw_value"] is None
+    assert transit["contribution"] is None
+
+
 def test_higher_severity_and_no_nearby_resource_ranks_first():
     tracts = [
         make_tract("A", population=3000, half=1, one=1, lat=41.80, lon=-87.63),

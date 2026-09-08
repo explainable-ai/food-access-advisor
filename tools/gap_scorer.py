@@ -34,6 +34,41 @@ class PriorityWeights:
 DEFAULT_WEIGHTS = PriorityWeights()
 
 
+def _component_sources(tract):
+    economic = (
+        "Greater Chicago Food Depository Community Data Map (ACS 2024)"
+        if tract.get("scoring_context_version")
+        else "ACS 5-year"
+    )
+    return {
+        "food_access_gap": "USDA Food Access Research Atlas",
+        "poverty": economic,
+        "no_vehicle": "ACS 5-year",
+        "population_served": "ACS 5-year",
+        "transit_burden": "Chicago Transit Authority static GTFS",
+        "existing_coverage": "Versioned local resource directory",
+    }
+
+
+def _contribution_breakdown(tract, components, contributions, normalized_weights):
+    sources = _component_sources(tract)
+    rows = []
+    for name, value in components.items():
+        rows.append({
+            "component": name,
+            "weight": round(
+                -normalized_weights[name]
+                if name == "existing_coverage"
+                else normalized_weights[name],
+                4,
+            ),
+            "raw_value": round(value * 100, 1) if value is not None else None,
+            "contribution": contributions.get(name),
+            "source": sources[name],
+        })
+    return rows
+
+
 def _severity_component(tract):
     continuous_rural_gap = tract.get("low_income_low_access_share")
     if continuous_rural_gap is not None:
@@ -266,6 +301,9 @@ def _score_all(tracts, resources, weights, *, prepared_inputs=None):
         )
         entry = {**tract, "need_score": score, "score_components": {name: round(value * 100, 1) if value is not None else None for name, value in components.items()},
                  "score_contributions": contributions, "weights_used": {name: round(value, 4) for name, value in normalized_weights.items()},
+                 "contributions": _contribution_breakdown(
+                     tract, components, contributions, normalized_weights
+                 ),
                  "missing_components": missing, "score_explanation": _explanation(
                      contributions, missing, economic_label=economic_label
                  ),
@@ -284,6 +322,43 @@ def _score_all(tracts, resources, weights, *, prepared_inputs=None):
     for rank, item in enumerate(scored, 1):
         item["rank"] = rank
     return scored
+
+
+def recompute_score_with_override(scored_tract: dict, **component_overrides) -> dict:
+    """Recompute one already-scored tract with explicit component overrides.
+
+    Overrides are normalized values in the 0..1 range. Missing evidence remains
+    missing unless the caller explicitly supplies that component.
+    """
+    unknown = set(component_overrides) - set(asdict(DEFAULT_WEIGHTS))
+    if unknown:
+        raise ValueError(f"unknown score components: {sorted(unknown)}")
+    components = {
+        name: (value / 100 if value is not None else None)
+        for name, value in (scored_tract.get("score_components") or {}).items()
+    }
+    for name, value in component_overrides.items():
+        components[name] = None if value is None else max(0.0, min(float(value), 1.0))
+    weights = {
+        **DEFAULT_WEIGHTS.normalized(),
+        **(scored_tract.get("weights_used") or {}),
+    }
+    score, contributions = _weighted_score(
+        components,
+        weights,
+        preserve_missing=bool(scored_tract.get("scoring_context_version")),
+    )
+    return {
+        "score": score,
+        "score_components": {
+            name: round(value * 100, 1) if value is not None else None
+            for name, value in components.items()
+        },
+        "score_contributions": contributions,
+        "contributions": _contribution_breakdown(
+            scored_tract, components, contributions, weights
+        ),
+    }
 
 
 def score_all_gaps(tracts: list, resources: list,

@@ -44,14 +44,15 @@ from tools.evidence_snapshots import record_resource_snapshot
 from tools.flagged_tracts import read_flagged_tracts, update_flagged_tract
 from tools.recheck_status import check_resource_appeared
 from tools.telemetry import configure_telemetry, print_metrics
+from tools.watchdog_run import run_watchdog_pass
 
 configure_telemetry()
 
-SYSTEM_PROMPT = f"""You are the Food-Access Watchdog for {PILOT_CITY['name']} \
+SYSTEM_PROMPT = f"""You are Sentry, LastMile Market's access-monitoring agent for {PILOT_CITY['name']} \
 and the rural pilot county. You run on a schedule, unattended — nobody is \
 asking you a question right now. Your job is to work the backlog of \
-tracts previously flagged by a recommending agent (the Site Advisor or \
-the Route Advisor) and report, per tract, whether a food resource has \
+tracts previously flagged by a recommending agent (Scout or Router) and \
+report, per tract, whether a food resource has \
 since actually appeared nearby.
 
 For this run:
@@ -60,7 +61,7 @@ For this run:
 3. Call get_existing_resources once, and get_rural_existing_resources \
 once — both take no arguments, always querying their fixed region. You \
 need both because the backlog can contain rows from either the Site \
-Advisor ("site", urban) or the Route Advisor ("route", rural).
+Scout ("site", urban) or Router ("route", rural).
 4. For each flagged tract, look at its recommendation_type: use the \
 get_existing_resources results for "site" rows, or the \
 get_rural_existing_resources results for "route" rows — never mix the \
@@ -91,8 +92,8 @@ show a possible change awaiting human verification, how many are still \
 needed — broken out by recommendation_type if the backlog contained both \
 kinds.
 
-You never make a new siting or routing recommendation — that's the Site \
-Advisor's or Route Advisor's job, not yours. You only report on what \
+You never make a new siting or routing recommendation — that's Scout's \
+or Router's job, not yours. You only report on what \
 already happened to a past one.
 """
 
@@ -129,9 +130,21 @@ def build_watchdog_reporter() -> Agent:
     )
 
 
+def run_watchdog(study_area: str) -> dict:
+    """Run Sentry for only the recommendation type matching the study area."""
+    recommendation_type = {"chicago_neighborhoods": "site", "rural_fringe": "route"}.get(study_area)
+    if recommendation_type is None:
+        raise ValueError("study_area must be 'chicago_neighborhoods' or 'rural_fringe'")
+
+    def read_target(status="pending"):
+        return [row for row in read_flagged_tracts(status) if row.get("recommendation_type") == recommendation_type]
+
+    return run_watchdog_pass(read_fn=read_target)
+
+
 if __name__ == "__main__":
     watchdog = build_watchdog()
-    print(f"Food-Access Watchdog — pilot city: {PILOT_CITY['name']}")
+    print(f"LastMile Market Sentry — pilot city: {PILOT_CITY['name']}")
     print("Running a single unattended recheck pass over the flagged-tracts backlog...\n")
     result = watchdog("Run today's recheck pass over every pending flagged tract.")
     print_metrics(result)
