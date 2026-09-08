@@ -38,6 +38,16 @@ def test_explainability_keeps_missing_component_values_null():
     assert transit["contribution"] is None
 
 
+def test_explainability_reports_effective_weights_when_missing_is_redistributed():
+    tract = make_tract("A", 1000)
+    row = score_gaps([tract], [], top_n=1)[0]
+    by_component = {item["component"]: item for item in row["contributions"]}
+
+    assert by_component["transit_burden"]["raw_value"] is None
+    assert by_component["transit_burden"]["weight"] == 0.0
+    assert by_component["food_access_gap"]["weight"] == 0.2778
+
+
 def test_higher_severity_and_no_nearby_resource_ranks_first():
     tracts = [
         make_tract("A", population=3000, half=1, one=1, lat=41.80, lon=-87.63),
