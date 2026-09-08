@@ -120,7 +120,7 @@ TIME_RANGE_RE = re.compile(
     re.IGNORECASE,
 )
 DIRECTIONAL_ADDRESS_RE = re.compile(
-    r"\b\d{1,5}(?:-\d{1,5})?\s+[NSEW]\.?\s+[A-Za-z.'’-]+"
+    r"\b\d{1,5}(?:-\d{1,5})?\s+[NSEW]\.?\s+[A-Za-z0-9.'’-]+"
     r"(?:\s+(?:St(?:reet)?|Ave(?:nue)?|Rd|Road|Blvd|Boulevard|Dr(?:ive)?|"
     r"Pl(?:ace)?|Pkwy|Parkway|Ct|Court|Ln|Lane|Way))?\b",
     re.IGNORECASE,
