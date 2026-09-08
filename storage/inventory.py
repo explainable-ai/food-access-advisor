@@ -87,6 +87,10 @@ class S3InventoryStore:
                     if expected_etag is not None
                     else {"IfNoneMatch": "*"}
                 )
+            # Stage the immutable version before conditionally publishing the
+            # new current object. A failed publish may leave an unused staged
+            # version, but can never leave an unversioned current mutation.
+            self.s3.put_object(Bucket=self.bucket, Key=version_key, Body=body, ContentType="application/json")
             self.s3.put_object(
                 Bucket=self.bucket,
                 Key=key,
@@ -94,7 +98,6 @@ class S3InventoryStore:
                 ContentType="application/json",
                 **conditions,
             )
-            self.s3.put_object(Bucket=self.bucket, Key=version_key, Body=body, ContentType="application/json")
         except Exception as exc:
             code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", ""))
             if code in {"PreconditionFailed", "412", "ConditionalRequestConflict", "409"}:
