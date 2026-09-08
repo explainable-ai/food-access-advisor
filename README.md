@@ -1,41 +1,33 @@
-# Food-Access Advisor
+# LastMile Market
 
-A Strands Agents SDK agent for the **Agents for Humans** hackathon (Good Neighbor track).
+A Strands Agents SDK operations platform for the **Agents for Humans** hackathon
+(Good Neighbor track).
 
-Community leaders deciding where to put a new farm, market, or food-rescue
-route usually work from instinct, not evidence — even though the evidence
-already exists in public datasets nobody queries. This project maps
-low-income, low-access census tracts (USDA's Food Access Research Atlas)
-against what food resources already exist nearby, and answers a plain
-question like *"where in Chicago would a new food resource have the
-highest impact?"* with a ranked, cited recommendation.
+LastMile Market plans and reviews its own mobile grocery operations. It maps
+low-income, low-access census tracts against trusted public evidence, builds a
+constrained route, checks inventory and cold-chain readiness, and drafts a
+mission for a person to approve.
 
-Three agents, split by job and lifecycle, not one agent with a mode flag —
-see [Guardrails](#guardrails) for why that split matters:
+The product-facing agent team is **The Last Mile Crew**. The existing Python
+module and function names remain unchanged for compatibility:
 
-- **Site Advisor** (`agent.py`) — on-demand, recommends a new fixed site
-  for the urban pilot city (Chicago, IL).
-- **Route Advisor** (`route_advisor.py`) — on-demand, recommends a route
-  or distribution-schedule change instead of a new site for the rural
-  pilot county (Alexander County, IL), where a fixed-site store is often
-  not viable at rural density. Scaffolded against illustrative sample
-  data — see [Data setup](#data-setup).
-- **Watchdog** (`watchdog_agent.py`) — scheduled, closes the loop by
-  working through both Advisors' flagged tracts and reporting whether a
-  resource or route change ever actually appeared/happened.
+- **Scout** (`agent.py`) ranks census tracts by need.
+- **Router** (`route_advisor.py`) builds a constrained mobile-market route.
+- **Dispatch** (`services/crew_lead.py`) checks route, inventory, capacity,
+  and cold-chain readiness and drafts the mission.
+- **Sentry** (`watchdog_agent.py`) watches trusted evidence for changes.
+- **Crew Lead** (`services/crew_lead.py`) runs Sentry → Scout → Router →
+  Dispatch and returns a structured step log.
 
-`orchestration.py` formalizes these three with Strands' `GraphBuilder`
-(without adding a fourth agent — see
-[Orchestration, API, and the planning-workspace UI](#orchestration-api-and-the-planning-workspace-ui)),
-and a React + FastAPI planning workspace (map, ranked-answer workspaces,
-follow-up tracking) sits on top for a browser-based demo instead of three
-command-line scripts.
+`orchestration.py` retains the original single-agent routes for backward
+compatibility. The new fixed-order Crew Lead workflow is additive. The React
+frontend lives in the separate `food-equity-navigator` repository.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    U["Community organizer\n(plain-language question)"] --> ADV[Site Advisor]
+    U["Community organizer\n(plain-language question)"] --> ADV[Scout]
     ADV -->|1| AD[get_low_access_tracts]
     ADV -->|2| ER[get_existing_resources]
     ADV -->|3| GS[score_gaps]
@@ -51,7 +43,7 @@ flowchart LR
     EB -->|cited paragraph| ADV
     ADV --> ANSWER["Ranked recommendation\n+ citable brief"]
 
-    P["Regional planner\n(routing question)"] --> RA[Route Advisor]
+    P["Regional planner\n(routing question)"] --> RA[Router]
     RA -->|1| ADR[get_low_access_rural_tracts]
     RA -->|2| ERR[get_rural_existing_resources]
     RA -->|3| GS
@@ -66,7 +58,7 @@ flowchart LR
     RB -->|cited paragraph| RA
     RA --> RANSWER["Ranked route recommendation\n+ citable brief"]
 
-    SCHED["Scheduled trigger\n(e.g. monthly)"] --> WD[Watchdog agent]
+    SCHED["Scheduled trigger\n(e.g. monthly)"] --> WD[Sentry agent]
     WD -->|1| RFT[read_flagged_tracts]
     WD -->|2| ER2[get_existing_resources]
     WD -->|2| ER3[get_rural_existing_resources]
@@ -229,7 +221,7 @@ its `metadata` table. Tool responses label fallback records as
    refresh inside ECS when its network cannot reach Overpass; publish the
    prepared snapshot before deploying the service.
 
-The Site Advisor endpoints default to `study_area=chicago`, so neighborhood
+The Scout endpoints default to `study_area=chicago`, so neighborhood
 priorities are not diluted by suburban Cook County tracts. Pass
 `study_area=cook_county` to inspect the wider county context. The ranked-tract
 endpoints accept non-negative query weights named
@@ -239,7 +231,7 @@ one. Every result returns the normalized components, their point
 contributions, missing-evidence disclosures, a plain-language explanation,
 and a ±20% one-weight-at-a-time score/rank sensitivity range.
 
-To point the Site Advisor at a different city, or the Route Advisor at a
+To point the Scout at a different city, or the Router at a
 different rural county, edit `config.py` (county FIPS + bounding box) and
 re-run `data/prep_atlas.py`. Nothing else in the project hardcodes a
 location — that's the scalability story: the Atlas already covers every
@@ -252,7 +244,7 @@ python agent.py
 ```
 
 ```
-Food-Access Advisor ready — pilot city: Chicago, IL
+LastMile Market ready — pilot city: Chicago, IL
 > where's the highest-need spot for a new food resource?
 ```
 
@@ -261,12 +253,12 @@ python route_advisor.py
 ```
 
 ```
-Route Advisor ready — rural pilot county: Alexander County, IL
+Router ready — rural pilot county: Alexander County, IL
 > where would a route change help most?
 ```
 
 Each answer also flags its top tract in `data/flagged_tracts.db` for the
-Watchdog to check later. Run the Watchdog's recheck pass (normally fired on
+Sentry to check later. Run the Sentry's recheck pass (normally fired on
 a schedule, e.g. EventBridge — here run manually) with:
 
 ```bash
@@ -274,7 +266,7 @@ python watchdog_agent.py
 ```
 
 ```
-Food-Access Watchdog — pilot city: Chicago, IL
+Food-Access Sentry — pilot city: Chicago, IL
 Running a single unattended recheck pass over the flagged-tracts backlog...
 ```
 
@@ -299,7 +291,7 @@ Then open <http://127.0.0.1:5050>. It reads `data/flagged_tracts.db`
 directly (no LLM call) and shows, separately for the urban and rural
 regions: how many flagged tracts remain unclosed, how many resolved, and
 the median days it took to resolve them. Auto-refreshes every 30 seconds,
-so leaving it open while running the Watchdog shows the numbers move.
+so leaving it open while running the Sentry shows the numbers move.
 
 ### Orchestration, API, and the planning-workspace UI
 
@@ -313,8 +305,8 @@ constraint from Strands' `GraphBuilder` shaped this: a single shared
 `AgentBase`/`MultiAgentBase` instances, and — confirmed directly against
 the installed `strands-agents` package's execution engine — *every* entry
 point fires on *every* `graph()` call, with no per-call way to pick just
-one). A shared graph containing all three agents would therefore run Site
-Advisor, Route Advisor, and Watchdog together on every invocation, which
+one). A shared graph containing all three legacy agents would therefore run
+Scout, Router, and Sentry together on every invocation, which
 is wrong here. So `orchestration.py` wraps each agent in its own trivial
 single-node `Graph` (`build_site_graph()`, `build_route_graph()`,
 `build_watchdog_graph()`) and adds one plain-Python dispatcher,
@@ -344,6 +336,20 @@ Amazon Location calls are server-side through the Routes V2 `geo-routes`
 client. Grant the API/AgentCore execution role only
 `geo-routes:CalculateRouteMatrix` on the regional default provider; see
 [`deploy/AMAZON_LOCATION_SETUP.md`](deploy/AMAZON_LOCATION_SETUP.md).
+
+The Last Mile Crew adds these contracts without removing the legacy routes:
+
+- `POST /crew/brief` (also `/api/crew/brief`) runs the fixed Sentry → Scout →
+  Router → Dispatch workflow and returns the complete step log.
+- `GET/POST /inventory` and `GET/POST /inventory/cold-chain` use versioned S3
+  objects as the inventory source of truth.
+- `POST /demo/feedback` applies an illustrative coverage override to the real
+  weighted scoring formula and always returns `persisted: false`.
+- `GET /ping` and `POST /invocations` implement the AgentCore HTTP container
+  contract. ECS continues to expose the complete REST API used by the frontend.
+
+See [`deploy/LASTMILE_ELEVATE.md`](deploy/LASTMILE_ELEVATE.md) for the scoped
+S3 IAM policy, ARM64 AgentCore build, and smoke tests.
 Run the API with:
 
 ```bash
@@ -391,10 +397,10 @@ export needs `opentelemetry-exporter-otlp-proto-http` installed
 separately; it's not in `requirements.txt` since it's unused unless you
 opt in.
 
-### Running the Watchdog on Bedrock AgentCore Runtime
+### Running the Sentry on Bedrock AgentCore Runtime
 
 `watchdog_agent.py`'s manual run above is the local/test path. To actually
-host the Watchdog as the scheduled service the architecture diagram above
+host the Sentry as the scheduled service the architecture diagram above
 shows, `watchdog_agentcore_entry.py` wraps the same `build_watchdog()` in a
 `BedrockAgentCoreApp` for Amazon Bedrock AgentCore Runtime:
 
@@ -437,23 +443,23 @@ above, this needs your own AWS credentials to actually run.
   the model just gets it wrong. The system prompt still tells each agent
   to *say* when a question is out of scope — that's a wording/UX
   instruction now, not the only thing enforcing the boundary.
-- **Site Advisor, Route Advisor, and Watchdog are three separate agents
+- **Scout, Router, and Sentry are three separate agents
   with disjoint tool lists, not one agent with a mode flag — and
   `orchestration.py`'s `GraphBuilder` wrapping doesn't change that.**
   Neither Advisor has a tool that can write to a flagged tract's status;
-  the Watchdog has no tool that can answer a siting or routing question or
-  make a new recommendation. `flag_top_tract_for_recheck` (Site Advisor's
+  the Sentry has no tool that can answer a siting or routing question or
+  make a new recommendation. `flag_top_tract_for_recheck` (Scout's
   only write) hardcodes `recommendation_type="site"` and
-  `source_agent="advisor"`; `flag_top_route_for_recheck` (Route Advisor's
+  `source_agent="advisor"`; `flag_top_route_for_recheck` (Router's
   only write) hardcodes `recommendation_type="route"` and
   `source_agent="route_advisor"` — neither is a model-settable argument,
   so neither Advisor can mislabel a row as coming from the other.
-  `update_flagged_tract` (the Watchdog's only write) takes a fixed,
+  `update_flagged_tract` (the Sentry's only write) takes a fixed,
   validated status enum and writes to exactly one table — there's no
   table-name or raw-SQL argument for a model to misuse. `route_request`'s
   `mode` argument is likewise a plain caller-supplied string, never
   something a model infers.
-- **The Route Advisor's capacity trade-off is a required disclosure, not
+- **The Router's capacity trade-off is a required disclosure, not
   optional color.** A mobile route or delivery day has fixed stop
   capacity, so "add a stop here" is usually really "move a stop from
   somewhere else" — a Success-to-the-Successful risk found during the
@@ -462,8 +468,8 @@ above, this needs your own AWS credentials to actually run.
   explicitly in every brief; it isn't left to the orchestrator prompt to
   remember, since a content rule worth actually testing needs to live
   where the sentence a reader sees is actually generated. The frontend's
-  Route Advisor workspace renders this paragraph in full, not truncated.
-- **The Watchdog checks each flagged tract against the resources and
+  Router workspace renders this paragraph in full, not truncated.
+- **The Sentry checks each flagged tract against the resources and
   distance threshold that actually match its region.** A "site" row is
   checked against `get_existing_resources` (urban) at the 1-mile default;
   a "route" row is checked against `get_rural_existing_resources` (rural)
@@ -480,16 +486,16 @@ above, this needs your own AWS credentials to actually run.
 
 ## Roadmap
 
-Supplemental source adapters and the Watchdog snapshot/diff contract are now
+Supplemental source adapters and the Sentry snapshot/diff contract are now
 implemented. See [`docs/ADDITIONAL_DATA_AND_WATCHDOG.md`](docs/ADDITIONAL_DATA_AND_WATCHDOG.md)
 for the exact official sources, freshness rules, change semantics, and the
 production persistence boundary.
 
-AWS deployments use DynamoDB for Watchdog metadata/state and S3 for full
+AWS deployments use DynamoDB for Sentry metadata/state and S3 for full
 versioned evidence payloads, while local development remains SQLite by default.
 See [`deploy/AWS_PERSISTENCE_SETUP.md`](deploy/AWS_PERSISTENCE_SETUP.md).
 
-- **Watchdog on a real recurring schedule.** `watchdog_agentcore_entry.py`
+- **Sentry on a real recurring schedule.** `watchdog_agentcore_entry.py`
   is deployable today; [`deploy/EVENTBRIDGE_SETUP.md`](deploy/EVENTBRIDGE_SETUP.md)
   now documents the EventBridge Scheduler + Lambda shim needed to actually
   invoke the deployed AgentCore Runtime endpoint on a cadence, making the
@@ -511,7 +517,7 @@ See [`deploy/AWS_PERSISTENCE_SETUP.md`](deploy/AWS_PERSISTENCE_SETUP.md).
   service. A future routing engine can add walk, wait, transfer, and in-vehicle
   time to specific food resources without replacing the explainable Phase 1
   transportation evidence.
-- **Real rural Atlas data.** The Route Advisor's code is built and tested,
+- **Real rural Atlas data.** The Router's code is built and tested,
   but `data/prep_atlas.py` doesn't yet build `data/atlas_rural_county.db`
   from a real LRAM/SRAM download for Alexander County, IL — it runs on
   illustrative sample data until that's done (see Data setup above).
