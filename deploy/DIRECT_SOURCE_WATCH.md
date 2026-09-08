@@ -5,6 +5,7 @@ not use Eventbrite, social-media scraping, or an API token.
 
 ## Sources
 
+- City of Chicago Food Equity Dashboard public ArcGIS data (grocery stores, farmers markets, urban agriculture, grants, and community investments)
 - Greater Chicago Food Depository food finder
 - Urban Growers Collective Fresh Moves Mobile Market
 - Northern Illinois Food Bank grocery and Mobile Market page
@@ -13,12 +14,13 @@ not use Eventbrite, social-media scraping, or an API token.
 - Chicago Food Policy Action Council events
 - Nourishing Hope volunteer opportunities
 
-The registry and exact URLs live in `data_sources/community_sources.py`. Adding a
+The approved webpage registry lives in `data_sources/community_sources.py`; the
+City dashboard adapter lives in `data_sources/chicago_food_equity.py`. Adding a
 source is a reviewed code change; callers cannot submit arbitrary URLs.
 
 ## Behavior
 
-1. The scheduled Watchdog pass fetches each source independently.
+1. The scheduled Watchdog pass fetches each source independently. The City ArcGIS query is filtered to Access Watch categories and paginated in deterministic order.
 2. Schema.org events are preferred. Relevant official page sections are used
    when structured event markup is unavailable.
 3. Results are normalized to the existing `ResourceEvidence` contract and

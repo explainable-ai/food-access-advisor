@@ -59,6 +59,7 @@ from tools.access_data import (
 )
 from tools.evidence_brief import write_route_brief
 from tools.evidence_snapshots import read_change_page, review_change
+from data_sources.chicago_food_equity import source_registry_entry as food_equity_source_registry_entry
 from data_sources.community_sources import source_registry
 from services.direct_source_signals import refresh_direct_sources
 from tools.existing_resources import OverpassQueryError
@@ -400,7 +401,7 @@ def impact_metrics() -> ImpactMetrics:
 @app.get("/api/community-signals/sources")
 def community_signal_sources():
     """List the reviewed first-party sources used by Community Access Watch."""
-    return source_registry()
+    return [food_equity_source_registry_entry(), *source_registry()]
 
 
 @app.post("/api/community-signals/refresh")

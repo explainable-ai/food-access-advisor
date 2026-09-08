@@ -166,7 +166,10 @@ def test_refresh_isolates_sources_and_never_changes_plans():
         calls.append((source_id, records, kwargs))
         return {"source_id": source_id, "status": kwargs["status"], "changes": []}
 
-    result = refresh_direct_sources(client=BatchClient(), sources=(SOURCE,), snapshot_fn=snapshot)
+    result = refresh_direct_sources(
+        client=BatchClient(), sources=(SOURCE,), include_food_equity=False,
+        snapshot_fn=snapshot,
+    )
     assert result["status"] == "complete"
     assert result["healthy_source_count"] == 1
     assert calls[0][2]["min_retained_fraction"] == 0.60
