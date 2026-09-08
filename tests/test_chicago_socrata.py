@@ -70,7 +70,7 @@ def test_active_business_query_is_scoped_at_the_source():
     adapter.fetch_active_food_businesses()
     where = adapter.session.calls[0][1]["$where"]
     assert "business_activity" in where
-    assert "GROCERY" in where
+    assert "GROCER" in where
     assert "RETAIL FOOD" not in where
 
 
