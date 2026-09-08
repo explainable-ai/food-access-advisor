@@ -85,6 +85,27 @@ def test_fresh_moves_requires_a_schedule_time_and_address():
     }
 
 
+def test_fresh_moves_accepts_live_schedule_formats():
+    source = next(item for item in APPROVED_SOURCES if item.source_id == "fresh_moves_mobile_market")
+    html = """
+    <h2>Regular Mobile Market Schedule</h2>
+    <h3>EVERY OTHER WEDNESDAY: 08/12, 08/26, 09/09, 09/23</h3>
+    <p>4:30-6:00 Boxville, 330 E 51st St</p>
+    <h3>THURSDAYS:</h3>
+    <p>10:30 AM - 12:00 PM: Trina Davila, 4300 W North Ave</p>
+    <h3>MONDAYS:</h3>
+    <p>1:00 PM - 3:00 PM: Thresholds Austin, 334 N Menard</p>
+    <h2>What's On The Bus</h2>
+    """
+    batch = parse_source_html(source, html)
+    assert batch.quality.status.value == "complete"
+    assert len(batch.records) == 3
+    assert {record.attributes["location"] for record in batch.records} == {
+        "330 E 51st St", "4300 W North Ave", "334 N Menard"
+    }
+    assert any("4:30-6:00" in record.attributes["start_at"] for record in batch.records)
+
+
 def test_beyond_hunger_requires_a_dated_upcoming_event():
     source = next(item for item in APPROVED_SOURCES if item.source_id == "beyond_hunger_events")
     html = """
