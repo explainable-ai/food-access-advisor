@@ -98,9 +98,14 @@ def test_record_changes_remain_individually_auditable(tmp_path):
 
 def test_change_page_exposes_bounded_read_truncation(monkeypatch):
     class FakeStore:
-        def read_changes_window(self, *, limit: int, source_id=None):
+        def read_changes_window(
+            self, *, limit: int, source_id=None,
+            excluded_source_ids=None, excluded_source_scopes=None,
+        ):
             assert limit == 200
             assert source_id is None
+            assert excluded_source_ids is None
+            assert excluded_source_scopes is None
             return ([{
                 "source_id": "licenses",
                 "scope": "urban",
