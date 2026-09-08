@@ -53,3 +53,31 @@ def test_scheduled_refresh_includes_approved_direct_sources(monkeypatch):
     )
     assert len(results) == 5
     assert results[-1]["source_id"] == "fresh_moves_mobile_market"
+
+
+def test_community_watch_can_skip_transit_and_legacy_market_source(monkeypatch):
+    monkeypatch.setattr(
+        additional_evidence,
+        "refresh_direct_sources",
+        lambda **_kwargs: {"sources": [{
+            "source_id": "fresh_moves_mobile_market", "status": "complete"
+        }]},
+    )
+    results = refresh_additional_sources(
+        socrata=Socrata(),
+        gtfs=GTFS(),
+        snapshot_fn=lambda *args, **kwargs: {
+            "source_id": args[0], "status": kwargs["status"],
+        },
+        include_transit=False,
+        include_legacy_farmers_markets=False,
+    )
+
+    source_ids = {result["source_id"] for result in results}
+    assert "cta_gtfs" not in source_ids
+    assert "chicago_farmers_markets" not in source_ids
+    assert source_ids == {
+        "chicago_food_inspections",
+        "chicago_active_business_licenses",
+        "fresh_moves_mobile_market",
+    }
