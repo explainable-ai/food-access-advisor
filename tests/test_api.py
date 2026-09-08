@@ -476,21 +476,21 @@ def test_route_optimization_endpoint_rejects_bad_matrix():
     assert response.status_code == 422
 
 
-def test_route_optimization_endpoint_uses_openrouteservice(monkeypatch):
-    monkeypatch.setattr(api_main, "get_openrouteservice_matrix", lambda points: [[0, 5], [5, 0]])
+def test_route_optimization_endpoint_uses_road_network_provider(monkeypatch):
+    monkeypatch.setattr(api_main, "get_road_route_matrix", lambda points, provider_name=None: [[0, 5], [5, 0]])
     response = client.post("/api/route-advisor/optimize", json={
         "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
         "vehicle_capacity": 10, "max_stops": 1,
         "candidates": [{"stop_id": "A", "lat": 37.01, "lon": -89.2, "demand": 5, "need_score": 90}],
     })
     assert response.status_code == 200
-    assert response.json()["travel_time_source"] == "openrouteservice_matrix"
+    assert response.json()["travel_time_source"] == "road_network_matrix"
 
 
-def test_route_optimization_endpoint_surfaces_openrouteservice_failure(monkeypatch):
-    def fail(_points):
+def test_route_optimization_endpoint_surfaces_road_network_failure(monkeypatch):
+    def fail(_points, provider_name=None):
         raise api_main.TravelTimeProviderError("routing unavailable")
-    monkeypatch.setattr(api_main, "get_openrouteservice_matrix", fail)
+    monkeypatch.setattr(api_main, "get_road_route_matrix", fail)
     response = client.post("/api/route-advisor/optimize", json={
         "depot": {"lat": 37.0, "lon": -89.2}, "max_route_minutes": 120,
         "vehicle_capacity": 10, "max_stops": 1,
@@ -500,7 +500,7 @@ def test_route_optimization_endpoint_surfaces_openrouteservice_failure(monkeypat
 
 
 def test_route_directions_returns_road_geometry(monkeypatch):
-    monkeypatch.setattr(api_main, "get_openrouteservice_directions", lambda points, alternatives=2: {
+    monkeypatch.setattr(api_main, "get_road_route_directions", lambda points, alternatives=2: {
         "coordinates": [[-89.2, 37.0], [-89.1, 37.1]],
         "legs": [], "distanceMiles": 8.5, "durationMinutes": 10, "alternatives": [],
     })

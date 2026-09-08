@@ -28,6 +28,11 @@ class InventoryConflictError(InventoryStoreError):
 
 
 _UNCONDITIONAL = object()
+_ALIAS_FAMILIES = (
+    ("on_hand", "quantity", "qty"),
+    ("unit_weight_lbs", "weight_lbs"),
+    ("risk_status", "cold_chain_risk"),
+)
 
 
 def _identity(item: dict[str, Any]) -> str:
@@ -61,6 +66,16 @@ def _validate_numeric_fields(item: dict[str, Any]) -> None:
             raise ValueError(f"Inventory field {key} must be a positive number") from exc
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"Inventory field {key} must be a positive number")
+
+
+def _merge_item(current: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(current)
+    for family in _ALIAS_FAMILIES:
+        if any(key in update for key in family):
+            for key in family:
+                merged.pop(key, None)
+    merged.update(update)
+    return merged
 
 
 class S3InventoryStore:
@@ -151,7 +166,7 @@ class S3InventoryStore:
             seen = set()
             for item in current:
                 item_id = _identity(item)
-                merged.append({**item, **update_by_id.get(item_id, {})})
+                merged.append(_merge_item(item, update_by_id.get(item_id, {})))
                 seen.add(item_id)
             merged.extend(item for item_id, item in update_by_id.items() if item_id not in seen)
             try:

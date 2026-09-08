@@ -4,20 +4,42 @@ from __future__ import annotations
 
 from typing import Any
 
+from config import PILOT_CITY, PILOT_RURAL_COUNTY
 from tools.access_data import get_all_rural_tracts, get_all_tracts
 from tools.gap_scorer import recompute_score_with_override, score_all_gaps
 from tools.resource_cache import load_resource_cache
 
 
+def _study_area_candidates(tract_id: str) -> list[str]:
+    county_fips = str(tract_id).strip()[:5]
+    candidates = []
+    if county_fips in set(PILOT_CITY["county_fips"]):
+        candidates.append("urban")
+    if county_fips in set(PILOT_RURAL_COUNTY["county_fips"]):
+        candidates.append("rural")
+    return candidates or ["urban", "rural"]
+
+
+def _load_scope_tracts(scope: str) -> list[dict[str, Any]]:
+    if scope == "urban":
+        return [row for row in get_all_tracts() if row.get("is_chicago")]
+    return get_all_rural_tracts()
+
+
 def _current_scored_tract(tract_id: str) -> dict[str, Any]:
-    for scope, tracts in (
-        ("urban", [row for row in get_all_tracts() if row.get("is_chicago")]),
-        ("rural", get_all_rural_tracts()),
-    ):
+    pending_error = None
+    for scope in _study_area_candidates(tract_id):
+        try:
+            tracts = _load_scope_tracts(scope)
+        except Exception as exc:
+            pending_error = exc
+            continue
         if not any(str(row.get("tract_fips")) == tract_id for row in tracts):
             continue
         resources = load_resource_cache(scope, require_complete_coverage=True)
         return next(row for row in score_all_gaps(tracts, resources) if str(row.get("tract_fips")) == tract_id)
+    if pending_error is not None:
+        raise pending_error
     raise LookupError(f"Tract {tract_id} is not in a configured study area")
 
 

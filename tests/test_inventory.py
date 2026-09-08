@@ -85,6 +85,22 @@ def test_inventory_identity_aliases_merge_the_same_product():
     assert merged == [{"sku": "A", "item_id": "A", "qty": 5}]
 
 
+def test_inventory_merge_replaces_superseded_value_aliases():
+    s3 = FakeS3()
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+    store.write(
+        "inventory/on-hand.json",
+        [{"item_id": "apples", "on_hand": 2, "unit_weight_lbs": 1.5, "cold_chain_risk": "watch"}],
+    )
+
+    merged = store.merge(
+        "inventory/on-hand.json",
+        [{"item_id": "apples", "qty": 7, "weight_lbs": 2.0, "risk_status": "low"}],
+    )
+
+    assert merged == [{"item_id": "apples", "qty": 7, "weight_lbs": 2.0, "risk_status": "low"}]
+
+
 def test_inventory_merge_retries_after_concurrent_update():
     s3 = FakeS3()
     store = S3InventoryStore(bucket="bucket", s3_client=s3)
