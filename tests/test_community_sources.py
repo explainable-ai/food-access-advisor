@@ -76,6 +76,17 @@ def test_empty_or_redesigned_page_is_partial_not_mass_removal():
     assert "previous evidence must remain active" in batch.quality.warnings[0]
 
 
+def test_known_first_party_empty_state_is_healthy_zero_records():
+    source = CommunitySource(
+        "official_events", "Official Events", SOURCE.url, "chicago",
+        "community_event", "Official events.", ("No upcoming events",),
+    )
+    batch = parse_source_html(source, "<h2>No upcoming events</h2><p>Check back soon.</p>")
+    assert batch.quality.status.value == "complete"
+    assert batch.records == []
+    assert batch.quality.warnings == []
+
+
 class Response:
     def __init__(self, *, url=SOURCE.url, content_type="text/html", body="<p>Free groceries today.</p>"):
         self.url = url

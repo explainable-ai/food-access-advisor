@@ -55,6 +55,7 @@ class CommunitySource:
     scope: str
     source_type: str
     description: str
+    empty_state_markers: tuple[str, ...] = ()
 
 
 APPROVED_SOURCES: tuple[CommunitySource, ...] = (
@@ -87,6 +88,7 @@ APPROVED_SOURCES: tuple[CommunitySource, ...] = (
         "chicago_food_policy_action_council", "Chicago Food Policy Action Council",
         "https://www.chicagofoodpolicy.com/events-1", "chicago",
         "food_justice", "Food-justice meetings, events, and community submissions.",
+        ("Meetings and local happenings", "Submit An Event"),
     ),
     CommunitySource(
         "nourishing_hope_volunteer", "Nourishing Hope",
@@ -353,8 +355,12 @@ def parse_source_html(source: CommunitySource, html: str, *, retrieved_at: datet
             ))
     unique = {record.entity_id: record for record in records}
     records = list(unique.values())
-    status = EvidenceStatus.COMPLETE if records else EvidenceStatus.PARTIAL
-    warnings = [] if records else [
+    page_text = _clean_text(" ".join(parser.blocks)).casefold()
+    verified_empty = bool(source.empty_state_markers) and all(
+        marker.casefold() in page_text for marker in source.empty_state_markers
+    )
+    status = EvidenceStatus.COMPLETE if records or verified_empty else EvidenceStatus.PARTIAL
+    warnings = [] if records or verified_empty else [
         "The official page was reachable but yielded no parseable in-scope records; previous evidence must remain active."
     ]
     return ResourceEvidenceBatch(
@@ -400,5 +406,5 @@ class CommunitySourceClient:
         return parse_source_html(source, response.text)
 
 
-def source_registry() -> list[dict[str, str]]:
+def source_registry() -> list[dict[str, Any]]:
     return [asdict(source) for source in APPROVED_SOURCES]
