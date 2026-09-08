@@ -1,4 +1,4 @@
-"""Route Advisor agent — the rural sibling of the Site Advisor.
+"""Router agent — the routing member of the Last Mile Crew.
 
 Same shape as `agent.py`'s Advisor (one Agent, tools called in a fixed
 order, zero region arguments — pinned to config.PILOT_RURAL_COUNTY exactly
@@ -9,7 +9,7 @@ rural density (see the rural systems-thinking pass in
 docs/design-canvas.html for the full reasoning).
 
 Deliberately a separate agent, not `agent.py` with a `region="rural"` flag:
-same reasoning as the Advisor/Watchdog split — a single agent with a flag
+same reasoning as the Scout/Sentry split — a single agent with a flag
 that changes its behavior is one prompt-injection or bug away from running
 in the wrong mode, and a flag would reopen exactly the model-controlled
 surface `tools/access_data.py` and `tools/existing_resources.py` were
@@ -39,11 +39,11 @@ from tools.telemetry import configure_telemetry, print_metrics
 load_dotenv()
 configure_telemetry()
 
-SYSTEM_PROMPT = f"""You are the Route Advisor for {PILOT_RURAL_COUNTY['name']}. \
-Community organizers and regional planners ask you where a route or \
+SYSTEM_PROMPT = f"""You are Router for LastMile Market in {PILOT_RURAL_COUNTY['name']}. \
+The operations crew asks you where a route or \
 distribution-schedule change — a mobile market stop, a food-bank delivery \
 day — would do the most good. You do not recommend new brick-and-mortar \
-sites; that's the Site Advisor's job, and a fixed-site store is often not \
+sites; Scout ranks service areas, and a fixed-site store is often not \
 viable at rural density.
 
 For every routing question:
@@ -59,7 +59,7 @@ trade-off — you must not omit or soften that when you relay it, since a \
 mobile route has fixed stop capacity and "add a stop here" is usually \
 really "move a stop from somewhere else."
 5. Call flag_top_route_for_recheck on that same top-ranked tract. This is \
-what lets the Watchdog check back later on whether a route or schedule \
+what lets Sentry check back later on whether a route or schedule \
 change ever actually happened — do this every time, not just when asked.
 
 Always name the USDA Food Access Research Atlas as your data source. \
@@ -72,11 +72,11 @@ now, rather than guessing at data you don't have.
 
 @tool
 def flag_top_route_for_recheck(top_tract: dict) -> dict:
-    """Log the top-ranked tract so the Watchdog can check on it later.
+    """Log the top-ranked tract so Sentry can check on it later.
 
     A thin, Route-Advisor-specific wrapper around
     `flagged_tracts.flag_tract_for_recheck` — `recommendation_type`
-    ("route") and `source_agent` ("route_advisor") are fixed here, not
+    ("route") and `source_agent` ("router") are fixed here, not
     left as arguments the model could set, same discipline as `agent.py`'s
     `flag_top_tract_for_recheck`.
 
@@ -91,11 +91,11 @@ def flag_top_route_for_recheck(top_tract: dict) -> dict:
     return flag_tract_for_recheck(
         tract_fips=top_tract["tract_fips"],
         recommendation_type="route",
-        source_agent="route_advisor",
+        source_agent="router",
         population=top_tract.get("population"),
         centroid_lat=top_tract.get("centroid_lat"),
         centroid_lon=top_tract.get("centroid_lon"),
-        note=f"Flagged from a Route Advisor recommendation (need_score={top_tract.get('need_score')}).",
+        note=f"Flagged from a Router recommendation (need_score={top_tract.get('need_score')}).",
     )
 
 
@@ -115,7 +115,7 @@ def build_route_advisor() -> Agent:
 
 if __name__ == "__main__":
     route_advisor = build_route_advisor()
-    print(f"Route Advisor ready — rural pilot county: {PILOT_RURAL_COUNTY['name']}")
+    print(f"LastMile Market Router ready — rural fringe: {PILOT_RURAL_COUNTY['name']}")
     print("Ask a routing question (e.g. \"where would a route change help most?\"), "
           "or Ctrl+C to quit.\n")
     while True:
