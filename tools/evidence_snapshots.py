@@ -24,7 +24,6 @@ OSM_MIN_RETAINED_FRACTION = 0.75
 OSM_MIN_BASELINE_RECORDS = 10
 SOURCE_HEALTH_CHANGE_TYPES = {"unavailable", "partial", "stale"}
 CLOSED_REVIEW_STATUSES = {"acknowledged", "no_decision_impact"}
-COMMUNITY_ACCESS_WATCH_EXCLUDED_SOURCES = {"cta_gtfs"}
 
 
 def _connect(db_path: Path = DB_PATH):
@@ -314,7 +313,9 @@ def _decode_cursor(cursor: str) -> tuple[str, str]:
 
 def read_change_page(*, limit: int = 10, cursor: str | None = None,
                      source_id: str | None = None, status: str = "open",
-                     db_path: Path = DB_PATH) -> dict[str, Any]:
+                     db_path: Path = DB_PATH,
+                     excluded_source_ids: set[str] | frozenset[str] | None = None,
+                     excluded_source_scopes: set[str] | frozenset[str] | None = None) -> dict[str, Any]:
     """Return stable, human-reviewable findings rather than raw repeated events."""
     if limit < 1 or limit > 100:
         raise ValueError("limit must be between 1 and 100")
@@ -328,7 +329,10 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
     findings_window_truncated = False
     if bounded_aws_read:
         raw_changes, findings_window_truncated = AwsEvidenceStore().read_changes_window(
-            limit=recent_window_limit, source_id=source_id
+            limit=recent_window_limit,
+            source_id=source_id,
+            excluded_source_ids=excluded_source_ids,
+            excluded_source_scopes=excluded_source_scopes,
         )
     else:
         raw_changes = _all_changes(
@@ -336,11 +340,13 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
             db_path=db_path,
             limit=None,
         )
-    if source_id is None:
-        raw_changes = [
-            change for change in raw_changes
-            if change["source_id"] not in COMMUNITY_ACCESS_WATCH_EXCLUDED_SOURCES
-        ]
+    excluded_ids = excluded_source_ids or frozenset()
+    excluded_scopes = excluded_source_scopes or frozenset()
+    raw_changes = [
+        change for change in raw_changes
+        if change.get("source_id") not in excluded_ids
+        and change.get("source_scope") not in excluded_scopes
+    ]
     grouped: dict[str, list[dict[str, Any]]] = {}
     for change in raw_changes:
         grouped.setdefault(_finding_key(change), []).append(change)
