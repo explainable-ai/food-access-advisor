@@ -102,12 +102,17 @@ def _query_up_to(table, *, item_limit: int, **kwargs) -> list[dict[str, Any]]:
     return _query_up_to_with_state(table, item_limit=item_limit, **kwargs)[0]
 
 
-def _scan_up_to_with_state(table, *, item_limit: int, **kwargs) -> tuple[list[dict[str, Any]], bool]:
+def _scan_up_to_with_state(table, *, item_limit: int,
+                               evaluated_item_limit: int | None = None,
+                               **kwargs) -> tuple[list[dict[str, Any]], bool]:
     items: list[dict[str, Any]] = []
     evaluated = 0
+    evaluation_budget = evaluated_item_limit or item_limit
+    if evaluation_budget < item_limit:
+        raise ValueError("evaluated_item_limit cannot be smaller than item_limit")
     has_more = False
-    while len(items) < item_limit and evaluated < item_limit:
-        remaining_budget = item_limit - evaluated
+    while len(items) < item_limit and evaluated < evaluation_budget:
+        remaining_budget = evaluation_budget - evaluated
         kwargs["Limit"] = remaining_budget
         response = table.scan(**kwargs)
         page_items = response.get("Items", [])
@@ -123,17 +128,23 @@ def _scan_up_to_with_state(table, *, item_limit: int, **kwargs) -> tuple[list[di
     return items[:item_limit], truncated
 
 
-def _query_up_to_with_state(table, *, item_limit: int, **kwargs) -> tuple[list[dict[str, Any]], bool]:
+def _query_up_to_with_state(table, *, item_limit: int,
+                                evaluated_item_limit: int | None = None,
+                                **kwargs) -> tuple[list[dict[str, Any]], bool]:
     """Query within a hard evaluated-item budget.
 
-    DynamoDB applies FilterExpression after Limit, so bounding returned matches
-    is insufficient: a sparse filter could otherwise walk the whole partition.
+    DynamoDB applies FilterExpression after Limit, so callers may provide a
+    larger evaluation budget when known exclusions are expected. The returned
+    item count remains bounded by item_limit.
     """
     items: list[dict[str, Any]] = []
     evaluated = 0
+    evaluation_budget = evaluated_item_limit or item_limit
+    if evaluation_budget < item_limit:
+        raise ValueError("evaluated_item_limit cannot be smaller than item_limit")
     has_more = False
-    while len(items) < item_limit and evaluated < item_limit:
-        remaining_budget = item_limit - evaluated
+    while len(items) < item_limit and evaluated < evaluation_budget:
+        remaining_budget = evaluation_budget - evaluated
         kwargs["Limit"] = remaining_budget
         response = table.query(**kwargs)
         items.extend(response.get("Items", []))
@@ -281,10 +292,13 @@ class AwsEvidenceStore:
             expression = expression & Attr("source_id").ne(excluded_source_id)
         for excluded_source_scope in sorted(excluded_source_scopes or ()):
             expression = expression & Attr("source_scope").ne(excluded_source_scope)
+        exclusion_scan_multiplier = 10 if (excluded_source_ids or excluded_source_scopes) else 1
+        evaluated_item_limit = limit * exclusion_scan_multiplier
         try:
             items, query_truncated = _query_up_to_with_state(
                 self.table,
                 item_limit=limit,
+                evaluated_item_limit=evaluated_item_limit,
                 IndexName=CHANGES_BY_DETECTED_AT_INDEX,
                 KeyConditionExpression=Key("item_type").eq("change"),
                 FilterExpression=expression,
@@ -302,6 +316,7 @@ class AwsEvidenceStore:
             items, query_truncated = _scan_up_to_with_state(
                 self.table,
                 item_limit=limit,
+                evaluated_item_limit=evaluated_item_limit,
                 FilterExpression=Attr("item_type").eq("change") & expression,
             )
             need_sort = True
