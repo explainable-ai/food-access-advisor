@@ -149,9 +149,14 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/crew/brief")
-async def brief_crew(body: BriefRequest):
-    """Run the Last Mile Crew without changing any existing advisor route."""
+@app.get("/ping", include_in_schema=False)
+def agentcore_ping():
+    """Bedrock AgentCore Runtime health contract."""
+    return health()
+
+
+async def _run_crew_brief(body: BriefRequest):
+    """Execute the authenticated Crew Lead request shared by HTTP aliases."""
     try:
         return await asyncio.to_thread(run_crew_brief, body.request, body.study_area)
     except ValueError as exc:
@@ -160,10 +165,31 @@ async def brief_crew(body: BriefRequest):
         raise HTTPException(status_code=502, detail=f"Crew Lead failed: {exc}") from exc
 
 
+@app.post("/crew/brief")
+async def brief_crew(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Run the Last Mile Crew without changing any existing advisor route."""
+    return await _run_crew_brief(body)
+
+
 @app.post("/invoke", include_in_schema=False)
-async def agentcore_invoke(body: BriefRequest):
-    """AgentCore HTTP-protocol alias for the same additive Crew Lead flow."""
-    return await brief_crew(body)
+async def agentcore_invoke(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Backward-compatible invocation alias for the Crew Lead flow."""
+    return await _run_crew_brief(body)
+
+
+@app.post("/invocations", include_in_schema=False)
+async def agentcore_invocations(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Bedrock AgentCore Runtime invocation contract."""
+    return await _run_crew_brief(body)
 
 
 def _inventory_read(key: str, store: S3InventoryStore):
