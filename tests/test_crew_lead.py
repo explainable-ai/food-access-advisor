@@ -1,4 +1,5 @@
 import crew_lead
+import agent as scout_agent
 from services.mission_preview import run_mission_ops
 from storage.inventory import COLD_CHAIN_KEY, ON_HAND_KEY
 
@@ -33,6 +34,21 @@ def test_crew_chain_discloses_inferred_area(monkeypatch):
     _successful_dependencies(monkeypatch)
     result = crew_lead.run_crew_brief("Take 200 lbs to the rural fringe in four hours.", agent=FakeCrewAgent("rural_fringe"))
     assert result["steps"][1]["summary"].startswith("Assumed study area: rural_fringe")
+
+
+def test_rural_scout_scores_complete_tract_universe_before_top_n(monkeypatch):
+    tracts = [{"tract_fips": str(index)} for index in range(30)]
+    monkeypatch.setattr(scout_agent, "get_all_rural_tracts", lambda: tracts)
+    monkeypatch.setattr(scout_agent, "load_resource_cache", lambda *args, **kwargs: [])
+
+    def score(received, resources, top_n):
+        assert received is tracts
+        return [{"tract_fips": "29", "need_score": 99}]
+
+    monkeypatch.setattr(scout_agent, "score_gaps", score)
+    result = scout_agent.run_site_advisor("rural_fringe", "test", top_n=1)
+
+    assert result["ranked_tracts"][0]["tract_fips"] == "29"
 
 
 def test_crew_stops_after_failed_sentry(monkeypatch):
