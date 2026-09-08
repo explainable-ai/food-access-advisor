@@ -197,6 +197,44 @@ def test_read_changes_window_reports_truncation_for_sparse_matches():
     assert truncated is True
 
 
+def test_read_changes_window_scans_past_excluded_history():
+    calls = []
+
+    class Table:
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return {
+                    "Items": [],
+                    "LastEvaluatedKey": {"id": 1},
+                    "ScannedCount": 50,
+                }
+            return {
+                "Items": [{
+                    "item_type": "change",
+                    "source_id": "fresh_moves_mobile_market",
+                    "source_scope": "fresh_moves_mobile_market#chicago",
+                    "record_key": "CHANGE#food",
+                    "detected_at": "2026-09-08T04:43:24+00:00",
+                }],
+                "ScannedCount": 1,
+            }
+
+    store = AwsEvidenceStore(
+        table=Table(), s3_client=FakeS3(), table_name="evidence", bucket="bucket"
+    )
+    items, truncated = store.read_changes_window(
+        limit=10,
+        excluded_source_ids={"cta_gtfs"},
+        excluded_source_scopes={"chicago_farmers_markets#urban"},
+    )
+
+    assert [item["record_key"] for item in items] == ["CHANGE#food"]
+    assert truncated is False
+    assert len(calls) == 2
+    assert calls[0]["Limit"] == 100
+
+
 def test_bounded_scan_reports_truncation_when_budget_exhausted():
     class Table:
         def scan(self, **kwargs):
