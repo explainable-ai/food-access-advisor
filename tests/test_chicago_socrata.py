@@ -36,18 +36,53 @@ def test_food_inspections_are_normalized_and_cited():
     assert batch.records[0].entity_id == "42"
     assert batch.records[0].status == "Pass"
     assert batch.citation.dataset_id == "4ijn-s7e5"
-    assert adapter.session.calls[0][1]["$where"].startswith("inspection_date >=")
+    where = adapter.session.calls[0][1]["$where"]
+    assert "upper(facility_type) like '%GROCERY%'" in where
+    assert "inspection_date >=" in where
     assert adapter.session.calls[0][2] == {"X-App-Token": "token"}
 
 
 def test_food_license_filter_excludes_non_food_records():
     batch = client([
         {"license_id": "1", "doing_business_as_name": "Grocer", "license_description": "Retail Food Establishment",
-         "license_status": "AAI", "latitude": "41.8", "longitude": "-87.6"},
+         "business_activity": "Retail sale of groceries", "license_status": "AAI",
+         "latitude": "41.8", "longitude": "-87.6"},
         {"license_id": "2", "doing_business_as_name": "Office", "license_description": "Limited Business License"},
     ]).fetch_active_food_businesses()
     assert [record.name for record in batch.records] == ["Grocer"]
     assert batch.quality.excluded_rows == 1
+    assert batch.quality.status == EvidenceStatus.COMPLETE
+
+
+def test_missing_coordinates_do_not_make_a_usable_source_partial():
+    batch = client([{
+        "inspection_id": "42", "dba_name": "Market", "facility_type": "Grocery Store",
+        "inspection_date": "2026-08-01T00:00:00.000", "results": "Out of Business",
+        "address": "1 Main St",
+    }]).fetch_food_inspections()
+    assert batch.quality.status == EvidenceStatus.COMPLETE
+    assert batch.quality.missing_fields == ["coordinates"]
+    assert "non-spatial change detection remains available" in batch.quality.warnings[-1]
+
+
+def test_unusable_row_keeps_otherwise_usable_batch_partial():
+    batch = client([
+        {"inspection_id": "42", "dba_name": "Market", "facility_type": "Grocery Store"},
+        {"inspection_id": "43", "dba_name": "", "facility_type": "Grocery Store"},
+    ]).fetch_food_inspections()
+    assert [record.entity_id for record in batch.records] == ["42"]
+    assert batch.quality.status == EvidenceStatus.PARTIAL
+    assert batch.quality.excluded_rows == 1
+    assert "1 unusable" in batch.quality.warnings[0]
+
+
+def test_active_business_query_is_scoped_at_the_source():
+    adapter = client([])
+    adapter.fetch_active_food_businesses()
+    where = adapter.session.calls[0][1]["$where"]
+    assert "business_activity" in where
+    assert "GROCER" in where
+    assert "RETAIL FOOD" not in where
 
 
 def test_legacy_market_dataset_is_never_labeled_current():
