@@ -39,6 +39,20 @@ FOOD_INSPECTIONS = ChicagoDataset("chicago_food_inspections", "Food Inspections"
 ACTIVE_BUSINESS_LICENSES = ChicagoDataset(
     "chicago_active_business_licenses", "Business Licenses - Current Active", "uupf-x98q"
 )
+
+# Source contracts deliberately constrain the very large City datasets to records
+# that can inform grocery access. Filtering at Socrata also makes every scheduled
+# run deterministic and avoids treating unrelated restaurants as access changes.
+GROCERY_INSPECTION_FILTER = "upper(facility_type) like '%GROCERY%'"
+FOOD_ACCESS_BUSINESS_FILTER = " OR ".join((
+    "upper(business_activity) like '%GROCERY%'",
+    "upper(business_activity) like '%SUPERMARKET%'",
+    "upper(business_activity) like '%PRODUCE%'",
+    "upper(business_activity) like '%FOOD STORE%'",
+    "upper(license_description) like '%GROCERY%'",
+    "upper(license_description) like '%PRODUCE MERCHANT%'",
+))
+FOOD_ACCESS_TERMS = ("grocery", "supermarket", "produce", "food store")
 FARMERS_MARKETS = ChicagoDataset(
     "chicago_farmers_markets", "Farmers Market Dataset", "iqus-3tju", vintage="legacy"
 )
@@ -111,10 +125,12 @@ class ChicagoSocrataClient:
             retrieved_at=retrieved_at, geographic_level=dataset.geographic_level, fields_used=fields)
 
     def fetch_food_inspections(self, *, since: str | None = None, limit: int = 50000) -> ResourceEvidenceBatch:
-        where = f"inspection_date >= '{since}T00:00:00.000'" if since else None
-        rows, retrieved = self._fetch(FOOD_INSPECTIONS, where=where, limit=limit)
-        fields = ["inspection_id", "dba_name", "license_", "facility_type", "inspection_date", "results",
-                  "latitude", "longitude"]
+        filters = [GROCERY_INSPECTION_FILTER]
+        if since:
+            filters.append(f"inspection_date >= '{since}T00:00:00.000'")
+        rows, retrieved = self._fetch(FOOD_INSPECTIONS, where=" AND ".join(filters), limit=limit)
+        fields = ["inspection_id", "dba_name", "aka_name", "license_", "facility_type", "address",
+                  "inspection_date", "inspection_type", "results", "latitude", "longitude"]
         citation = self._citation(FOOD_INSPECTIONS, retrieved, fields)
         records, excluded = [], 0
         for row in rows:
@@ -130,15 +146,19 @@ class ChicagoSocrataClient:
         return self._batch(FOOD_INSPECTIONS, citation, rows, records, excluded)
 
     def fetch_active_food_businesses(self, *, limit: int = 50000) -> ResourceEvidenceBatch:
-        rows, retrieved = self._fetch(ACTIVE_BUSINESS_LICENSES, limit=limit)
-        fields = ["license_id", "account_number", "doing_business_as_name", "license_description",
-                  "license_status", "expiration_date", "latitude", "longitude"]
+        rows, retrieved = self._fetch(
+            ACTIVE_BUSINESS_LICENSES, where=FOOD_ACCESS_BUSINESS_FILTER, limit=limit
+        )
+        fields = ["license_id", "account_number", "doing_business_as_name", "legal_name",
+                  "license_description", "business_activity", "application_type", "date_issued",
+                  "license_status", "license_status_change_date", "expiration_date", "address",
+                  "latitude", "longitude"]
         citation = self._citation(ACTIVE_BUSINESS_LICENSES, retrieved, fields)
-        food_terms = ("retail food", "grocery", "shared kitchen", "mobile food", "produce merchant")
         records, excluded = [], 0
         for row in rows:
-            description = str(row.get("license_description") or "").lower()
-            if not any(term in description for term in food_terms):
+            searchable = " ".join(str(row.get(field) or "").casefold()
+                                  for field in ("license_description", "business_activity"))
+            if not any(term in searchable for term in FOOD_ACCESS_TERMS):
                 excluded += 1
                 continue
             entity_id = str(row.get("license_id") or "").strip()
@@ -173,8 +193,19 @@ class ChicagoSocrataClient:
     @staticmethod
     def _batch(dataset, citation, rows, records, excluded, stale=False):
         missing = sum(1 for record in records if record.lat is None or record.lon is None)
-        status = EvidenceStatus.STALE_CACHE if stale else (EvidenceStatus.PARTIAL if missing or excluded else EvidenceStatus.COMPLETE)
+        unusable_response = bool(rows) and not records
+        status = (
+            EvidenceStatus.STALE_CACHE if stale
+            else EvidenceStatus.PARTIAL if unusable_response
+            else EvidenceStatus.COMPLETE
+        )
         warnings = ["Legacy dataset: verify market dates before operational use."] if stale else []
+        if excluded:
+            warnings.append(f"{excluded} out-of-scope or unusable rows were excluded.")
+        if missing:
+            warnings.append(
+                f"{missing} in-scope records have no coordinates; non-spatial change detection remains available."
+            )
         return ResourceEvidenceBatch(source_id=dataset.source_id, records=records, citation=citation,
             quality=DataQualityReport(status=status, source_row_count=len(rows), matched_rows=len(records),
                 excluded_rows=excluded, missing_fields=["coordinates"] if missing else [], warnings=warnings))
