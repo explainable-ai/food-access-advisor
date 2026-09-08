@@ -62,6 +62,19 @@ def test_inventory_rejects_rows_without_identity():
         store.merge("inventory/on-hand.json", [{"qty": 2}])
 
 
+@pytest.mark.parametrize("field,value", [
+    ("qty", "unknown"),
+    ("quantity", -1),
+    ("on_hand", float("nan")),
+    ("unit_weight_lbs", 0),
+    ("weight_lbs", "heavy"),
+])
+def test_inventory_rejects_invalid_quantity_and_weight_fields(field, value):
+    store = S3InventoryStore(bucket="bucket", s3_client=FakeS3())
+    with pytest.raises(ValueError, match=field):
+        store.merge("inventory/on-hand.json", [{"item_id": "apples", field: value}])
+
+
 def test_inventory_identity_aliases_merge_the_same_product():
     s3 = FakeS3()
     store = S3InventoryStore(bucket="bucket", s3_client=s3)
