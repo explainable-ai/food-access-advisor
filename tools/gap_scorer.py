@@ -200,6 +200,24 @@ def _weighted_score(components, normalized_weights, *, preserve_missing=False):
     return round(max(0.0, min(score * 100, 100.0)), 1), contributions
 
 
+def recompute_score_from_components(components: Mapping[str, float | None],
+                                    weights: Mapping[str, float] | None = None,
+                                    *, preserve_missing: bool = True) -> tuple[float, dict[str, float]]:
+    """Re-run the production weighted formula against explicit 0–100 inputs.
+
+    This is intentionally small and side-effect free. It supports the demo
+    feedback endpoint without writing an illustrative value into prepared data
+    or changing future Scout rankings.
+    """
+    selected = _coerce_weights(weights)
+    normalized = selected.normalized()
+    converted = {
+        name: (None if value is None else max(0.0, min(float(value) / 100.0, 1.0)))
+        for name, value in components.items()
+    }
+    return _weighted_score(converted, normalized, preserve_missing=preserve_missing)
+
+
 def _explanation(contributions, missing, *, economic_label):
     labels = {"food_access_gap": "food-access gap", "poverty": economic_label,
               "no_vehicle": "households without a vehicle", "population_served": "population served",
