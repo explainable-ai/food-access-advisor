@@ -21,13 +21,13 @@ class RoutesClient:
     def calculate_routes(self, **kwargs):
         self.routes_request = kwargs
         return {"Routes": [{
-            "Distance": 1609.344,
-            "Duration": 600,
+            "Summary": {"Distance": 1609.344, "Duration": 600},
             "Legs": [{
-                "Distance": 1609.344,
-                "Duration": 600,
+                "Summary": {"Distance": 1609.344, "Duration": 600},
                 "Geometry": {"LineString": [[-89.2, 37.0], [-89.1, 37.1]]},
-                "TravelSteps": [{"Instruction": "Continue", "Distance": 804.672, "Duration": 300}],
+                "VehicleLegDetails": {
+                    "TravelSteps": [{"Instruction": "Continue", "Distance": 804.672, "Duration": 300}],
+                },
             }],
         }]}
 
