@@ -417,12 +417,23 @@ def refresh_community_signals(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+COMMUNITY_WATCH_EXCLUDED_SOURCE_IDS = frozenset({"cta_gtfs"})
+COMMUNITY_WATCH_EXCLUDED_SOURCE_SCOPES = frozenset({"chicago_farmers_markets#urban"})
+
+
 @app.get("/api/watchdog/changes")
 def watchdog_changes(limit: int = Query(default=10, ge=1, le=100), cursor: str | None = None,
                      source_id: str | None = None, status: str = Query(default="open")):
-    """Return deduplicated, cursor-paginated findings for human review."""
+    """Return food-access findings for human review without deleting audit history."""
     try:
-        return read_change_page(limit=limit, cursor=cursor, source_id=source_id, status=status)
+        return read_change_page(
+            limit=limit,
+            cursor=cursor,
+            source_id=source_id,
+            status=status,
+            excluded_source_ids=COMMUNITY_WATCH_EXCLUDED_SOURCE_IDS,
+            excluded_source_scopes=COMMUNITY_WATCH_EXCLUDED_SOURCE_SCOPES,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
