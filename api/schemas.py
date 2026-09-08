@@ -8,7 +8,7 @@ API-specific shape -- one less thing to keep in sync as those tools evolve.
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 FlaggedTractStatus = Literal["pending", "possible_change", "still_needed", "resource_found"]
 
@@ -211,48 +211,3 @@ class EvidenceReviewRequest(BaseModel):
     record_key: str = Field(min_length=3)
     action: EvidenceReviewAction
     note: Optional[str] = Field(default="", max_length=2000)
-
-
-class InventoryItemUpdate(BaseModel):
-    item_id: Optional[str] = None
-    item_name: str = Field(min_length=1)
-    category: Literal["produce", "dry goods", "cold-chain", "other"]
-    quantity: float = Field(ge=0)
-    unit: str = Field(min_length=1)
-    unit_weight_lbs: Optional[float] = Field(default=None, gt=0)
-
-    @field_validator("category", mode="before")
-    @classmethod
-    def normalize_category(cls, value):
-        return "dry goods" if str(value).strip().lower() in {"dry", "dry_goods", "dry goods"} else value
-
-
-class ColdChainLotUpdate(BaseModel):
-    lot_id: Optional[str] = None
-    item_id: Optional[str] = None
-    item_name: str = Field(min_length=1)
-    status: Literal["OK", "At risk", "Hold"]
-    note: Optional[str] = Field(default="", max_length=1000)
-
-    @field_validator("status", mode="before")
-    @classmethod
-    def normalize_status(cls, value):
-        return {"ok": "OK", "at risk": "At risk", "at_risk": "At risk", "hold": "Hold"}.get(
-            str(value).strip().lower(), value
-        )
-
-
-class CrewBriefRequest(BaseModel):
-    request: str = Field(min_length=1)
-    study_area: Optional[Literal["chicago_neighborhoods", "rural_fringe"]] = None
-    scenario: str = Field(default="community_equity", min_length=1)
-    load_lbs: Optional[float] = Field(default=None, gt=0)
-    time_window_hours: Optional[float] = Field(default=None, gt=0)
-    vehicle_capacity_lbs: Optional[float] = Field(default=None, gt=0)
-    hub: Optional[RoutePoint] = None
-    max_stops: int = Field(default=5, ge=1, le=15)
-
-
-class DemoFeedbackRequest(BaseModel):
-    tract_id: str = Field(min_length=11, max_length=11)
-    households_served: int = Field(ge=0)

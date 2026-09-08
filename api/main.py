@@ -36,6 +36,7 @@ from api.operations_read import router as operations_read_router
 from api.schemas import (
     AdvisorRequest,
     AdvisorResponse,
+    BriefRequest,
     EvidenceRequest,
     EvidenceReviewRequest,
     EvidenceResponse,
@@ -47,10 +48,7 @@ from api.schemas import (
     RouteOptimizationRequest,
     RouteOptimizationResponse,
     VerifyRequest,
-    ColdChainLotUpdate,
-    CrewBriefRequest,
-    DemoFeedbackRequest,
-    InventoryItemUpdate,
+    FeedbackRequest,
 )
 from api.auth import require_staff_user
 from config import PILOT_CITY, PILOT_RURAL_COUNTY
@@ -66,9 +64,6 @@ from tools.evidence_snapshots import read_change_page, review_change
 from data_sources.chicago_food_equity import source_registry_entry as food_equity_source_registry_entry
 from data_sources.community_sources import source_registry
 from services.direct_source_signals import refresh_direct_sources
-from services.crew_lead import run_crew_brief
-from services.demo_feedback import compute_demo_feedback
-from storage.s3_inventory import InventoryStoreError, S3InventoryStore
 from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import DEFAULT_WEIGHTS, score_all_gaps, score_gaps
@@ -80,6 +75,16 @@ from tools.travel_time_provider import (
     TravelTimeProviderError,
     get_road_route_directions,
     get_road_route_matrix,
+)
+from crew_lead import run_crew_brief
+from services.feedback_demo import calculate_feedback
+from storage.inventory import (
+    COLD_CHAIN_KEY,
+    ON_HAND_KEY,
+    InventoryConflictError,
+    InventoryStoreError,
+    S3InventoryStore,
+    get_inventory_store,
 )
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -147,70 +152,14 @@ def health():
 
 @app.get("/ping", include_in_schema=False)
 def agentcore_ping():
-    """AgentCore custom-container health contract."""
-    return {"status": "Healthy"}
+    """Bedrock AgentCore Runtime health contract."""
+    return health()
 
 
-def get_inventory_store() -> S3InventoryStore:
-    return S3InventoryStore()
-
-
-@app.get("/inventory")
-@app.get("/api/inventory", include_in_schema=False)
-def inventory(store: S3InventoryStore = Depends(get_inventory_store)):
+async def _run_crew_brief(body: BriefRequest):
+    """Execute the authenticated Crew Lead request shared by HTTP aliases."""
     try:
-        return store.on_hand()
-    except InventoryStoreError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.post("/inventory")
-@app.post("/api/inventory", include_in_schema=False)
-def update_inventory(request: InventoryItemUpdate,
-                     store: S3InventoryStore = Depends(get_inventory_store),
-                     _staff_user: dict[str, Any] = Depends(require_staff_user)):
-    try:
-        return store.upsert_on_hand(request.model_dump())
-    except InventoryStoreError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.get("/inventory/cold-chain")
-@app.get("/api/inventory/cold-chain", include_in_schema=False)
-def cold_chain_inventory(store: S3InventoryStore = Depends(get_inventory_store)):
-    try:
-        return store.cold_chain()
-    except InventoryStoreError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.post("/inventory/cold-chain")
-@app.post("/api/inventory/cold-chain", include_in_schema=False)
-def update_cold_chain(request: ColdChainLotUpdate,
-                      store: S3InventoryStore = Depends(get_inventory_store),
-                      _staff_user: dict[str, Any] = Depends(require_staff_user)):
-    try:
-        return store.upsert_cold_chain(request.model_dump())
-    except InventoryStoreError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-async def _run_crew_brief(request: CrewBriefRequest):
-    try:
-        kwargs = {"study_area": request.study_area}
-        if request.scenario != "community_equity":
-            kwargs["scenario"] = request.scenario
-        if request.load_lbs is not None:
-            kwargs["load_lbs"] = request.load_lbs
-        if request.time_window_hours is not None:
-            kwargs["time_window_hours"] = request.time_window_hours
-        if request.vehicle_capacity_lbs is not None:
-            kwargs["vehicle_capacity_lbs"] = request.vehicle_capacity_lbs
-        if request.hub is not None:
-            kwargs["hub"] = request.hub.model_dump()
-        if request.max_stops != 5:
-            kwargs["max_stops"] = request.max_stops
-        return await asyncio.to_thread(run_crew_brief, request.request, **kwargs)
+        return await asyncio.to_thread(run_crew_brief, body.request, body.study_area)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -218,29 +167,74 @@ async def _run_crew_brief(request: CrewBriefRequest):
 
 
 @app.post("/crew/brief")
-@app.post("/api/crew/brief", include_in_schema=False)
-async def brief_crew(request: CrewBriefRequest):
+async def brief_crew(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
     """Run the Last Mile Crew without changing any existing advisor route."""
-    return await _run_crew_brief(request)
+    return await _run_crew_brief(body)
 
 
 @app.post("/invoke", include_in_schema=False)
-async def agentcore_invoke(request: CrewBriefRequest):
+async def agentcore_invoke(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
     """Backward-compatible invocation alias for the Crew Lead flow."""
-    return await _run_crew_brief(request)
+    return await _run_crew_brief(body)
 
 
 @app.post("/invocations", include_in_schema=False)
-async def agentcore_invocations(request: CrewBriefRequest):
+async def agentcore_invocations(
+    body: BriefRequest,
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
     """Bedrock AgentCore Runtime invocation contract."""
-    return await _run_crew_brief(request)
+    return await _run_crew_brief(body)
+
+
+def _inventory_read(key: str, store: S3InventoryStore):
+    try:
+        return store.read(key)
+    except InventoryStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _inventory_merge(key: str, updates: list[dict[str, Any]], store: S3InventoryStore):
+    try:
+        return store.merge(key, updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except InventoryConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InventoryStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/inventory")
+def inventory(store: S3InventoryStore = Depends(get_inventory_store)):
+    return _inventory_read(ON_HAND_KEY, store)
+
+
+@app.post("/inventory")
+def update_inventory(updates: list[dict[str, Any]], store: S3InventoryStore = Depends(get_inventory_store), _staff_user: dict[str, Any] = Depends(require_staff_user)):
+    return _inventory_merge(ON_HAND_KEY, updates, store)
+
+
+@app.get("/inventory/cold-chain")
+def cold_chain_inventory(store: S3InventoryStore = Depends(get_inventory_store)):
+    return _inventory_read(COLD_CHAIN_KEY, store)
+
+
+@app.post("/inventory/cold-chain")
+def update_cold_chain_inventory(updates: list[dict[str, Any]], store: S3InventoryStore = Depends(get_inventory_store), _staff_user: dict[str, Any] = Depends(require_staff_user)):
+    return _inventory_merge(COLD_CHAIN_KEY, updates, store)
 
 
 @app.post("/demo/feedback")
-@app.post("/api/demo/feedback", include_in_schema=False)
-def demo_feedback(request: DemoFeedbackRequest):
+def demo_feedback(body: FeedbackRequest):
     try:
-        return compute_demo_feedback(request.tract_id, request.households_served)
+        return calculate_feedback(body.tract_id, body.households_served)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -263,8 +257,7 @@ async def _run_advisor(mode: str, node_id: str, question: str) -> AdvisorRespons
     except OverpassQueryError as exc:
         raise HTTPException(status_code=502, detail=f"OpenStreetMap query failed: {exc}") from exc
     except Exception as exc:  # Bedrock/model errors, etc. -- surface a real message, not a bare 500
-        display_name = "Scout" if mode == "site" else "Router"
-        raise HTTPException(status_code=502, detail=f"{display_name} failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"{mode} advisor failed: {exc}") from exc
     return AdvisorResponse(answer=_answer_text(result, node_id))
 
 
@@ -575,7 +568,7 @@ def review_watchdog_change(request: EvidenceReviewRequest,
 @app.post("/api/flagged-tracts/verify")
 def verify_tract(request: VerifyRequest,
                  _staff_user: dict[str, Any] = Depends(require_staff_user)):
-    """A human's verification of a Sentry-observed 'possible_change' --
+    """A human's verification of a Watchdog-observed 'possible_change' --
     see tools/flagged_tracts.py's verify_flagged_tract for the four
     verification choices and what each maps to."""
     result = verify_flagged_tract(

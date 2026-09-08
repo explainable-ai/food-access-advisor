@@ -1,6 +1,6 @@
-"""Sentry agent — the scheduled evidence monitor for LastMile Market.
+"""Watchdog agent — the scheduled half of the Food-Access Site Recommender.
 
-Where Scout answers an on-demand question, Sentry runs on a
+Where the Advisor answers an on-demand question, the Watchdog runs on a
 schedule (e.g. monthly, via EventBridge in the AWS architecture — see
 diagrams/system_architecture.py) with no human in the loop asking it
 anything. Its one job: work through the backlog of previously-flagged
@@ -10,12 +10,12 @@ This is deliberately a separate agent, not a `mode="watchdog"` flag on the
 Advisor. Same reasoning as the region-boundary fix in `tools/access_data.py`
 and `tools/existing_resources.py`: a single agent with a flag that changes
 its behavior is one prompt-injection or bug away from running in the wrong
-mode. Two agents with disjoint tool lists can't do that — Sentry
+mode. Two agents with disjoint tool lists can't do that — the Watchdog
 literally has no tool that can answer a siting question, and the Advisor
 has no tool that can write to the flagged-tracts log's status field.
 
-Sentry is generalized rather than tripled: one accountability agent
-watches both Scout's ("site") and Router's ("route")
+Watchdog is generalized rather than tripled: one accountability agent
+watches both the Site Advisor's ("site") and the Route Advisor's ("route")
 recommendations, rather than building a third agent to do the same job.
 That means it needs BOTH regions' live resource data, not just Chicago's —
 a "route" row's centroid sits in the configured Chicagoland rural fringe, and checking it against
@@ -48,11 +48,11 @@ from tools.watchdog_run import run_watchdog_pass
 
 configure_telemetry()
 
-SYSTEM_PROMPT = f"""You are Sentry for LastMile Market in {PILOT_CITY['name']} \
+SYSTEM_PROMPT = f"""You are Sentry, LastMile Market's access-monitoring agent for {PILOT_CITY['name']} \
 and the rural pilot county. You run on a schedule, unattended — nobody is \
 asking you a question right now. Your job is to work the backlog of \
-tracts previously flagged by a recommending agent (Scout or \
-Router) and report, per tract, whether a food resource has \
+tracts previously flagged by a recommending agent (Scout or Router) and \
+report, per tract, whether a food resource has \
 since actually appeared nearby.
 
 For this run:
@@ -92,8 +92,8 @@ show a possible change awaiting human verification, how many are still \
 needed — broken out by recommendation_type if the backlog contained both \
 kinds.
 
-You never make a new siting or routing recommendation — that's the Site \
-Scout's or Router's job, not yours. You only report on what \
+You never make a new siting or routing recommendation — that's Scout's \
+or Router's job, not yours. You only report on what \
 already happened to a past one.
 """
 

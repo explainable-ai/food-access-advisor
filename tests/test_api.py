@@ -54,7 +54,7 @@ def test_health_endpoint_has_no_dependencies():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    assert client.get("/ping").json() == {"status": "Healthy"}
+    assert client.get("/ping").json() == {"status": "ok"}
 
 
 def test_crew_brief_returns_structured_live_steps(monkeypatch):
@@ -79,7 +79,7 @@ def test_agentcore_invoke_uses_same_crew_flow(monkeypatch):
 
 
 def test_demo_feedback_does_not_claim_persistence(monkeypatch):
-    monkeypatch.setattr(api_main, "compute_demo_feedback", lambda tract_id, households: {"tract_id": tract_id, "households_served": households, "persisted": False})
+    monkeypatch.setattr(api_main, "calculate_feedback", lambda tract_id, households: {"tract_id": tract_id, "households_served": households, "persisted": False})
     response = client.post("/demo/feedback", json={"tract_id": "17031010100", "households_served": 20})
     assert response.status_code == 200
     assert response.json()["persisted"] is False

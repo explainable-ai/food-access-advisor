@@ -1,27 +1,33 @@
 # LastMile Market
 
-A Strands Agents SDK operations platform for the **Agents for Humans** hackathon
-(Good Neighbor track).
+A Strands Agents SDK operations system for the **Agents for Humans**
+hackathon (Good Neighbor track). LastMile Market plans our mobile grocery
+store's runs from the same evidence-backed food-access scoring that powered
+the project's original advisory workflow.
 
-LastMile Market plans and reviews its own mobile grocery operations. It maps
-low-income, low-access census tracts against trusted public evidence, builds a
-constrained route, checks inventory and cold-chain readiness, and drafts a
-mission for a person to approve.
+The existing modules and internal function names remain stable. Product-facing
+surfaces call the team **The Last Mile Crew**:
 
-The product-facing agent team is **The Last Mile Crew**. The existing Python
-module and function names remain unchanged for compatibility:
+- **Scout** (`agent.py`) — ranks tracts by need in either supported study area.
+- **Router** (`route_advisor.py`) — builds a capacity- and time-constrained
+  mobile-market route from Scout's top tracts.
+- **Dispatch** (`services/mission_preview.py`) — checks readiness and drafts a
+  human-reviewable mission with an S3-backed suggested load.
+- **Sentry** (`watchdog_agent.py`) — scheduled, closes the loop by
+  working through Scout and Router' flagged tracts and reporting whether a
+  resource or route change ever actually appeared/happened.
 
-- **Scout** (`agent.py`) ranks census tracts by need.
-- **Router** (`route_advisor.py`) builds a constrained mobile-market route.
-- **Dispatch** (`services/crew_lead.py`) checks route, inventory, capacity,
-  and cold-chain readiness and drafts the mission.
-- **Sentry** (`watchdog_agent.py`) watches trusted evidence for changes.
-- **Crew Lead** (`services/crew_lead.py`) runs Sentry → Scout → Router →
-  Dispatch and returns a structured step log.
+`crew_lead.py` adds a Crew Lead over those existing boundaries. It runs
+Sentry → Scout → Router → Dispatch for `POST /crew/brief`, preserves the exact
+tool results in a structured step log, and stops on the first failed or empty
+result. The original API routes remain unchanged.
 
-`orchestration.py` retains the original single-agent routes for backward
-compatibility. The new fixed-order Crew Lead workflow is additive. The React
-frontend lives in the separate `food-equity-navigator` repository.
+`orchestration.py` formalizes these three with Strands' `GraphBuilder`
+(without adding a fourth agent — see
+[Orchestration, API, and the planning-workspace UI](#orchestration-api-and-the-planning-workspace-ui)),
+and a React + FastAPI planning workspace (map, ranked-answer workspaces,
+follow-up tracking) sits on top for a browser-based demo instead of three
+command-line scripts.
 
 ## Architecture
 
@@ -305,7 +311,7 @@ constraint from Strands' `GraphBuilder` shaped this: a single shared
 `AgentBase`/`MultiAgentBase` instances, and — confirmed directly against
 the installed `strands-agents` package's execution engine — *every* entry
 point fires on *every* `graph()` call, with no per-call way to pick just
-one). A shared graph containing all three legacy agents would therefore run
+one). A shared graph containing all three agents would therefore run Site
 Scout, Router, and Sentry together on every invocation, which
 is wrong here. So `orchestration.py` wraps each agent in its own trivial
 single-node `Graph` (`build_site_graph()`, `build_route_graph()`,
@@ -336,20 +342,6 @@ Amazon Location calls are server-side through the Routes V2 `geo-routes`
 client. Grant the API/AgentCore execution role only
 `geo-routes:CalculateRouteMatrix` on the regional default provider; see
 [`deploy/AMAZON_LOCATION_SETUP.md`](deploy/AMAZON_LOCATION_SETUP.md).
-
-The Last Mile Crew adds these contracts without removing the legacy routes:
-
-- `POST /crew/brief` (also `/api/crew/brief`) runs the fixed Sentry → Scout →
-  Router → Dispatch workflow and returns the complete step log.
-- `GET/POST /inventory` and `GET/POST /inventory/cold-chain` use versioned S3
-  objects as the inventory source of truth.
-- `POST /demo/feedback` applies an illustrative coverage override to the real
-  weighted scoring formula and always returns `persisted: false`.
-- `GET /ping` and `POST /invocations` implement the AgentCore HTTP container
-  contract. ECS continues to expose the complete REST API used by the frontend.
-
-See [`deploy/LASTMILE_ELEVATE.md`](deploy/LASTMILE_ELEVATE.md) for the scoped
-S3 IAM policy, ARM64 AgentCore build, and smoke tests.
 Run the API with:
 
 ```bash
@@ -450,9 +442,9 @@ above, this needs your own AWS credentials to actually run.
   the Sentry has no tool that can answer a siting or routing question or
   make a new recommendation. `flag_top_tract_for_recheck` (Scout's
   only write) hardcodes `recommendation_type="site"` and
-  `source_agent="scout"`; `flag_top_route_for_recheck` (Router's
+  `source_agent="advisor"`; `flag_top_route_for_recheck` (Router's
   only write) hardcodes `recommendation_type="route"` and
-  `source_agent="router"` — neither is a model-settable argument,
+  `source_agent="route_advisor"` — neither is a model-settable argument,
   so neither planning agent can mislabel a row as coming from the other.
   `update_flagged_tract` (the Sentry's only write) takes a fixed,
   validated status enum and writes to exactly one table — there's no
