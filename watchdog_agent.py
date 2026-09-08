@@ -1,6 +1,6 @@
-"""Watchdog agent — the scheduled half of the Food-Access Site Recommender.
+"""Sentry agent — the scheduled evidence monitor for LastMile Market.
 
-Where the Advisor answers an on-demand question, the Watchdog runs on a
+Where Scout answers an on-demand question, Sentry runs on a
 schedule (e.g. monthly, via EventBridge in the AWS architecture — see
 diagrams/system_architecture.py) with no human in the loop asking it
 anything. Its one job: work through the backlog of previously-flagged
@@ -10,12 +10,12 @@ This is deliberately a separate agent, not a `mode="watchdog"` flag on the
 Advisor. Same reasoning as the region-boundary fix in `tools/access_data.py`
 and `tools/existing_resources.py`: a single agent with a flag that changes
 its behavior is one prompt-injection or bug away from running in the wrong
-mode. Two agents with disjoint tool lists can't do that — the Watchdog
+mode. Two agents with disjoint tool lists can't do that — Sentry
 literally has no tool that can answer a siting question, and the Advisor
 has no tool that can write to the flagged-tracts log's status field.
 
-Watchdog is generalized rather than tripled: one accountability agent
-watches both the Site Advisor's ("site") and the Route Advisor's ("route")
+Sentry is generalized rather than tripled: one accountability agent
+watches both Scout's ("site") and Router's ("route")
 recommendations, rather than building a third agent to do the same job.
 That means it needs BOTH regions' live resource data, not just Chicago's —
 a "route" row's centroid sits in the configured Chicagoland rural fringe, and checking it against
@@ -47,11 +47,11 @@ from tools.telemetry import configure_telemetry, print_metrics
 
 configure_telemetry()
 
-SYSTEM_PROMPT = f"""You are the Food-Access Watchdog for {PILOT_CITY['name']} \
+SYSTEM_PROMPT = f"""You are Sentry for LastMile Market in {PILOT_CITY['name']} \
 and the rural pilot county. You run on a schedule, unattended — nobody is \
 asking you a question right now. Your job is to work the backlog of \
-tracts previously flagged by a recommending agent (the Site Advisor or \
-the Route Advisor) and report, per tract, whether a food resource has \
+tracts previously flagged by a recommending agent (Scout or \
+Router) and report, per tract, whether a food resource has \
 since actually appeared nearby.
 
 For this run:
@@ -60,7 +60,7 @@ For this run:
 3. Call get_existing_resources once, and get_rural_existing_resources \
 once — both take no arguments, always querying their fixed region. You \
 need both because the backlog can contain rows from either the Site \
-Advisor ("site", urban) or the Route Advisor ("route", rural).
+Scout ("site", urban) or Router ("route", rural).
 4. For each flagged tract, look at its recommendation_type: use the \
 get_existing_resources results for "site" rows, or the \
 get_rural_existing_resources results for "route" rows — never mix the \
@@ -92,7 +92,7 @@ needed — broken out by recommendation_type if the backlog contained both \
 kinds.
 
 You never make a new siting or routing recommendation — that's the Site \
-Advisor's or Route Advisor's job, not yours. You only report on what \
+Scout's or Router's job, not yours. You only report on what \
 already happened to a past one.
 """
 
@@ -131,7 +131,7 @@ def build_watchdog_reporter() -> Agent:
 
 if __name__ == "__main__":
     watchdog = build_watchdog()
-    print(f"Food-Access Watchdog — pilot city: {PILOT_CITY['name']}")
+    print(f"LastMile Market Sentry — pilot city: {PILOT_CITY['name']}")
     print("Running a single unattended recheck pass over the flagged-tracts backlog...\n")
     result = watchdog("Run today's recheck pass over every pending flagged tract.")
     print_metrics(result)
