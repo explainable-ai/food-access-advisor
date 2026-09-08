@@ -62,6 +62,16 @@ def test_inventory_rejects_rows_without_identity():
         store.merge("inventory/on-hand.json", [{"qty": 2}])
 
 
+def test_inventory_identity_aliases_merge_the_same_product():
+    s3 = FakeS3()
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+    store.write("inventory/on-hand.json", [{"sku": "A", "qty": 2}])
+
+    merged = store.merge("inventory/on-hand.json", [{"item_id": "A", "qty": 5}])
+
+    assert merged == [{"sku": "A", "item_id": "A", "qty": 5}]
+
+
 def test_inventory_merge_retries_after_concurrent_update():
     s3 = FakeS3()
     store = S3InventoryStore(bucket="bucket", s3_client=s3)
