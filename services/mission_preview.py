@@ -195,18 +195,28 @@ def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: f
     inventory = []
     for item in on_hand:
         risk = cold_by_id.get(_inventory_identity(item), {})
-        inventory.append({**item, **({"cold_chain_risk": risk.get("risk_status") or risk.get("cold_chain_risk")} if risk else {})})
-    load = build_load_recommendation(route, inventory, load_lbs)
+        inventory.append({
+            **item,
+            "cold_chain_risk": (
+                risk.get("risk_status") or risk.get("cold_chain_risk") or "unknown"
+            ),
+        })
     route_minutes = float(route.get("route_minutes") or 0)
     capacity_used = float(route.get("capacity_used") or 0)
+    route_load_lbs = min(capacity_used, load_lbs)
+    load = build_load_recommendation(route, inventory, route_load_lbs)
     recommended = float(load["recommended_weight_lbs"])
+    suggested_ids = {
+        _inventory_identity(item) for item in load["items"] if _inventory_identity(item)
+    }
+    missing_cold_chain = sorted(suggested_ids - set(cold_by_id))
     time_limit_minutes = time_window_hours * 60
     checks = [
         {"check": "route", "status": "Ready", "finding": f"Router produced {len(route['selected_stops'])} viable stops.", "data_used": ["Router selected_stops", "Router route status"]},
         {"check": "time_window", "status": "Ready" if route_minutes <= time_limit_minutes else "Blocked", "finding": f"Route requires {route_minutes:g} minutes against a {time_limit_minutes:g}-minute window.", "data_used": ["Router route_minutes", "Crew request time_window_hours"]},
         {"check": "vehicle_capacity", "status": "Ready" if capacity_used <= load_lbs else "Blocked", "finding": f"Planned route load is {capacity_used:g} lbs against a {load_lbs:g}-lb limit.", "data_used": ["Router capacity_used", "Crew request load_lbs"]},
-        {"check": "inventory", "status": "Ready" if recommended >= load_lbs else "Partial", "finding": f"On-hand inventory supports a {recommended:g}-lb suggested load.", "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}"]},
-        {"check": "cold_chain", "status": "Ready" if cold_chain else "Unknown", "finding": f"Evaluated {len(cold_chain)} cold-chain risk records.", "data_used": [f"s3://{store.bucket}/{COLD_CHAIN_KEY}"]},
+        {"check": "inventory", "status": "Ready" if recommended >= route_load_lbs else "Partial", "finding": f"On-hand inventory supports {recommended:g} lbs against the selected route's {route_load_lbs:g}-lb modeled demand.", "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}", "Router capacity_used"]},
+        {"check": "cold_chain", "status": "Ready" if suggested_ids and not missing_cold_chain else "Unknown", "finding": (f"Every suggested item has a matching cold-chain risk record ({len(suggested_ids)} evaluated)." if suggested_ids and not missing_cold_chain else f"Missing cold-chain evidence for {len(missing_cold_chain)} suggested item(s): {', '.join(missing_cold_chain) or 'no suggested items to evaluate'}."), "data_used": [f"s3://{store.bucket}/{COLD_CHAIN_KEY}"]},
     ]
     blocked = any(check["status"] == "Blocked" for check in checks)
     partial = any(check["status"] in {"Partial", "Unknown"} for check in checks)
