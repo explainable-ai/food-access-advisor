@@ -44,7 +44,7 @@ def _component_sources(tract):
         "food_access_gap": "USDA Food Access Research Atlas",
         "poverty": economic,
         "no_vehicle": "ACS 5-year",
-        "population_served": "ACS 5-year",
+        "population_served": "USDA 2025 SNAP-authorized Retailer Access Map (2020 Census population)",
         "transit_burden": "Chicago Transit Authority static GTFS",
         "existing_coverage": "OpenStreetMap (versioned S3 resource cache)",
     }
