@@ -50,16 +50,32 @@ def _component_sources(tract):
     }
 
 
-def _contribution_breakdown(tract, components, contributions, normalized_weights):
+def _contribution_breakdown(
+    tract, components, contributions, normalized_weights, *, preserve_missing=False
+):
     sources = _component_sources(tract)
+    denominator = (
+        sum(normalized_weights.values())
+        if preserve_missing
+        else sum(
+            normalized_weights[name]
+            for name, value in components.items()
+            if value is not None
+        )
+    )
     rows = []
     for name, value in components.items():
+        effective_weight = (
+            normalized_weights[name] / denominator
+            if value is not None and denominator
+            else (normalized_weights[name] if preserve_missing else 0.0)
+        )
         rows.append({
             "component": name,
             "weight": round(
-                -normalized_weights[name]
+                -effective_weight
                 if name == "existing_coverage"
-                else normalized_weights[name],
+                else effective_weight,
                 4,
             ),
             "raw_value": round(value * 100, 1) if value is not None else None,
@@ -302,7 +318,11 @@ def _score_all(tracts, resources, weights, *, prepared_inputs=None):
         entry = {**tract, "need_score": score, "score_components": {name: round(value * 100, 1) if value is not None else None for name, value in components.items()},
                  "score_contributions": contributions, "weights_used": {name: round(value, 4) for name, value in normalized_weights.items()},
                  "contributions": _contribution_breakdown(
-                     tract, components, contributions, normalized_weights
+                     tract,
+                     components,
+                     contributions,
+                     normalized_weights,
+                     preserve_missing=bool(tract.get("scoring_context_version")),
                  ),
                  "missing_components": missing, "score_explanation": _explanation(
                      contributions, missing, economic_label=economic_label
@@ -356,7 +376,11 @@ def recompute_score_with_override(scored_tract: dict, **component_overrides) -> 
         },
         "score_contributions": contributions,
         "contributions": _contribution_breakdown(
-            scored_tract, components, contributions, weights
+            scored_tract,
+            components,
+            contributions,
+            weights,
+            preserve_missing=bool(scored_tract.get("scoring_context_version")),
         ),
     }
 
