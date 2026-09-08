@@ -14,4 +14,5 @@ def test_feedback_uses_real_recompute_without_persisting(monkeypatch):
     result = feedback.calculate_feedback("17031010100", 100)
     assert result["persisted"] is False
     assert result["households_served"] == 100
-    assert result["after"]["score_components"]["existing_coverage"] == 20.0
+    assert result["after"]["score_components"]["existing_coverage"] == 19.0
+    assert "uncovered share" in result["method"]
