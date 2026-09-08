@@ -1,4 +1,4 @@
-"""Application service connecting approved public sources to Watchdog."""
+"""Application service connecting approved public sources to Sentry."""
 
 from __future__ import annotations
 
