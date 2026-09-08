@@ -1,4 +1,6 @@
 import crew_lead
+from services.mission_preview import run_mission_ops
+from storage.inventory import COLD_CHAIN_KEY, ON_HAND_KEY
 
 
 class FakeCrewAgent:
@@ -56,3 +58,35 @@ def test_crew_marks_a_premature_agent_stop_as_failed(monkeypatch):
     assert [step["agent"] for step in result["steps"]] == ["sentry", "scout"]
     assert result["steps"][-1]["status"] == "failed"
     assert result["mission_id"] is None
+
+
+def test_dispatch_limits_load_to_route_demand_and_discloses_missing_cold_chain():
+    class InventoryStore:
+        bucket = "inventory-bucket"
+
+        def read(self, key):
+            if key == ON_HAND_KEY:
+                return [{"item_id": "apples", "qty": 100, "unit_weight_lbs": 1}]
+            assert key == COLD_CHAIN_KEY
+            return [{"item_id": "bananas", "risk_status": "high"}]
+
+    result = run_mission_ops(
+        {
+            "status": "optimal",
+            "selected_stops": [{"stop_id": "tract-1", "demand": 40}],
+            "route_minutes": 120,
+            "capacity_used": 40,
+        },
+        200,
+        4,
+        inventory_store=InventoryStore(),
+        mission_id_factory=lambda: "mission-test",
+    )
+
+    assert result["load_recommendation"]["capacity_lbs"] == 40
+    assert result["load_recommendation"]["recommended_weight_lbs"] == 40
+    cold_chain = next(
+        check for check in result["readiness_checks"] if check["check"] == "cold_chain"
+    )
+    assert cold_chain["status"] == "Unknown"
+    assert "apples" in cold_chain["finding"]
