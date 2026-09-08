@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from data_sources.contracts import DataQualityReport, EvidenceStatus, ResourceEvidenceBatch, SourceCitation
+import tools.additional_evidence as additional_evidence
 from tools.additional_evidence import refresh_additional_sources
 
 
@@ -26,7 +27,29 @@ def test_refresh_isolates_failures_and_maps_stale_status():
     def snapshot(source_id, records, **kwargs):
         calls.append((source_id, kwargs["status"]))
         return {"source_id": source_id, "status": kwargs["status"]}
-    results = refresh_additional_sources(socrata=Socrata(), gtfs=GTFS(), snapshot_fn=snapshot)
+    results = refresh_additional_sources(
+        socrata=Socrata(), gtfs=GTFS(), snapshot_fn=snapshot,
+        include_direct_sources=False,
+    )
     assert len(results) == 4
     assert ("chicago_active_business_licenses", "failed") in calls
     assert ("chicago_farmers_markets", "stale") in calls
+
+
+def test_scheduled_refresh_includes_approved_direct_sources(monkeypatch):
+    monkeypatch.setattr(
+        additional_evidence,
+        "refresh_direct_sources",
+        lambda **_kwargs: {"sources": [
+            {"source_id": "fresh_moves_mobile_market", "status": "complete"}
+        ]},
+    )
+    results = refresh_additional_sources(
+        socrata=Socrata(),
+        gtfs=GTFS(),
+        snapshot_fn=lambda *args, **kwargs: {
+            "source_id": args[0], "status": kwargs["status"],
+        },
+    )
+    assert len(results) == 5
+    assert results[-1]["source_id"] == "fresh_moves_mobile_market"

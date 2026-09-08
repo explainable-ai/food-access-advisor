@@ -59,6 +59,9 @@ from tools.access_data import (
 )
 from tools.evidence_brief import write_route_brief
 from tools.evidence_snapshots import read_change_page, review_change
+from data_sources.chicago_food_equity import source_registry_entry as food_equity_source_registry_entry
+from data_sources.community_sources import source_registry
+from services.direct_source_signals import refresh_direct_sources
 from tools.existing_resources import OverpassQueryError
 from tools.flagged_tracts import ALLOWED_STATUSES, read_flagged_tracts, verify_flagged_tract
 from tools.gap_scorer import DEFAULT_WEIGHTS, score_all_gaps, score_gaps
@@ -393,6 +396,25 @@ def flagged_tracts(status: str = Query(default="pending")):
 @app.get("/api/impact-metrics", response_model=ImpactMetrics)
 def impact_metrics() -> ImpactMetrics:
     return compute_impact_metrics()
+
+
+@app.get("/api/community-signals/sources")
+def community_signal_sources():
+    """List the reviewed first-party sources used by Community Access Watch."""
+    return [food_equity_source_registry_entry(), *source_registry()]
+
+
+@app.post("/api/community-signals/refresh")
+def refresh_community_signals(
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+):
+    """Refresh approved official pages without changing an operational plan."""
+    try:
+        return refresh_direct_sources()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/watchdog/changes")
