@@ -224,8 +224,8 @@ def _same_route(candidate, routes):
     return False
 
 
-def _configured_provider():
-    provider = os.getenv("ROUTING_PROVIDER", "aws_location").strip().lower()
+def _configured_provider(provider_name=None):
+    provider = (provider_name or os.getenv("ROUTING_PROVIDER", "aws_location")).strip().lower()
     if provider == "aws_location":
         return AmazonLocationRoutesProvider()
     if provider == "openrouteservice":
@@ -233,8 +233,8 @@ def _configured_provider():
     raise TravelTimeProviderError("ROUTING_PROVIDER must be aws_location or openrouteservice")
 
 
-def get_road_route_matrix(points):
-    return _configured_provider().calculate_matrix(points)
+def get_road_route_matrix(points, provider_name=None):
+    return _configured_provider(provider_name).calculate_matrix(points)
 
 
 def get_road_route_directions(points, alternatives=2):
