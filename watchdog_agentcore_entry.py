@@ -103,7 +103,11 @@ async def handler(payload: dict):
 
     supplemental = []
     if payload.get("refresh_additional_sources", True):
-        refresh = await asyncio.to_thread(refresh_additional_sources)
+        refresh = await asyncio.to_thread(
+            refresh_additional_sources,
+            include_transit=False,
+            include_legacy_farmers_markets=False,
+        )
         supplemental = _compact_sources(refresh)
 
     run = await asyncio.to_thread(run_watchdog_pass)
