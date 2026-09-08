@@ -45,14 +45,14 @@ ACTIVE_BUSINESS_LICENSES = ChicagoDataset(
 # run deterministic and avoids treating unrelated restaurants as access changes.
 GROCERY_INSPECTION_FILTER = "upper(facility_type) like '%GROCERY%'"
 FOOD_ACCESS_BUSINESS_FILTER = " OR ".join((
-    "upper(business_activity) like '%GROCERY%'",
+    "upper(business_activity) like '%GROCER%'",
     "upper(business_activity) like '%SUPERMARKET%'",
     "upper(business_activity) like '%PRODUCE%'",
     "upper(business_activity) like '%FOOD STORE%'",
-    "upper(license_description) like '%GROCERY%'",
+    "upper(license_description) like '%GROCER%'",
     "upper(license_description) like '%PRODUCE MERCHANT%'",
 ))
-FOOD_ACCESS_TERMS = ("grocery", "supermarket", "produce", "food store")
+FOOD_ACCESS_TERMS = ("grocer", "supermarket", "produce", "food store")
 FARMERS_MARKETS = ChicagoDataset(
     "chicago_farmers_markets", "Farmers Market Dataset", "iqus-3tju", vintage="legacy"
 )
