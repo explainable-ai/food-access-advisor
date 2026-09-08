@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 from typing import Any, Iterable
@@ -35,6 +36,31 @@ def _identity(item: dict[str, Any]) -> str:
         if value:
             return value
     raise ValueError("Each inventory item requires item_id, sku, or item")
+
+
+def _validate_numeric_fields(item: dict[str, Any]) -> None:
+    for key in ("on_hand", "quantity", "qty"):
+        if key not in item or item[key] is None:
+            continue
+        if isinstance(item[key], bool):
+            raise ValueError(f"Inventory field {key} must be a non-negative number")
+        try:
+            value = float(item[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Inventory field {key} must be a non-negative number") from exc
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"Inventory field {key} must be a non-negative number")
+    for key in ("unit_weight_lbs", "weight_lbs"):
+        if key not in item or item[key] is None:
+            continue
+        if isinstance(item[key], bool):
+            raise ValueError(f"Inventory field {key} must be a positive number")
+        try:
+            value = float(item[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Inventory field {key} must be a positive number") from exc
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"Inventory field {key} must be a positive number")
 
 
 class S3InventoryStore:
@@ -81,6 +107,7 @@ class S3InventoryStore:
             raise ValueError("Inventory data must be a list of objects")
         for item in data:
             _identity(item)
+            _validate_numeric_fields(item)
         body = json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8")
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         version_key = f"inventory/versions/{timestamp}-{key.rsplit('/', 1)[-1]}"
