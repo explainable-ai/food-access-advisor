@@ -132,18 +132,21 @@ class ChicagoSocrataClient:
         fields = ["inspection_id", "dba_name", "aka_name", "license_", "facility_type", "address",
                   "inspection_date", "inspection_type", "results", "latitude", "longitude"]
         citation = self._citation(FOOD_INSPECTIONS, retrieved, fields)
-        records, excluded = [], 0
+        records, excluded, unusable = [], 0, 0
         for row in rows:
             entity_id = str(row.get("inspection_id") or "").strip()
             name = str(row.get("dba_name") or row.get("aka_name") or "").strip()
             if not entity_id or not name:
                 excluded += 1
+                unusable += 1
                 continue
             lat, lon = _coordinates(row)
             records.append(ResourceEvidence(entity_id=entity_id, kind="food_inspection", name=name,
                 lat=lat, lon=lon, status=row.get("results"), observed_at=_parse_date(row.get("inspection_date")),
                 source_citation=citation, attributes={k: row.get(k) for k in fields if k in row}))
-        return self._batch(FOOD_INSPECTIONS, citation, rows, records, excluded)
+        return self._batch(
+            FOOD_INSPECTIONS, citation, rows, records, excluded, unusable=unusable
+        )
 
     def fetch_active_food_businesses(self, *, limit: int = 50000) -> ResourceEvidenceBatch:
         rows, retrieved = self._fetch(
@@ -154,7 +157,7 @@ class ChicagoSocrataClient:
                   "license_status", "license_status_change_date", "expiration_date", "address",
                   "latitude", "longitude"]
         citation = self._citation(ACTIVE_BUSINESS_LICENSES, retrieved, fields)
-        records, excluded = [], 0
+        records, excluded, unusable = [], 0, 0
         for row in rows:
             searchable = " ".join(str(row.get(field) or "").casefold()
                                   for field in ("license_description", "business_activity"))
@@ -165,43 +168,53 @@ class ChicagoSocrataClient:
             name = str(row.get("doing_business_as_name") or row.get("legal_name") or "").strip()
             if not entity_id or not name:
                 excluded += 1
+                unusable += 1
                 continue
             lat, lon = _coordinates(row)
             records.append(ResourceEvidence(entity_id=entity_id, kind="licensed_food_business", name=name,
                 lat=lat, lon=lon, status=row.get("license_status"),
                 observed_at=_parse_date(row.get("expiration_date")), source_citation=citation,
                 attributes={k: row.get(k) for k in fields if k in row}))
-        return self._batch(ACTIVE_BUSINESS_LICENSES, citation, rows, records, excluded)
+        return self._batch(
+            ACTIVE_BUSINESS_LICENSES, citation, rows, records, excluded, unusable=unusable
+        )
 
     def fetch_farmers_markets(self, *, limit: int = 50000) -> ResourceEvidenceBatch:
         rows, retrieved = self._fetch(FARMERS_MARKETS, limit=limit)
         fields = ["id", "market_name", "address", "location", "start_date", "end_date"]
         citation = self._citation(FARMERS_MARKETS, retrieved, fields)
-        records, excluded = [], 0
+        records, excluded, unusable = [], 0, 0
         for index, row in enumerate(rows):
             name = str(row.get("market_name") or row.get("name") or "").strip()
             if not name:
                 excluded += 1
+                unusable += 1
                 continue
             entity_id = str(row.get("id") or row.get("market_id") or f"market-{index}")
             lat, lon = _coordinates(row)
             records.append(ResourceEvidence(entity_id=entity_id, kind="farmers_market", name=name,
                 lat=lat, lon=lon, status="legacy_directory_record", source_citation=citation,
                 attributes={k: row.get(k) for k in fields if k in row}))
-        return self._batch(FARMERS_MARKETS, citation, rows, records, excluded, stale=True)
+        return self._batch(
+            FARMERS_MARKETS, citation, rows, records, excluded,
+            stale=True, unusable=unusable,
+        )
 
     @staticmethod
-    def _batch(dataset, citation, rows, records, excluded, stale=False):
+    def _batch(dataset, citation, rows, records, excluded, stale=False, unusable=0):
         missing = sum(1 for record in records if record.lat is None or record.lon is None)
-        unusable_response = bool(rows) and not records
         status = (
-            EvidenceStatus.STALE_CACHE if stale
-            else EvidenceStatus.PARTIAL if unusable_response
+            EvidenceStatus.PARTIAL if unusable
+            else EvidenceStatus.STALE_CACHE if stale
             else EvidenceStatus.COMPLETE
         )
         warnings = ["Legacy dataset: verify market dates before operational use."] if stale else []
         if excluded:
-            warnings.append(f"{excluded} out-of-scope or unusable rows were excluded.")
+            out_of_scope = excluded - unusable
+            warnings.append(
+                f"{excluded} rows were excluded ({out_of_scope} out-of-scope; "
+                f"{unusable} unusable)."
+            )
         if missing:
             warnings.append(
                 f"{missing} in-scope records have no coordinates; non-spatial change detection remains available."

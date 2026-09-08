@@ -65,6 +65,17 @@ def test_missing_coordinates_do_not_make_a_usable_source_partial():
     assert "non-spatial change detection remains available" in batch.quality.warnings[-1]
 
 
+def test_unusable_row_keeps_otherwise_usable_batch_partial():
+    batch = client([
+        {"inspection_id": "42", "dba_name": "Market", "facility_type": "Grocery Store"},
+        {"inspection_id": "43", "dba_name": "", "facility_type": "Grocery Store"},
+    ]).fetch_food_inspections()
+    assert [record.entity_id for record in batch.records] == ["42"]
+    assert batch.quality.status == EvidenceStatus.PARTIAL
+    assert batch.quality.excluded_rows == 1
+    assert "1 unusable" in batch.quality.warnings[0]
+
+
 def test_active_business_query_is_scoped_at_the_source():
     adapter = client([])
     adapter.fetch_active_food_businesses()

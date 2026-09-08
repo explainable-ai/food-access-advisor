@@ -115,7 +115,7 @@ DATE_TIME_RE = re.compile(
 )
 CLOCK_RE = re.compile(r"\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b", re.IGNORECASE)
 TIME_RANGE_RE = re.compile(
-    r"\b\d{1,2}:\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?\s*(?:-|–|—|to)\s*"
+    r"\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?\s*(?:-|–|—|to)\s*"
     r"\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?\b",
     re.IGNORECASE,
 )

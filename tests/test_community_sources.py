@@ -95,15 +95,21 @@ def test_fresh_moves_accepts_live_schedule_formats():
     <p>10:30 AM - 12:00 PM: Trina Davila, 4300 W North Ave</p>
     <h3>MONDAYS:</h3>
     <p>1:00 PM - 3:00 PM: Thresholds Austin, 334 N Menard</p>
+    <h3>TUESDAYS:</h3>
+    <p>10 AM - 12 PM: Austin Stop, 500 W Madison St</p>
     <h2>What's On The Bus</h2>
     """
     batch = parse_source_html(source, html)
     assert batch.quality.status.value == "complete"
-    assert len(batch.records) == 3
+    assert len(batch.records) == 4
     assert {record.attributes["location"] for record in batch.records} == {
-        "330 E 51st St", "4300 W North Ave", "334 N Menard"
+        "330 E 51st St", "4300 W North Ave", "334 N Menard", "500 W Madison St"
     }
     assert any("4:30-6:00" in record.attributes["start_at"] for record in batch.records)
+    hour_only = next(record for record in batch.records
+                     if record.attributes["location"] == "500 W Madison St")
+    assert hour_only.name == "Fresh Moves — Austin Stop"
+    assert "10 AM - 12 PM" in hour_only.attributes["start_at"]
 
 
 def test_beyond_hunger_requires_a_dated_upcoming_event():
