@@ -33,7 +33,7 @@ def _identity(item: dict[str, Any]) -> str:
     for key in ("item_id", "sku", "item"):
         value = str(item.get(key, "")).strip()
         if value:
-            return f"{key}:{value}"
+            return value
     raise ValueError("Each inventory item requires item_id, sku, or item")
 
 
@@ -41,10 +41,15 @@ class S3InventoryStore:
     """Read and update inventory directly in the configured evidence bucket."""
 
     def __init__(self, bucket: str | None = None, s3_client: Any | None = None):
-        self.bucket = bucket or os.getenv("INVENTORY_BUCKET") or os.getenv("RESOURCE_CACHE_BUCKET")
+        self.bucket = (
+            bucket
+            or os.getenv("INVENTORY_BUCKET")
+            or os.getenv("RESOURCE_CACHE_BUCKET")
+            or os.getenv("EVIDENCE_BUCKET")
+        )
         if not self.bucket:
             raise InventoryStoreError(
-                "Inventory bucket is not configured; set INVENTORY_BUCKET or RESOURCE_CACHE_BUCKET"
+                "Inventory bucket is not configured; set INVENTORY_BUCKET, RESOURCE_CACHE_BUCKET, or EVIDENCE_BUCKET"
             )
         region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
         self.s3 = s3_client or boto3.client("s3", region_name=region)
