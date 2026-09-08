@@ -435,7 +435,7 @@ def optimize_route_scenario(request: RouteOptimizationRequest):
         source = None
         if matrix is None and request.travel_time_provider != "estimate":
             points = [request.depot.model_dump(), *[candidate.model_dump() for candidate in request.candidates]]
-            matrix = get_road_route_matrix(points)
+            matrix = get_road_route_matrix(points, provider_name=request.travel_time_provider)
             source = "road_network_matrix"
         return optimize_route(
             candidates=[candidate.model_dump() for candidate in request.candidates],
