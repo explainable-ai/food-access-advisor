@@ -198,3 +198,34 @@ def test_completeness_guard_uses_entity_overlap_not_response_size(tmp_path):
     assert result["new_entity_count"] == 18
     assert result["retained_fraction"] == 0
     assert [change["change_type"] for change in result["changes"]] == ["partial"]
+
+
+def test_change_page_filters_sources_and_scopes_before_counts(tmp_path):
+    db = tmp_path / "snapshots.db"
+    record_snapshot("cta_gtfs", [], scope="urban", status="stale", captured_at=NOW, db_path=db)
+    record_snapshot(
+        "chicago_farmers_markets", [], scope="urban", status="stale",
+        captured_at=NOW + timedelta(minutes=1), db_path=db,
+    )
+    record_snapshot(
+        "chicago_farmers_markets", [], scope="chicago", status="stale",
+        captured_at=NOW + timedelta(minutes=2), db_path=db,
+    )
+    record_snapshot(
+        "chicago_food_inspections", [], scope="urban", status="partial",
+        captured_at=NOW + timedelta(minutes=3), db_path=db,
+    )
+
+    page = read_change_page(
+        limit=10,
+        db_path=db,
+        excluded_source_ids={"cta_gtfs"},
+        excluded_source_scopes={"chicago_farmers_markets#urban"},
+    )
+
+    assert page["open_finding_count"] == 2
+    assert page["source_count"] == 2
+    assert {item["source_scope"] for item in page["items"]} == {
+        "chicago_farmers_markets#chicago",
+        "chicago_food_inspections#urban",
+    }
