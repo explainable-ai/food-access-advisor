@@ -69,6 +69,15 @@
       }
     },
     {
+      "Sid": "UseAmazonLocationRoutes",
+      "Effect": "Allow",
+      "Action": [
+        "geo-routes:CalculateRouteMatrix",
+        "geo-routes:CalculateRoutes"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "InvokeHaikuUSInferenceProfile",
       "Effect": "Allow",
       "Action": [
