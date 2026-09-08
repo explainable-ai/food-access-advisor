@@ -37,7 +37,18 @@ def calculate_feedback(tract_id: str, households_served: int) -> dict[str, Any]:
     # Treat the served share as temporarily receiving full mobile-market
     # coverage, while the remainder retains its current access quality.
     adjusted = current_ratio + served_share * (1.0 - current_ratio)
-    after = recompute_score_with_override(before, existing_coverage=adjusted)
+    # A zero-household demo request is the identity operation. Preserve the
+    # exact scored baseline instead of recomputing from the rounded component
+    # values exposed by the API, which could otherwise move the score by 0.1.
+    if households_served == 0:
+        after = {
+            "score": before["need_score"],
+            "score_components": before["score_components"],
+            "score_contributions": before["score_contributions"],
+            "contributions": before["contributions"],
+        }
+    else:
+        after = recompute_score_with_override(before, existing_coverage=adjusted)
     return {
         "tract_id": tract_id,
         "before": {"score": before["need_score"], "score_components": before["score_components"], "score_contributions": before["score_contributions"], "contributions": before["contributions"]},
