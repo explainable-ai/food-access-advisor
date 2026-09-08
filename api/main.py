@@ -73,8 +73,8 @@ from tools.resource_cache import ResourceCacheError, load_resource_cache
 from tools.site_evidence_brief import write_site_evidence_brief
 from tools.travel_time_provider import (
     TravelTimeProviderError,
-    get_openrouteservice_directions,
-    get_openrouteservice_matrix,
+    get_road_route_directions,
+    get_road_route_matrix,
 )
 from crew_lead import run_crew_brief
 from services.feedback_demo import calculate_feedback
@@ -433,10 +433,10 @@ def optimize_route_scenario(request: RouteOptimizationRequest):
     try:
         matrix = request.travel_time_matrix
         source = None
-        if matrix is None and request.travel_time_provider == "openrouteservice":
+        if matrix is None and request.travel_time_provider != "estimate":
             points = [request.depot.model_dump(), *[candidate.model_dump() for candidate in request.candidates]]
-            matrix = get_openrouteservice_matrix(points)
-            source = "openrouteservice_matrix"
+            matrix = get_road_route_matrix(points)
+            source = "road_network_matrix"
         return optimize_route(
             candidates=[candidate.model_dump() for candidate in request.candidates],
             depot=request.depot.model_dump(), max_route_minutes=request.max_route_minutes,
@@ -459,7 +459,7 @@ def route_directions(request: RouteDirectionsRequest):
         request.destination.model_dump(),
     ]
     try:
-        return get_openrouteservice_directions(points, alternatives=request.alternatives)
+        return get_road_route_directions(points, alternatives=request.alternatives)
     except (ValueError, TravelTimeProviderError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
