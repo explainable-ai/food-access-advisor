@@ -46,7 +46,7 @@ def _component_sources(tract):
         "no_vehicle": "ACS 5-year",
         "population_served": "ACS 5-year",
         "transit_burden": "Chicago Transit Authority static GTFS",
-        "existing_coverage": "Versioned local resource directory",
+        "existing_coverage": "OpenStreetMap (versioned S3 resource cache)",
     }
 
 
