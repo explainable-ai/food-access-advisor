@@ -20,6 +20,9 @@ from model import build_model
 from tools.site_evidence_brief import write_site_evidence_brief
 from tools.flagged_tracts import flag_tract_for_recheck
 from tools.site_ranker import rank_chicago_tracts
+from tools.access_data import get_all_rural_tracts
+from tools.gap_scorer import score_gaps
+from tools.resource_cache import load_resource_cache
 from tools.telemetry import configure_telemetry, print_metrics
 
 load_dotenv()
@@ -92,6 +95,17 @@ def build_advisor() -> Agent:
             flag_top_tract_for_recheck,
         ],
     )
+
+
+def run_site_advisor(study_area: str, scenario: str, top_n: int = 12) -> dict:
+    """Run Scout's existing deterministic ranking path for a Crew brief."""
+    if study_area == "chicago_neighborhoods":
+        ranked = rank_chicago_tracts(top_n=top_n)
+    elif study_area == "rural_fringe":
+        ranked = score_gaps(get_all_rural_tracts(), load_resource_cache("rural", require_complete_coverage=True), top_n=top_n)
+    else:
+        raise ValueError("study_area must be 'chicago_neighborhoods' or 'rural_fringe'")
+    return {"study_area": study_area, "scenario": scenario, "ranked_tracts": ranked, "top_tracts": ranked[:3], "ranked_count": len(ranked)}
 
 
 if __name__ == "__main__":

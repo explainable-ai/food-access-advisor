@@ -27,7 +27,7 @@ Run: python route_advisor.py
 from dotenv import load_dotenv
 from strands import Agent, tool
 
-from config import PILOT_RURAL_COUNTY
+from config import OPERATIONS_HUB, PILOT_RURAL_COUNTY
 from model import build_model
 from tools.access_data import get_low_access_rural_tracts
 from tools.evidence_brief import write_route_brief
@@ -35,6 +35,8 @@ from tools.existing_resources import get_rural_existing_resources
 from tools.flagged_tracts import flag_tract_for_recheck
 from tools.gap_scorer import score_gaps
 from tools.telemetry import configure_telemetry, print_metrics
+from tools.route_optimizer import optimize_route
+from tools.travel_time_provider import get_road_route_matrix
 
 load_dotenv()
 configure_telemetry()
@@ -111,6 +113,25 @@ def build_route_advisor() -> Agent:
             flag_top_route_for_recheck,
         ],
     )
+
+
+def run_route_advisor(top_tracts: list, hub: dict | None, time_window_hours: float, load_lbs: float, *, matrix_fn=None) -> dict:
+    """Build Router's constrained route from Scout's actual top tracts."""
+    if not top_tracts:
+        return {"status": "infeasible", "reason": "Scout returned no candidate tracts", "travel_time_source": "not_run", "selected_stops": [], "unselected_stops": []}
+    origin = hub or OPERATIONS_HUB
+    households = [max(float(row.get("households_total") or row.get("population") or 1), 1) for row in top_tracts[:5]]
+    total_households = sum(households)
+    candidates = []
+    allocated = 0.0
+    for index, (tract, household_count) in enumerate(zip(top_tracts[:5], households)):
+        demand = load_lbs - allocated if index == min(len(top_tracts), 5) - 1 else round(load_lbs * household_count / total_households, 2)
+        allocated += demand
+        candidates.append({"stop_id": str(tract.get("tract_fips")), "tract_fips": str(tract.get("tract_fips")), "lat": tract.get("centroid_lat"), "lon": tract.get("centroid_lon"), "demand": max(demand, 0.01), "households": household_count, "need_score": float(tract.get("need_score") or 0), "population": tract.get("population"), "currently_served": False})
+    provider = matrix_fn or get_road_route_matrix
+    matrix = provider([origin, *candidates])
+    route = optimize_route(candidates=candidates, depot={"lat": origin["lat"], "lon": origin["lon"]}, max_route_minutes=time_window_hours * 60, vehicle_capacity=load_lbs, max_stops=min(4, len(candidates)), service_minutes=20, travel_time_matrix=matrix, travel_time_source="road_network_matrix")
+    return {**route, "hub": origin}
 
 
 if __name__ == "__main__":

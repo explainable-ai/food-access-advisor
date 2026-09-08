@@ -78,8 +78,8 @@ from tools.resource_cache import ResourceCacheError, load_resource_cache
 from tools.site_evidence_brief import write_site_evidence_brief
 from tools.travel_time_provider import (
     TravelTimeProviderError,
-    get_openrouteservice_directions,
-    get_openrouteservice_matrix,
+    get_road_route_directions,
+    get_road_route_matrix,
 )
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -145,7 +145,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/ping")
+@app.get("/ping", include_in_schema=False)
 def agentcore_ping():
     """AgentCore custom-container health contract."""
     return {"status": "Healthy"}
@@ -195,29 +195,45 @@ def update_cold_chain(request: ColdChainLotUpdate,
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+async def _run_crew_brief(request: CrewBriefRequest):
+    try:
+        kwargs = {"study_area": request.study_area}
+        if request.scenario != "community_equity":
+            kwargs["scenario"] = request.scenario
+        if request.load_lbs is not None:
+            kwargs["load_lbs"] = request.load_lbs
+        if request.time_window_hours is not None:
+            kwargs["time_window_hours"] = request.time_window_hours
+        if request.vehicle_capacity_lbs is not None:
+            kwargs["vehicle_capacity_lbs"] = request.vehicle_capacity_lbs
+        if request.hub is not None:
+            kwargs["hub"] = request.hub.model_dump()
+        if request.max_stops != 5:
+            kwargs["max_stops"] = request.max_stops
+        return await asyncio.to_thread(run_crew_brief, request.request, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Crew Lead failed: {exc}") from exc
+
+
 @app.post("/crew/brief")
 @app.post("/api/crew/brief", include_in_schema=False)
 async def brief_crew(request: CrewBriefRequest):
-    try:
-        return await asyncio.to_thread(
-            run_crew_brief,
-            request.request,
-            study_area=request.study_area,
-            scenario=request.scenario,
-            load_lbs=request.load_lbs,
-            time_window_hours=request.time_window_hours,
-            vehicle_capacity_lbs=request.vehicle_capacity_lbs,
-            hub=request.hub.model_dump() if request.hub else None,
-            max_stops=request.max_stops,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    """Run the Last Mile Crew without changing any existing advisor route."""
+    return await _run_crew_brief(request)
 
 
-@app.post("/invocations")
+@app.post("/invoke", include_in_schema=False)
+async def agentcore_invoke(request: CrewBriefRequest):
+    """Backward-compatible invocation alias for the Crew Lead flow."""
+    return await _run_crew_brief(request)
+
+
+@app.post("/invocations", include_in_schema=False)
 async def agentcore_invocations(request: CrewBriefRequest):
-    """AgentCore HTTP contract; delegates to the same Crew Lead workflow."""
-    return await brief_crew(request)
+    """Bedrock AgentCore Runtime invocation contract."""
+    return await _run_crew_brief(request)
 
 
 @app.post("/demo/feedback")
@@ -225,6 +241,8 @@ async def agentcore_invocations(request: CrewBriefRequest):
 def demo_feedback(request: DemoFeedbackRequest):
     try:
         return compute_demo_feedback(request.tract_id, request.households_served)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -422,10 +440,10 @@ def optimize_route_scenario(request: RouteOptimizationRequest):
     try:
         matrix = request.travel_time_matrix
         source = None
-        if matrix is None and request.travel_time_provider == "openrouteservice":
+        if matrix is None and request.travel_time_provider != "estimate":
             points = [request.depot.model_dump(), *[candidate.model_dump() for candidate in request.candidates]]
-            matrix = get_openrouteservice_matrix(points)
-            source = "openrouteservice_matrix"
+            matrix = get_road_route_matrix(points, provider_name=request.travel_time_provider)
+            source = "road_network_matrix"
         return optimize_route(
             candidates=[candidate.model_dump() for candidate in request.candidates],
             depot=request.depot.model_dump(), max_route_minutes=request.max_route_minutes,
@@ -448,7 +466,7 @@ def route_directions(request: RouteDirectionsRequest):
         request.destination.model_dump(),
     ]
     try:
-        return get_openrouteservice_directions(points, alternatives=request.alternatives)
+        return get_road_route_directions(points, alternatives=request.alternatives)
     except (ValueError, TravelTimeProviderError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

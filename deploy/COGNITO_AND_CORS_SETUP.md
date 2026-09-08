@@ -80,8 +80,9 @@ token. Public pages and read requests remain unauthenticated.
 
 ## 4. Configure the API task
 
-Set these environment variables on the ECS task definition and deploy a new
-task revision:
+Export the CloudFormation outputs, render the checked ECS Express template,
+and deploy the rendered file. The renderer fails before deployment if either
+Cognito identifier is missing; it never substitutes demo credentials.
 
 ```text
 FOOD_ACCESS_CORS_ORIGINS=https://YOUR-FINAL-DOMAIN
@@ -91,6 +92,20 @@ COGNITO_USER_POOL_ID=<UserPoolId stack output>
 COGNITO_APP_CLIENT_ID=<AppClientId stack output>
 COGNITO_STAFF_GROUP=staff
 ```
+
+```powershell
+$env:COGNITO_USER_POOL_ID = "PASTE-USER-POOL-ID"
+$env:COGNITO_APP_CLIENT_ID = "PASTE-APP-CLIENT-ID"
+python deploy/render_ecs_express_service.py
+aws ecs create-express-gateway-service `
+  --cli-input-json file://ecs-express-service.rendered.json `
+  --region us-east-1
+```
+
+`ecs-express-service.json` also pins `ROUTING_PROVIDER=aws_location`; no
+third-party routing key is required by a Crew run. Attach
+`deploy/food-access-runtime-policy.json` to `FoodAccessApiTaskRole` before
+deploying so the task can call the signed Routes V2 matrix and directions APIs.
 
 Production must never use `FOOD_ACCESS_CORS_ORIGINS=*`. Localhost belongs only
 in a local `.env` file. Bearer-token requests do not require CORS credentials.

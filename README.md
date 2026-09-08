@@ -103,7 +103,7 @@ first.
 
 ### Data setup
 
-Both Advisors run out of the box against small, clearly-labeled sample
+Scout and Router run out of the box against small, clearly-labeled sample
 tracts (see the docstrings in `tools/access_data.py` — `_sample_tracts`
 for the urban pilot city, `_sample_rural_tracts` for the rural pilot
 county) so you can smoke-test the plumbing immediately. For real
@@ -266,7 +266,7 @@ python watchdog_agent.py
 ```
 
 ```
-Food-Access Sentry — pilot city: Chicago, IL
+LastMile Market Sentry — pilot city: Chicago, IL
 Running a single unattended recheck pass over the flagged-tracts backlog...
 ```
 
@@ -356,7 +356,7 @@ Run the API with:
 uvicorn api.main:app --reload
 ```
 
-Advisor calls are the slow path (a full tool-calling loop plus at least
+Agent calls are the slow path (a full tool-calling loop plus at least
 one Bedrock round trip) — `model.py`'s `streaming=False` is a deliberate,
 already-tested fix for a real `ReadTimeoutError` this project hit earlier,
 so these endpoints don't attempt token-by-token SSE streaming; expect
@@ -430,7 +430,7 @@ above, this needs your own AWS credentials to actually run.
 ## Guardrails
 
 - **Stay-in-the-pilot-region is enforced in code, not just in the prompt,
-  for both Advisors.** `get_low_access_tracts` / `get_existing_resources`
+  for Scout and Router.** `get_low_access_tracts` / `get_existing_resources`
   take no city/region/bounding-box arguments at all — both always resolve
   to `config.PILOT_CITY`. `get_low_access_rural_tracts` /
   `get_rural_existing_resources` are pinned the same way to
@@ -446,14 +446,14 @@ above, this needs your own AWS credentials to actually run.
 - **Scout, Router, and Sentry are three separate agents
   with disjoint tool lists, not one agent with a mode flag — and
   `orchestration.py`'s `GraphBuilder` wrapping doesn't change that.**
-  Neither Advisor has a tool that can write to a flagged tract's status;
+  Neither planning agent has a tool that can write to a flagged tract's status;
   the Sentry has no tool that can answer a siting or routing question or
   make a new recommendation. `flag_top_tract_for_recheck` (Scout's
   only write) hardcodes `recommendation_type="site"` and
-  `source_agent="advisor"`; `flag_top_route_for_recheck` (Router's
+  `source_agent="scout"`; `flag_top_route_for_recheck` (Router's
   only write) hardcodes `recommendation_type="route"` and
-  `source_agent="route_advisor"` — neither is a model-settable argument,
-  so neither Advisor can mislabel a row as coming from the other.
+  `source_agent="router"` — neither is a model-settable argument,
+  so neither planning agent can mislabel a row as coming from the other.
   `update_flagged_tract` (the Sentry's only write) takes a fixed,
   validated status enum and writes to exactly one table — there's no
   table-name or raw-SQL argument for a model to misuse. `route_request`'s
@@ -504,7 +504,7 @@ See [`deploy/AWS_PERSISTENCE_SETUP.md`](deploy/AWS_PERSISTENCE_SETUP.md).
   credentials — that's a one-time setup step for whoever operates this,
   not something this repo can do on its own.
 - **A structured ranked-tract endpoint for the frontend.** The planning
-  workspace currently renders each Advisor's composed text answer as one
+  workspace currently renders each agent's composed text answer as one
   evidence panel (see [above](#orchestration-api-and-the-planning-workspace-ui));
   a `score_gaps`-shaped JSON endpoint would let the UI render a real
   clickable ranked table instead.

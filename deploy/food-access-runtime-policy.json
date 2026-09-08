@@ -48,7 +48,8 @@
       "Resource": [
         "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/snapshots/*",
         "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/resource-cache/*",
-        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/prepared-data/*"
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/prepared-data/*",
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/inventory/*"
       ]
     },
     {
@@ -61,10 +62,20 @@
           "s3:prefix": [
             "resource-cache/*",
             "prepared-data/*",
-            "snapshots/*"
+            "snapshots/*",
+            "inventory/*"
           ]
         }
       }
+    },
+    {
+      "Sid": "UseAmazonLocationRoutes",
+      "Effect": "Allow",
+      "Action": [
+        "geo-routes:CalculateRouteMatrix",
+        "geo-routes:CalculateRoutes"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "InvokeHaikuUSInferenceProfile",

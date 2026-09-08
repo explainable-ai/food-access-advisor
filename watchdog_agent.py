@@ -44,6 +44,7 @@ from tools.evidence_snapshots import record_resource_snapshot
 from tools.flagged_tracts import read_flagged_tracts, update_flagged_tract
 from tools.recheck_status import check_resource_appeared
 from tools.telemetry import configure_telemetry, print_metrics
+from tools.watchdog_run import run_watchdog_pass
 
 configure_telemetry()
 
@@ -127,6 +128,18 @@ def build_watchdog_reporter() -> Agent:
         system_prompt=REPORTER_SYSTEM_PROMPT,
         tools=[],
     )
+
+
+def run_watchdog(study_area: str) -> dict:
+    """Run Sentry for only the recommendation type matching the study area."""
+    recommendation_type = {"chicago_neighborhoods": "site", "rural_fringe": "route"}.get(study_area)
+    if recommendation_type is None:
+        raise ValueError("study_area must be 'chicago_neighborhoods' or 'rural_fringe'")
+
+    def read_target(status="pending"):
+        return [row for row in read_flagged_tracts(status) if row.get("recommendation_type") == recommendation_type]
+
+    return run_watchdog_pass(read_fn=read_target)
 
 
 if __name__ == "__main__":

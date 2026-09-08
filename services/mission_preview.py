@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
+from services.load_recommendation import build_load_recommendation
+from storage.inventory import COLD_CHAIN_KEY, ON_HAND_KEY, S3InventoryStore
 from storage.operations_repository import OperationsRepository
 
 
@@ -15,6 +18,7 @@ CHECK_LABELS = {
     "permit": "Permit",
     "policy": "Manifest policy",
 }
+KNOWN_COLD_CHAIN_RISKS = {"critical", "high", "watch", "medium", "low", "none"}
 
 
 def _canonical_status(scenario: dict[str, Any]) -> str:
@@ -49,6 +53,8 @@ def _check(
         "status": status,
         "detail": detail,
         "evidence_id": evidence_id,
+        "finding": detail,
+        "data_used": [evidence_id] if evidence_id else [],
     }
 
 
@@ -171,3 +177,58 @@ def build_mission_preview(
         "not_for_real_dispatch": True,
         "dispatch_enabled": False,
     }
+
+
+def _inventory_identity(item: dict[str, Any]) -> str:
+    return str(item.get("item_id") or item.get("sku") or item.get("item") or "").strip()
+
+
+def _cold_chain_risk(item: dict[str, Any]) -> str | None:
+    value = str(item.get("risk_status") or item.get("cold_chain_risk") or "").strip().lower()
+    return value if value in KNOWN_COLD_CHAIN_RISKS else None
+
+
+def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: float, *, inventory_store: S3InventoryStore | None = None, mission_id_factory=None) -> dict[str, Any]:
+    """Draft a route-based mission without replacing existing previews."""
+    if load_lbs <= 0 or time_window_hours <= 0:
+        raise ValueError("load_lbs and time_window_hours must be positive")
+    if route.get("status") != "optimal" or not route.get("selected_stops"):
+        raise ValueError("Dispatch requires a viable route with at least one selected stop")
+    store = inventory_store or S3InventoryStore()
+    on_hand = store.read(ON_HAND_KEY)
+    cold_chain = store.read(COLD_CHAIN_KEY)
+    cold_risk_by_id = {
+        _inventory_identity(item): _cold_chain_risk(item)
+        for item in cold_chain
+        if _inventory_identity(item)
+    }
+    inventory = []
+    for item in on_hand:
+        inventory.append({
+            **item,
+            "cold_chain_risk": cold_risk_by_id.get(_inventory_identity(item)) or "unknown",
+        })
+    route_minutes = float(route.get("route_minutes") or 0)
+    capacity_used = float(route.get("capacity_used") or 0)
+    route_load_lbs = min(capacity_used, load_lbs)
+    load = build_load_recommendation(route, inventory, route_load_lbs)
+    recommended = float(load["recommended_weight_lbs"])
+    suggested_ids = {
+        _inventory_identity(item) for item in load["items"] if _inventory_identity(item)
+    }
+    missing_cold_chain = sorted(
+        item_id for item_id in suggested_ids if not cold_risk_by_id.get(item_id)
+    )
+    time_limit_minutes = time_window_hours * 60
+    checks = [
+        {"check": "route", "status": "Ready", "finding": f"Router produced {len(route['selected_stops'])} viable stops.", "data_used": ["Router selected_stops", "Router route status"]},
+        {"check": "time_window", "status": "Ready" if route_minutes <= time_limit_minutes else "Blocked", "finding": f"Route requires {route_minutes:g} minutes against a {time_limit_minutes:g}-minute window.", "data_used": ["Router route_minutes", "Crew request time_window_hours"]},
+        {"check": "vehicle_capacity", "status": "Ready" if capacity_used <= load_lbs else "Blocked", "finding": f"Planned route load is {capacity_used:g} lbs against a {load_lbs:g}-lb limit.", "data_used": ["Router capacity_used", "Crew request load_lbs"]},
+        {"check": "inventory", "status": "Ready" if recommended >= route_load_lbs else "Partial", "finding": f"On-hand inventory supports {recommended:g} lbs against the selected route's {route_load_lbs:g}-lb modeled demand.", "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}", "Router capacity_used"]},
+        {"check": "cold_chain", "status": "Ready" if suggested_ids and not missing_cold_chain else "Unknown", "finding": (f"Every suggested item has a matching cold-chain risk record ({len(suggested_ids)} evaluated)." if suggested_ids and not missing_cold_chain else f"Missing cold-chain evidence for {len(missing_cold_chain)} suggested item(s): {', '.join(missing_cold_chain) or 'no suggested items to evaluate'}."), "data_used": [f"s3://{store.bucket}/{COLD_CHAIN_KEY}"]},
+    ]
+    blocked = any(check["status"] == "Blocked" for check in checks)
+    partial = any(check["status"] in {"Partial", "Unknown"} for check in checks)
+    status = "Blocked" if blocked else ("Partial" if partial else "Ready")
+    make_id = mission_id_factory or (lambda: f"mission-{uuid4().hex[:12]}")
+    return {"mission_id": make_id(), "status": status, "route": route, "suggested_load": load["items"], "load_recommendation": load, "readiness_checks": checks, "human_review_required": True, "dispatch_enabled": False}
