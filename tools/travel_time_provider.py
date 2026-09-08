@@ -1,12 +1,79 @@
-"""Road-network travel times and directions supplied by openrouteservice."""
+"""Road-network travel times and directions from configured providers."""
 
 import os
 
+import boto3
 import requests
+
+
+METERS_PER_MILE = 1609.344
 
 
 class TravelTimeProviderError(RuntimeError):
     pass
+
+
+class AmazonLocationRoutesProvider:
+    """Use the ECS task role to call Amazon Location Routes V2."""
+
+    def __init__(self, *, region=None, client=None):
+        self.region = region or os.getenv("AWS_LOCATION_REGION") or os.getenv("AWS_REGION") or "us-east-1"
+        self.client = client or boto3.client("geo-routes", region_name=self.region)
+
+    def _call(self, operation, **kwargs):
+        try:
+            return getattr(self.client, operation)(**kwargs)
+        except Exception as exc:
+            raise TravelTimeProviderError(f"Amazon Location {operation} request failed") from exc
+
+    def calculate_matrix(self, points):
+        if not 2 <= len(points) <= 16:
+            raise ValueError("Amazon Location matrix requires 2-16 points for this optimizer")
+        positions = [{"Position": _position(point)} for point in points]
+        payload = self._call(
+            "calculate_route_matrix",
+            Origins=positions,
+            Destinations=positions,
+            RoutingBoundary={"Unbounded": True},
+            OptimizeRoutingFor="FastestRoute",
+            Traffic={"Usage": "UseTrafficData"},
+            TravelMode="Car",
+        )
+        rows = payload.get("RouteMatrix")
+        if not isinstance(rows, list) or len(rows) != len(points):
+            raise TravelTimeProviderError("Amazon Location returned an incomplete route matrix")
+        matrix = []
+        for row in rows:
+            if not isinstance(row, list) or len(row) != len(points):
+                raise TravelTimeProviderError("Amazon Location returned an incomplete route-matrix row")
+            parsed_row = []
+            for cell in row:
+                if not isinstance(cell, dict) or cell.get("Error") or cell.get("Duration") is None:
+                    raise TravelTimeProviderError("Amazon Location could not route every stop pair")
+                parsed_row.append(round(float(cell["Duration"]) / 60, 3))
+            matrix.append(parsed_row)
+        return matrix
+
+    def directions(self, points, alternatives=2):
+        if not 2 <= len(points) <= 16:
+            raise ValueError("Amazon Location directions require 2-16 points")
+        payload = self._call(
+            "calculate_routes",
+            Origin=_position(points[0]),
+            Destination=_position(points[-1]),
+            Waypoints=[{"Position": _position(point)} for point in points[1:-1]],
+            InstructionsMeasurementSystem="Imperial",
+            LegAdditionalFeatures=["Summary", "TravelStepInstructions"],
+            LegGeometryFormat="Simple",
+            MaxAlternatives=int(alternatives),
+            OptimizeRoutingFor="FastestRoute",
+            Traffic={"Usage": "UseTrafficData"},
+            TravelMode="Car",
+        )
+        routes = payload.get("Routes") if isinstance(payload, dict) else None
+        if not routes:
+            raise TravelTimeProviderError("Amazon Location returned no road geometry")
+        return [_parse_amazon_route(route) for route in routes[: int(alternatives) + 1]]
 
 
 class OpenRouteServiceProvider:
@@ -37,7 +104,7 @@ class OpenRouteServiceProvider:
         if not 2 <= len(points) <= 16:
             raise ValueError("openrouteservice matrix requires 2-16 points for this optimizer")
         payload = self._post("/v2/matrix/driving-car", {
-            "locations": [[float(point["lon"]), float(point["lat"])] for point in points],
+            "locations": [_position(point) for point in points],
             "metrics": ["duration"],
         })
         durations = payload.get("durations")
@@ -51,7 +118,7 @@ class OpenRouteServiceProvider:
         return matrix
 
     def directions(self, points, alternatives=2):
-        coordinates = [[float(point["lon"]), float(point["lat"])] for point in points]
+        coordinates = [_position(point) for point in points]
         body = {"coordinates": coordinates, "instructions": True, "units": "mi"}
         if len(coordinates) == 2 and alternatives:
             body["alternative_routes"] = {
@@ -64,17 +131,8 @@ class OpenRouteServiceProvider:
         if not features:
             raise TravelTimeProviderError("openrouteservice returned no road geometry")
         routes = [_parse_feature(feature) for feature in features]
-
-        # ORS' built-in alternative_routes option applies only to a simple
-        # origin/destination trip. For a service route with waypoints, request
-        # a shortest-road variant while preserving the optimizer's exact stop
-        # sequence. Reordering waypoints here would make the returned geometry
-        # disagree with the selected stops and trip schedule.
         if len(coordinates) > 2 and alternatives:
-            variants = [
-                {**body, "preference": "shortest"},
-            ]
-            for variant in variants[: int(alternatives)]:
+            for variant in [{**body, "preference": "shortest"}][: int(alternatives)]:
                 try:
                     candidate_payload = self._post("/v2/directions/driving-car/geojson", variant)
                 except TravelTimeProviderError:
@@ -89,6 +147,48 @@ class OpenRouteServiceProvider:
         return routes[: int(alternatives) + 1]
 
 
+def _position(point):
+    return [float(point["lon"]), float(point["lat"])]
+
+
+def _miles(value):
+    return round(float(value) / METERS_PER_MILE, 3) if value is not None else None
+
+
+def _minutes(value):
+    return round(float(value) / 60, 3) if value is not None else None
+
+
+def _parse_amazon_route(route):
+    legs = []
+    coordinates = []
+    for index, leg in enumerate(route.get("Legs") or []):
+        line = (leg.get("Geometry") or {}).get("LineString") or []
+        if coordinates and line and coordinates[-1] == line[0]:
+            coordinates.extend(line[1:])
+        else:
+            coordinates.extend(line)
+        steps = [{
+            "instruction": str(step.get("Instruction") or ""),
+            "distanceMiles": _miles(step.get("Distance")),
+            "durationMinutes": _minutes(step.get("Duration")),
+        } for step in leg.get("TravelSteps") or []]
+        legs.append({
+            "index": index,
+            "distanceMiles": _miles(leg.get("Distance")),
+            "durationMinutes": _minutes(leg.get("Duration")),
+            "steps": steps,
+        })
+    if not coordinates:
+        raise TravelTimeProviderError("Amazon Location returned no road geometry")
+    return {
+        "coordinates": coordinates,
+        "legs": legs,
+        "distanceMiles": _miles(route.get("Distance")),
+        "durationMinutes": _minutes(route.get("Duration")),
+    }
+
+
 def _parse_feature(feature):
     properties = feature.get("properties") or {}
     summary = properties.get("summary") or {}
@@ -97,19 +197,19 @@ def _parse_feature(feature):
         steps = [{
             "instruction": str(step.get("instruction") or ""),
             "distanceMiles": step.get("distance"),
-            "durationMinutes": round(float(step["duration"]) / 60, 3) if step.get("duration") is not None else None,
+            "durationMinutes": _minutes(step.get("duration")),
         } for step in segment.get("steps") or []]
         legs.append({
             "index": index,
             "distanceMiles": segment.get("distance"),
-            "durationMinutes": round(float(segment["duration"]) / 60, 3) if segment.get("duration") is not None else None,
+            "durationMinutes": _minutes(segment.get("duration")),
             "steps": steps,
         })
     return {
         "coordinates": feature.get("geometry", {}).get("coordinates") or [],
         "legs": legs,
         "distanceMiles": summary.get("distance"),
-        "durationMinutes": round(float(summary["duration"]) / 60, 3) if summary.get("duration") is not None else None,
+        "durationMinutes": _minutes(summary.get("duration")),
     }
 
 
@@ -122,6 +222,26 @@ def _same_route(candidate, routes):
         if signature == other_signature:
             return True
     return False
+
+
+def _configured_provider():
+    provider = os.getenv("ROUTING_PROVIDER", "aws_location").strip().lower()
+    if provider == "aws_location":
+        return AmazonLocationRoutesProvider()
+    if provider == "openrouteservice":
+        return OpenRouteServiceProvider()
+    raise TravelTimeProviderError("ROUTING_PROVIDER must be aws_location or openrouteservice")
+
+
+def get_road_route_matrix(points):
+    return _configured_provider().calculate_matrix(points)
+
+
+def get_road_route_directions(points, alternatives=2):
+    routes = _configured_provider().directions(points, alternatives=alternatives)
+    primary = dict(routes[0])
+    primary["alternatives"] = routes[1:]
+    return primary
 
 
 def get_openrouteservice_matrix(points):
