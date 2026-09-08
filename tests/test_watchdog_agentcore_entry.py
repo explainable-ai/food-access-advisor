@@ -47,7 +47,7 @@ def test_handler_sends_only_compact_deterministic_result_to_reporter(monkeypatch
         return ReporterResult()
 
     monkeypatch.setattr(entry, "run_watchdog_pass", lambda: run)
-    monkeypatch.setattr(entry, "refresh_additional_sources", lambda: [{
+    monkeypatch.setattr(entry, "refresh_additional_sources", lambda **_kwargs: [{
         "source_id": "cta_gtfs",
         "scope": "urban",
         "status": "complete",
@@ -65,6 +65,28 @@ def test_handler_sends_only_compact_deterministic_result_to_reporter(monkeypatch
     assert report["results"] == run["results"]
     assert result["reporting_status"] == "complete"
     assert result["summary"].startswith("One tract")
+
+
+def test_handler_refreshes_only_food_access_supplemental_sources(monkeypatch):
+    captured = {}
+
+    def refresh_additional_sources(**kwargs):
+        captured["kwargs"] = kwargs
+        return []
+
+    monkeypatch.setattr(entry, "refresh_additional_sources", refresh_additional_sources)
+    monkeypatch.setattr(entry, "run_watchdog_pass", lambda: {
+        "status": "no_pending", "pending": 0, "checked": 0,
+        "possible_change": 0, "still_needed": 0,
+    })
+
+    result = asyncio.run(entry.handler({"prompt": "Run."}))
+
+    assert captured["kwargs"] == {
+        "include_transit": False,
+        "include_legacy_farmers_markets": False,
+    }
+    assert result["reporting_status"] == "skipped_no_pending"
 
 
 def test_no_pending_skips_bedrock_reporter(monkeypatch):

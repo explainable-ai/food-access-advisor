@@ -24,6 +24,7 @@ OSM_MIN_RETAINED_FRACTION = 0.75
 OSM_MIN_BASELINE_RECORDS = 10
 SOURCE_HEALTH_CHANGE_TYPES = {"unavailable", "partial", "stale"}
 CLOSED_REVIEW_STATUSES = {"acknowledged", "no_decision_impact"}
+COMMUNITY_ACCESS_WATCH_EXCLUDED_SOURCES = {"cta_gtfs"}
 
 
 def _connect(db_path: Path = DB_PATH):
@@ -335,6 +336,11 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
             db_path=db_path,
             limit=None,
         )
+    if source_id is None:
+        raw_changes = [
+            change for change in raw_changes
+            if change["source_id"] not in COMMUNITY_ACCESS_WATCH_EXCLUDED_SOURCES
+        ]
     grouped: dict[str, list[dict[str, Any]]] = {}
     for change in raw_changes:
         grouped.setdefault(_finding_key(change), []).append(change)

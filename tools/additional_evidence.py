@@ -6,8 +6,13 @@ from typing import Callable
 from data_sources.chicago_socrata import ChicagoSocrataClient
 from data_sources.cta_gtfs import CTAGTFSClient
 from data_sources.contracts import ResourceEvidenceBatch
-from services.direct_source_signals import refresh_direct_sources
 from tools.evidence_snapshots import record_snapshot
+
+
+def refresh_direct_sources(*args, **kwargs):
+    from services.direct_source_signals import refresh_direct_sources as _refresh_direct_sources
+
+    return _refresh_direct_sources(*args, **kwargs)
 
 
 def _snapshot_batch(batch: ResourceEvidenceBatch, snapshot_fn: Callable = record_snapshot) -> dict:

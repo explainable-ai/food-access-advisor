@@ -96,6 +96,27 @@ def test_record_changes_remain_individually_auditable(tmp_path):
     assert all(item["occurrence_count"] == 1 for item in page["items"])
 
 
+def test_change_page_hides_transit_findings_from_default_watch_queue(tmp_path):
+    db = tmp_path / "snapshots.db"
+    record_snapshot("cta_gtfs", [{"entity_id": "stop-1"}], scope="urban", captured_at=NOW, db_path=db)
+    record_snapshot(
+        "cta_gtfs", [{"entity_id": "stop-2"}], scope="urban",
+        captured_at=NOW + timedelta(minutes=5), db_path=db,
+    )
+    record_snapshot(
+        "licenses", [], scope="urban", status="stale",
+        captured_at=NOW + timedelta(minutes=10), db_path=db,
+    )
+
+    default_page = read_change_page(db_path=db)
+    assert default_page["source_count"] == 1
+    assert [item["source_id"] for item in default_page["items"]] == ["licenses"]
+
+    transit_page = read_change_page(source_id="cta_gtfs", db_path=db)
+    assert transit_page["source_count"] == 1
+    assert transit_page["items"][0]["source_id"] == "cta_gtfs"
+
+
 def test_change_page_exposes_bounded_read_truncation(monkeypatch):
     class FakeStore:
         def read_changes_window(self, *, limit: int, source_id=None):
