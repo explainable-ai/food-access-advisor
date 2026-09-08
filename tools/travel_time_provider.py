@@ -160,23 +160,26 @@ def _minutes(value):
 
 
 def _parse_amazon_route(route):
+    route_summary = route.get("Summary") or route
     legs = []
     coordinates = []
     for index, leg in enumerate(route.get("Legs") or []):
+        leg_summary = leg.get("Summary") or leg
         line = (leg.get("Geometry") or {}).get("LineString") or []
         if coordinates and line and coordinates[-1] == line[0]:
             coordinates.extend(line[1:])
         else:
             coordinates.extend(line)
+        vehicle_details = leg.get("VehicleLegDetails") or {}
         steps = [{
             "instruction": str(step.get("Instruction") or ""),
             "distanceMiles": _miles(step.get("Distance")),
             "durationMinutes": _minutes(step.get("Duration")),
-        } for step in leg.get("TravelSteps") or []]
+        } for step in vehicle_details.get("TravelSteps") or leg.get("TravelSteps") or []]
         legs.append({
             "index": index,
-            "distanceMiles": _miles(leg.get("Distance")),
-            "durationMinutes": _minutes(leg.get("Duration")),
+            "distanceMiles": _miles(leg_summary.get("Distance")),
+            "durationMinutes": _minutes(leg_summary.get("Duration")),
             "steps": steps,
         })
     if not coordinates:
@@ -184,8 +187,8 @@ def _parse_amazon_route(route):
     return {
         "coordinates": coordinates,
         "legs": legs,
-        "distanceMiles": _miles(route.get("Distance")),
-        "durationMinutes": _minutes(route.get("Duration")),
+        "distanceMiles": _miles(route_summary.get("Distance")),
+        "durationMinutes": _minutes(route_summary.get("Duration")),
     }
 
 
