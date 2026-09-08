@@ -31,7 +31,12 @@ def calculate_feedback(tract_id: str, households_served: int) -> dict[str, Any]:
     current = (before.get("score_components") or {}).get("existing_coverage")
     if current is None:
         raise ValueError("Existing coverage is unavailable for this tract")
-    adjusted = min(1.0, max(0.0, current / 100 + households_served / float(households_total)))
+    current_ratio = min(1.0, max(0.0, current / 100))
+    served_share = min(1.0, households_served / float(households_total))
+    # existing_coverage is a 0..1 access-quality proxy, not a household count.
+    # Treat the served share as temporarily receiving full mobile-market
+    # coverage, while the remainder retains its current access quality.
+    adjusted = current_ratio + served_share * (1.0 - current_ratio)
     after = recompute_score_with_override(before, existing_coverage=adjusted)
     return {
         "tract_id": tract_id,
@@ -39,5 +44,6 @@ def calculate_feedback(tract_id: str, households_served: int) -> dict[str, Any]:
         "after": after,
         "households_served": households_served,
         "persisted": False,
+        "method": "coverage = current coverage + served household share × uncovered share",
         "note": "Illustrative recalculation only; prepared evidence and future Scout runs are unchanged.",
     }
