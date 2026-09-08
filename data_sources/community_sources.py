@@ -1,8 +1,9 @@
 """Allowlisted public-source monitoring for Community Access Watch.
 
 The adapters intentionally read only approved first-party pages. They extract
-Schema.org events when available and otherwise retain small, relevant text
-sections. A parser failure is partial evidence, never proof that programs ended.
+Schema.org events when available and otherwise use source-specific parsers.
+Navigation text and keyword-only page fragments are never findings. A parser
+failure is partial evidence, never proof that programs ended.
 """
 
 from __future__ import annotations
@@ -63,16 +64,18 @@ APPROVED_SOURCES: tuple[CommunitySource, ...] = (
         "greater_chicago_food_depository", "Greater Chicago Food Depository",
         "https://www.chicagosfoodbank.org/find-food-2/", "chicago",
         "food_assistance", "Pantries, meal programs, distributions, and hours.",
+        ("Explore our Network of Cook County and Chicago Food Pantries and Programs",),
     ),
     CommunitySource(
         "fresh_moves_mobile_market", "Fresh Moves Mobile Market",
-        "https://www.urbangrowerscollective.org/fresh-moves-mobile-market", "chicago",
+        "https://www.urbangrowerscollective.org/fresh-moves-mobile-market#schedule", "chicago",
         "mobile_market", "Recurring mobile-market stops and schedules.",
     ),
     CommunitySource(
         "northern_illinois_food_bank", "Northern Illinois Food Bank",
         "https://solvehungertoday.org/get-groceries-resources/", "rural",
         "mobile_market", "Free grocery and mobile-market schedules.",
+        ("Get Free & Fresh Groceries Weekly",),
     ),
     CommunitySource(
         "beyond_hunger_events", "Beyond Hunger",
@@ -81,7 +84,7 @@ APPROVED_SOURCES: tuple[CommunitySource, ...] = (
     ),
     CommunitySource(
         "chicago_farmers_markets", "City of Chicago Farmers Markets",
-        "https://www.chicago.gov/city/en/depts/dca/supp_info/farmers_market.html", "chicago",
+        "https://www.chicago.gov/city/en/depts/dca/supp_info/farmers_market_schedule.html", "chicago",
         "farmers_market", "Official seasonal market dates and locations.",
     ),
     CommunitySource(
@@ -94,6 +97,7 @@ APPROVED_SOURCES: tuple[CommunitySource, ...] = (
         "nourishing_hope_volunteer", "Nourishing Hope",
         "https://nourishinghopechi.org/volunteer/", "chicago",
         "volunteer", "Food packing, distribution, and delivery opportunities.",
+        ("Volunteer Opportunities",),
     ),
 )
 
@@ -109,14 +113,14 @@ DATE_TIME_RE = re.compile(
     r"\b\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?)\b",
     re.IGNORECASE,
 )
-SOURCE_TYPE_TERMS: dict[str, tuple[str, ...]] = {
-    "food_assistance": ("find food", "food pantry", "meal program", "free food"),
-    "mobile_market": ("mobile market", "mobile pantry", "free groceries"),
-    "community_event": ("hunger", "food", "fundraiser", "benefit", "workshop"),
-    "farmers_market": ("farmers market", "farmers' market"),
-    "food_justice": ("food justice", "food policy", "food summit"),
-    "volunteer": ("volunteer", "pack food", "deliver food", "food distribution"),
-}
+CLOCK_RE = re.compile(r"\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b", re.IGNORECASE)
+ADDRESS_RE = re.compile(
+    r"\b\d{1,5}\s+(?:[NSEW]\.?(?:orth|outh|ast|est)?\s+)?"
+    r"[A-Za-z.'’-]+(?:\s+[A-Za-z.'’-]+){0,4}\s+"
+    r"(?:St(?:reet)?|Ave(?:nue)?|Rd|Road|Blvd|Boulevard|Dr(?:ive)?|Pl(?:ace)?|"
+    r"Pkwy|Parkway|Ct|Court|Ln|Lane|Way)\b\.?",
+    re.IGNORECASE,
+)
 
 
 class CommunitySourceError(RuntimeError):
@@ -140,6 +144,7 @@ class _PageParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.blocks: list[str] = []
+        self.block_items: list[tuple[str, str]] = []
         self.json_ld: list[str] = []
         self.links: list[tuple[str, str]] = []
         self._block_tag: str | None = None
@@ -177,6 +182,7 @@ class _PageParser(HTMLParser):
             value = _clean_text(" ".join(self._block_parts))
             if value:
                 self.blocks.append(value)
+                self.block_items.append((tag, value))
             self._block_tag = None
             self._block_parts = []
         if tag == "a" and self._link_href:
@@ -267,9 +273,11 @@ def _citation(source: CommunitySource, retrieved_at: datetime) -> SourceCitation
 def _record_from_event(source: CommunitySource, event: dict[str, Any], retrieved_at: datetime) -> ResourceEvidence | None:
     name = _clean_text(event.get("name"))
     description = _clean_text(event.get("description"))
-    text = f"{name} {description} {source.description}"
+    text = f"{name} {description} {_location_text(event) or ''}"
     matches = keyword_matches(text)
-    if not matches and source.source_type not in {"farmers_market", "mobile_market", "food_justice"}:
+    if not name or (not matches and source.source_type not in {
+        "farmers_market", "mobile_market", "food_justice", "community_event"
+    }):
         return None
     url = event.get("url") or source.url
     if isinstance(url, dict):
@@ -298,27 +306,148 @@ def _record_from_event(source: CommunitySource, event: dict[str, Any], retrieved
     )
 
 
-def _relevant_sections(blocks: list[str], source: CommunitySource) -> list[str]:
-    selected: list[str] = []
-    for index, block in enumerate(blocks):
-        window = _clean_text(" ".join(blocks[max(0, index - 1): index + 2]))
-        matches = keyword_matches(window)
-        source_term = any(
-            term in window.casefold()
-            for term in SOURCE_TYPE_TERMS.get(source.source_type, ())
-        )
-        if matches or source_term:
-            if 25 <= len(window) <= 1500:
-                selected.append(window)
-    # Preserve order but eliminate nested/duplicate page fragments.
+def _text_record(
+    source: CommunitySource,
+    retrieved_at: datetime,
+    *,
+    name: str,
+    summary: str,
+    identity: str | None = None,
+    url: str | None = None,
+    start_at: str | None = None,
+    location: str | None = None,
+) -> ResourceEvidence:
+    return ResourceEvidence(
+        entity_id=_stable_id(source.source_id, identity or f"{name} {location or ''}"),
+        kind=source.source_type,
+        name=_clean_text(name)[:140],
+        status="published",
+        observed_at=None,
+        source_citation=_citation(source, retrieved_at),
+        attributes={
+            "summary": _clean_text(summary),
+            "start_at": start_at,
+            "location": location,
+            "url": url or source.url,
+            "matched_keywords": keyword_matches(summary),
+            "source_scope": source.scope,
+            "official_source": True,
+        },
+    )
+
+
+def _section(blocks: list[str], start: str, *ends: str) -> list[str]:
+    start_index = next(
+        (index for index, block in enumerate(blocks) if start.casefold() in block.casefold()),
+        None,
+    )
+    if start_index is None:
+        return []
     result: list[str] = []
-    seen: set[str] = set()
-    for value in selected:
-        key = value.casefold()
-        if key not in seen and not any(key in existing.casefold() for existing in result):
-            seen.add(key)
-            result.append(value)
-    return result[:50]
+    for block in blocks[start_index + 1:]:
+        if any(end.casefold() in block.casefold() for end in ends):
+            break
+        result.append(block)
+    return result
+
+
+def _fresh_moves_records(parser: _PageParser, source: CommunitySource, retrieved: datetime) -> list[ResourceEvidence]:
+    blocks = _section(parser.blocks, "Regular Mobile Market Schedule", "What's On The Bus", "Join")
+    records: list[ResourceEvidence] = []
+    weekday = ""
+    for block in blocks:
+        if re.fullmatch(r"(?:every other\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)days?", block, re.I):
+            weekday = block
+            continue
+        address = ADDRESS_RE.search(block)
+        clock = CLOCK_RE.search(block)
+        if not address or not clock:
+            continue
+        location = address.group(0).strip(" .,;")
+        prefix = block[:address.start()].strip(" -,:;")
+        name = prefix.rsplit(":", 1)[-1].strip(" -,:;")
+        if CLOCK_RE.search(name):
+            name = re.sub(CLOCK_RE, "", name)
+            name = re.sub(r"\b(?:to|through|until)\b|[-–—]", " ", name, flags=re.I)
+            name = _clean_text(name).strip(" -,:;")
+        name = name or location
+        summary = _clean_text(f"{weekday} {block}")
+        records.append(_text_record(
+            source, retrieved, name=f"Fresh Moves — {name}", summary=summary,
+            identity=location, start_at=_clean_text(f"{weekday} {clock.group(0)}"), location=location,
+        ))
+    return records
+
+
+def _beyond_hunger_records(parser: _PageParser, source: CommunitySource, retrieved: datetime) -> list[ResourceEvidence]:
+    blocks = _section(parser.blocks, "Upcoming Events", "Past Events")
+    links = {_clean_text(text).casefold(): urljoin(source.url, href) for href, text in parser.links if text}
+    records: list[ResourceEvidence] = []
+    for index, block in enumerate(blocks):
+        if not (DATE_TIME_RE.search(block) and (CLOCK_RE.search(block) or re.search(r"\b20\d{2}\b", block))):
+            continue
+        title = next((value for value in reversed(blocks[max(0, index - 3):index])
+                      if 3 <= len(value) <= 140 and not DATE_TIME_RE.search(value)), "")
+        if not title or title.casefold() in {"upcoming events", "learn more", "sold out"}:
+            continue
+        description = blocks[index + 1] if index + 1 < len(blocks) else ""
+        summary = _clean_text(f"{title} {block} {description}")
+        records.append(_text_record(
+            source, retrieved, name=title, summary=summary, identity=f"{title} {block}",
+            url=links.get(title.casefold(), source.url), start_at=block,
+        ))
+    return records
+
+
+def _city_market_records(parser: _PageParser, source: CommunitySource, retrieved: datetime) -> list[ResourceEvidence]:
+    records: list[ResourceEvidence] = []
+    for index, block in enumerate(parser.blocks):
+        window = _clean_text(" ".join(parser.blocks[max(0, index - 2):index + 2]))
+        address = ADDRESS_RE.search(window)
+        if not address or not CLOCK_RE.search(window) or not DATE_TIME_RE.search(window):
+            continue
+        preceding = parser.blocks[max(0, index - 2):index + 1]
+        name = next((value for value in preceding if "market" in value.casefold() and len(value) <= 140), "")
+        if not name:
+            name = window[:address.start()].strip(" -,:;")[-140:]
+        if not name:
+            continue
+        location = address.group(0).strip(" .,;")
+        records.append(_text_record(
+            source, retrieved, name=name, summary=window,
+            identity=f"{name} {location}", location=location,
+        ))
+    return records
+
+
+def _nourishing_hope_records(parser: _PageParser, source: CommunitySource, retrieved: datetime) -> list[ResourceEvidence]:
+    allowed = {
+        "children & families", "adults", "group or corporate group",
+        "home delivery driving", "community service", "students",
+    }
+    blocks = _section(parser.blocks, "Volunteer Opportunities", "Volunteer Sign In")
+    records: list[ResourceEvidence] = []
+    for index, block in enumerate(blocks):
+        if block.casefold() not in allowed:
+            continue
+        description = blocks[index + 1] if index + 1 < len(blocks) else block
+        records.append(_text_record(
+            source, retrieved, name=block,
+            summary=_clean_text(f"{block}: {description}"), identity=block,
+        ))
+    return records
+
+
+def _source_specific_records(
+    parser: _PageParser, source: CommunitySource, retrieved: datetime
+) -> list[ResourceEvidence]:
+    parsers = {
+        "fresh_moves_mobile_market": _fresh_moves_records,
+        "beyond_hunger_events": _beyond_hunger_records,
+        "chicago_farmers_markets": _city_market_records,
+    }
+    extractor = parsers.get(source.source_id)
+    return extractor(parser, source, retrieved) if extractor else []
 
 
 def parse_source_html(source: CommunitySource, html: str, *, retrieved_at: datetime | None = None) -> ResourceEvidenceBatch:
@@ -337,22 +466,7 @@ def parse_source_html(source: CommunitySource, html: str, *, retrieved_at: datet
                 if record:
                     records.append(record)
     if not records:
-        for section in _relevant_sections(parser.blocks, source):
-            records.append(ResourceEvidence(
-                entity_id=_stable_id(source.source_id, section),
-                kind=source.source_type,
-                name=section[:140].rstrip(),
-                status="published",
-                observed_at=None,
-                source_citation=_citation(source, retrieved),
-                attributes={
-                    "summary": section,
-                    "url": source.url,
-                    "matched_keywords": keyword_matches(section),
-                    "source_scope": source.scope,
-                    "official_source": True,
-                },
-            ))
+        records.extend(_source_specific_records(parser, source, retrieved))
     unique = {record.entity_id: record for record in records}
     records = list(unique.values())
     page_text = _clean_text(" ".join(parser.blocks)).casefold()
