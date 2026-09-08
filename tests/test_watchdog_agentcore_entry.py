@@ -47,13 +47,18 @@ def test_handler_sends_only_compact_deterministic_result_to_reporter(monkeypatch
         return ReporterResult()
 
     monkeypatch.setattr(entry, "run_watchdog_pass", lambda: run)
-    monkeypatch.setattr(entry, "refresh_additional_sources", lambda: [{
-        "source_id": "cta_gtfs",
-        "scope": "urban",
-        "status": "complete",
-        "record_count": 1000,
-        "changes": [{"large": "raw change must not be forwarded"}],
-    }])
+
+    def refresh_sources(**kwargs):
+        captured["refresh_kwargs"] = kwargs
+        return [{
+            "source_id": "chicago_food_inspections",
+            "scope": "urban",
+            "status": "complete",
+            "record_count": 1000,
+            "changes": [{"large": "raw change must not be forwarded"}],
+        }]
+
+    monkeypatch.setattr(entry, "refresh_additional_sources", refresh_sources)
     monkeypatch.setattr(entry, "build_watchdog_reporter", lambda: reporter)
 
     result = asyncio.run(entry.handler({"prompt": "Run the pass."}))
@@ -61,6 +66,10 @@ def test_handler_sends_only_compact_deterministic_result_to_reporter(monkeypatch
     report_json = captured["prompt"].split("\n", 1)[1]
     report = json.loads(report_json)
     assert report["supplemental_sources"][0]["change_count"] == 1
+    assert captured["refresh_kwargs"] == {
+        "include_transit": False,
+        "include_legacy_farmers_markets": False,
+    }
     assert "raw change must not be forwarded" not in captured["prompt"]
     assert report["results"] == run["results"]
     assert result["reporting_status"] == "complete"

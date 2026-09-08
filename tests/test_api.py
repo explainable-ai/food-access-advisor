@@ -601,3 +601,28 @@ def test_impact_metrics_returns_both_regions(tmp_path, monkeypatch):
     body = response.json()
     assert body["urban"]["total_flagged"] == 1
     assert body["rural"]["total_flagged"] == 1
+
+
+def test_watchdog_changes_excludes_non_community_history(monkeypatch):
+    captured = {}
+
+    def read_page(**kwargs):
+        captured.update(kwargs)
+        return {
+            "items": [],
+            "next_cursor": None,
+            "page_size": 0,
+            "open_finding_count": 0,
+            "source_count": 0,
+            "findings_window_truncated": False,
+        }
+
+    monkeypatch.setattr(api_main, "read_change_page", read_page)
+
+    response = client.get("/api/watchdog/changes")
+
+    assert response.status_code == 200
+    assert captured["excluded_source_ids"] == frozenset({"cta_gtfs"})
+    assert captured["excluded_source_scopes"] == frozenset({
+        "chicago_farmers_markets#urban"
+    })

@@ -19,16 +19,26 @@ def _snapshot_batch(batch: ResourceEvidenceBatch, snapshot_fn: Callable = record
 def refresh_additional_sources(*, socrata: ChicagoSocrataClient | None = None,
                                gtfs: CTAGTFSClient | None = None,
                                snapshot_fn: Callable = record_snapshot,
-                               include_direct_sources: bool = True) -> list[dict]:
-    """Fetch independent sources, recording failures without aborting siblings."""
+                               include_direct_sources: bool = True,
+                               include_transit: bool = True,
+                               include_legacy_farmers_markets: bool = True) -> list[dict]:
+    """Fetch independent sources, recording failures without aborting siblings.
+
+    Transit and the legacy Socrata farmers-market monitor remain available to
+    non-community callers. The Community Access Watch scheduler disables both
+    so its queue stays focused on food-access changes and the approved direct
+    farmers-market source is not duplicated.
+    """
     socrata = socrata or ChicagoSocrataClient(app_token=os.getenv("SOCRATA_APP_TOKEN") or None)
-    gtfs = gtfs or CTAGTFSClient()
     sources = [
         ("chicago_food_inspections", socrata.fetch_food_inspections),
         ("chicago_active_business_licenses", socrata.fetch_active_food_businesses),
-        ("chicago_farmers_markets", socrata.fetch_farmers_markets),
-        ("cta_gtfs", gtfs.fetch_stops),
     ]
+    if include_legacy_farmers_markets:
+        sources.append(("chicago_farmers_markets", socrata.fetch_farmers_markets))
+    if include_transit:
+        gtfs = gtfs or CTAGTFSClient()
+        sources.append(("cta_gtfs", gtfs.fetch_stops))
     results = []
     for source_id, fetch in sources:
         try:
