@@ -18,6 +18,7 @@ CHECK_LABELS = {
     "permit": "Permit",
     "policy": "Manifest policy",
 }
+KNOWN_COLD_CHAIN_RISKS = {"critical", "high", "watch", "medium", "low", "none"}
 
 
 def _canonical_status(scenario: dict[str, Any]) -> str:
@@ -182,6 +183,11 @@ def _inventory_identity(item: dict[str, Any]) -> str:
     return str(item.get("item_id") or item.get("sku") or item.get("item") or "").strip()
 
 
+def _cold_chain_risk(item: dict[str, Any]) -> str | None:
+    value = str(item.get("risk_status") or item.get("cold_chain_risk") or "").strip().lower()
+    return value if value in KNOWN_COLD_CHAIN_RISKS else None
+
+
 def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: float, *, inventory_store: S3InventoryStore | None = None, mission_id_factory=None) -> dict[str, Any]:
     """Draft a route-based mission without replacing existing previews."""
     if load_lbs <= 0 or time_window_hours <= 0:
@@ -191,15 +197,16 @@ def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: f
     store = inventory_store or S3InventoryStore()
     on_hand = store.read(ON_HAND_KEY)
     cold_chain = store.read(COLD_CHAIN_KEY)
-    cold_by_id = {_inventory_identity(item): item for item in cold_chain if _inventory_identity(item)}
+    cold_risk_by_id = {
+        _inventory_identity(item): _cold_chain_risk(item)
+        for item in cold_chain
+        if _inventory_identity(item)
+    }
     inventory = []
     for item in on_hand:
-        risk = cold_by_id.get(_inventory_identity(item), {})
         inventory.append({
             **item,
-            "cold_chain_risk": (
-                risk.get("risk_status") or risk.get("cold_chain_risk") or "unknown"
-            ),
+            "cold_chain_risk": cold_risk_by_id.get(_inventory_identity(item)) or "unknown",
         })
     route_minutes = float(route.get("route_minutes") or 0)
     capacity_used = float(route.get("capacity_used") or 0)
@@ -209,7 +216,9 @@ def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: f
     suggested_ids = {
         _inventory_identity(item) for item in load["items"] if _inventory_identity(item)
     }
-    missing_cold_chain = sorted(suggested_ids - set(cold_by_id))
+    missing_cold_chain = sorted(
+        item_id for item_id in suggested_ids if not cold_risk_by_id.get(item_id)
+    )
     time_limit_minutes = time_window_hours * 60
     checks = [
         {"check": "route", "status": "Ready", "finding": f"Router produced {len(route['selected_stops'])} viable stops.", "data_used": ["Router selected_stops", "Router route status"]},
