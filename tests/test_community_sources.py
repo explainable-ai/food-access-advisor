@@ -57,16 +57,46 @@ def test_json_ld_event_is_normalized_with_official_provenance():
     assert record.attributes["official_source"] is True
 
 
-def test_relevant_schedule_text_is_kept_without_schema_markup():
+def test_keyword_only_navigation_is_not_a_finding():
     html = """
-    <h2>Fresh Moves Mobile Market</h2>
-    <p>Mondays at Roosevelt Square Farm, 10:00 AM to 11:30 AM.</p>
-    <p>Free groceries are available while supplies last.</p>
+    <nav><a>Find Food</a><a>Donate Food</a><a>Volunteer</a></nav>
+    <p>Free groceries and mobile pantry programs.</p>
     """
     batch = parse_source_html(SOURCE, html)
+    assert batch.quality.status.value == "partial"
+    assert batch.records == []
+
+
+def test_fresh_moves_requires_a_schedule_time_and_address():
+    source = next(item for item in APPROVED_SOURCES if item.source_id == "fresh_moves_mobile_market")
+    html = """
+    <h2>Regular Mobile Market Schedule</h2>
+    <h3>Mondays</h3>
+    <p>10:00 AM to 11:30 AM: Roosevelt Square Farm, 1242 S Loomis St.</p>
+    <p>1:00 PM to 3:00 PM: Thresholds Austin, 334 N Menard Ave.</p>
+    <h2>What's On The Bus</h2>
+    """
+    batch = parse_source_html(source, html)
     assert batch.quality.status.value == "complete"
-    assert batch.records
-    assert any("mobile market" in record.attributes["summary"].casefold() for record in batch.records)
+    assert len(batch.records) == 2
+    assert all(record.attributes["start_at"] for record in batch.records)
+    assert {record.attributes["location"] for record in batch.records} == {
+        "1242 S Loomis St", "334 N Menard Ave"
+    }
+
+
+def test_beyond_hunger_requires_a_dated_upcoming_event():
+    source = next(item for item in APPROVED_SOURCES if item.source_id == "beyond_hunger_events")
+    html = """
+    <h2>Upcoming Events</h2>
+    <h3>Children's Storytime</h3>
+    <p>September 19, 2026, 10:30 AM to 11:30 AM</p>
+    <p>A family event supporting Beyond Hunger.</p>
+    <h2>Past Events</h2>
+    """
+    batch = parse_source_html(source, html)
+    assert batch.quality.status.value == "complete"
+    assert [record.name for record in batch.records] == ["Children's Storytime"]
 
 
 def test_empty_or_redesigned_page_is_partial_not_mass_removal():
@@ -121,7 +151,12 @@ def test_registry_contains_only_https_approved_sources():
 
 class BatchClient:
     def fetch(self, source):
-        return parse_source_html(source, "<p>Free groceries at a mobile pantry in Chicago.</p>")
+        return parse_source_html(source, """
+        <script type="application/ld+json">
+        {"@type":"Event","@id":"food-drive-1","name":"Free Grocery Food Drive",
+        "description":"Mobile pantry for Chicago families","startDate":"2026-09-10T10:00:00-05:00"}
+        </script>
+        """)
 
 
 def test_refresh_isolates_sources_and_never_changes_plans():
