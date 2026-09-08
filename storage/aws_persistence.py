@@ -270,10 +270,17 @@ class AwsEvidenceStore:
     def read_changes(self, *, limit: int, source_id: str | None = None) -> list[dict[str, Any]]:
         return self.read_all_changes(source_id=source_id, limit=limit)
 
-    def read_changes_window(self, *, limit: int, source_id: str | None = None) -> tuple[list[dict[str, Any]], bool]:
+    def read_changes_window(self, *, limit: int, source_id: str | None = None,
+                            excluded_source_ids: set[str] | frozenset[str] | None = None,
+                            excluded_source_scopes: set[str] | frozenset[str] | None = None,
+                            ) -> tuple[list[dict[str, Any]], bool]:
         expression = Attr("suppressed").not_exists() | Attr("suppressed").eq(False)
         if source_id:
             expression = expression & Attr("source_id").eq(source_id)
+        for excluded_source_id in sorted(excluded_source_ids or ()):
+            expression = expression & Attr("source_id").ne(excluded_source_id)
+        for excluded_source_scope in sorted(excluded_source_scopes or ()):
+            expression = expression & Attr("source_scope").ne(excluded_source_scope)
         try:
             items, query_truncated = _query_up_to_with_state(
                 self.table,
