@@ -1,4 +1,4 @@
-"""Advisor agent — the on-demand half of the Food-Access Site Recommender.
+"""Scout agent — the on-demand siting member of the Last Mile Crew.
 
 Ask it something like:
     "Where in Chicago would a new food resource have the highest impact?"
@@ -7,7 +7,7 @@ It calls rank_chicago_tracts, which uses the same complete prepared Chicago
 candidate universe and resource snapshot as the workspace, then calls
 write_site_evidence_brief for the single top result.
 
-The Watchdog agent (scheduled, checks whether a past recommendation was ever
+Sentry (scheduled, checks whether a past recommendation was ever
 acted on) is a separate, later piece — see the tracker notes on the elevated
 scope. This file is the MVP: get this working first.
 """
@@ -25,18 +25,18 @@ from tools.telemetry import configure_telemetry, print_metrics
 load_dotenv()
 configure_telemetry()
 
-SYSTEM_PROMPT = f"""You are the Food-Access Advisor for {PILOT_CITY['name']}. \
-Community organizers and city planners ask you where a new food resource \
-(a farm, market, or food-rescue drop point) would do the most good.
+SYSTEM_PROMPT = f"""You are Scout for LastMile Market in {PILOT_CITY['name']}. \
+The operations crew asks you which census tracts should be prioritized for \
+the mobile market.
 
 For every siting question:
 1. Call rank_chicago_tracts to retrieve the deterministic ranking over the \
 same complete prepared Chicago tract universe and resource snapshot shown in \
-the Site Advisor workspace. Never rank tracts yourself.
+the Prioritize Sites workspace. Never rank tracts yourself.
 2. Call write_site_evidence_brief on the single top-ranked tract and include its \
 output verbatim in your answer.
 3. Call flag_top_tract_for_recheck on that same top-ranked tract. This is \
-what lets the Watchdog agent check back later on whether a resource ever \
+what lets Sentry check back later on whether a resource ever \
 actually appeared — do this every time, not just when asked.
 
 Attribute each measure to the source carried in the scored tract: USDA Food \
@@ -53,10 +53,10 @@ guessing at data you don't have.
 
 @tool
 def flag_top_tract_for_recheck(top_tract: dict) -> dict:
-    """Log the top-ranked tract so the Watchdog can check on it later.
+    """Log the top-ranked tract so Sentry can check on it later.
 
     A thin, Advisor-specific wrapper around `flagged_tracts.flag_tract_for_recheck`
-    — `recommendation_type` ("site") and `source_agent` ("advisor") are fixed
+    — `recommendation_type` ("site") and `source_agent` ("scout") are fixed
     here, not left as arguments the model could set, so this tool can only
     ever write a "this was a site recommendation, from the Advisor" row.
     That mirrors the boundary discipline used elsewhere in this project:
@@ -74,11 +74,11 @@ def flag_top_tract_for_recheck(top_tract: dict) -> dict:
     return flag_tract_for_recheck(
         tract_fips=top_tract["tract_fips"],
         recommendation_type="site",
-        source_agent="advisor",
+        source_agent="scout",
         population=top_tract.get("population"),
         centroid_lat=top_tract.get("centroid_lat"),
         centroid_lon=top_tract.get("centroid_lon"),
-        note=f"Flagged from an Advisor recommendation (need_score={top_tract.get('need_score')}).",
+        note=f"Flagged from a Scout recommendation (need_score={top_tract.get('need_score')}).",
     )
 
 
@@ -96,7 +96,7 @@ def build_advisor() -> Agent:
 
 if __name__ == "__main__":
     advisor = build_advisor()
-    print(f"Food-Access Advisor ready — pilot city: {PILOT_CITY['name']}")
+    print(f"LastMile Market Scout ready — pilot city: {PILOT_CITY['name']}")
     print("Ask a siting question (e.g. \"where's the highest-need spot for a "
           "new food resource?\"), or Ctrl+C to quit.\n")
     while True:
