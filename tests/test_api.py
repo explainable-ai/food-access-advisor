@@ -54,6 +54,7 @@ def test_health_endpoint_has_no_dependencies():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert client.get("/ping").json() == {"status": "ok"}
 
 
 def test_crew_brief_returns_structured_live_steps(monkeypatch):
@@ -72,6 +73,9 @@ def test_agentcore_invoke_uses_same_crew_flow(monkeypatch):
     response = client.post("/invoke", json={"request": "brief the crew"})
     assert response.status_code == 200
     assert response.json()["final_summary"] == "done"
+    runtime_response = client.post("/invocations", json={"request": "brief the crew"})
+    assert runtime_response.status_code == 200
+    assert runtime_response.json()["final_summary"] == "done"
 
 
 def test_demo_feedback_does_not_claim_persistence(monkeypatch):
