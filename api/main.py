@@ -81,6 +81,7 @@ from services.feedback_demo import calculate_feedback
 from storage.inventory import (
     COLD_CHAIN_KEY,
     ON_HAND_KEY,
+    InventoryConflictError,
     InventoryStoreError,
     S3InventoryStore,
     get_inventory_store,
@@ -204,6 +205,8 @@ def _inventory_merge(key: str, updates: list[dict[str, Any]], store: S3Inventory
         return store.merge(key, updates)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except InventoryConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except InventoryStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
