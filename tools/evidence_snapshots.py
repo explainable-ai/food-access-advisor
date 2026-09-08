@@ -329,7 +329,10 @@ def read_change_page(*, limit: int = 10, cursor: str | None = None,
     findings_window_truncated = False
     if bounded_aws_read:
         raw_changes, findings_window_truncated = AwsEvidenceStore().read_changes_window(
-            limit=recent_window_limit, source_id=source_id
+            limit=recent_window_limit,
+            source_id=source_id,
+            excluded_source_ids=excluded_source_ids,
+            excluded_source_scopes=excluded_source_scopes,
         )
     else:
         raw_changes = _all_changes(
