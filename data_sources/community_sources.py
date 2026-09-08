@@ -114,6 +114,21 @@ DATE_TIME_RE = re.compile(
     re.IGNORECASE,
 )
 CLOCK_RE = re.compile(r"\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b", re.IGNORECASE)
+TIME_RANGE_RE = re.compile(
+    r"\b\d{1,2}:\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?\s*(?:-|–|—|to)\s*"
+    r"\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?\b",
+    re.IGNORECASE,
+)
+DIRECTIONAL_ADDRESS_RE = re.compile(
+    r"\b\d{1,5}(?:-\d{1,5})?\s+[NSEW]\.?\s+[A-Za-z.'’-]+"
+    r"(?:\s+(?:St(?:reet)?|Ave(?:nue)?|Rd|Road|Blvd|Boulevard|Dr(?:ive)?|"
+    r"Pl(?:ace)?|Pkwy|Parkway|Ct|Court|Ln|Lane|Way))?\b",
+    re.IGNORECASE,
+)
+WEEKDAY_RE = re.compile(
+    r"^(?:every other\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)days?\b",
+    re.IGNORECASE,
+)
 ADDRESS_RE = re.compile(
     r"\b\d{1,5}\s+(?:[NSEW]\.?(?:orth|outh|ast|est)?\s+)?"
     r"[A-Za-z.'’-]+(?:\s+[A-Za-z.'’-]+){0,4}\s+"
@@ -356,20 +371,18 @@ def _fresh_moves_records(parser: _PageParser, source: CommunitySource, retrieved
     records: list[ResourceEvidence] = []
     weekday = ""
     for block in blocks:
-        if re.fullmatch(r"(?:every other\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)days?", block, re.I):
-            weekday = block
-            continue
-        address = ADDRESS_RE.search(block)
-        clock = CLOCK_RE.search(block)
+        weekday_match = WEEKDAY_RE.search(block)
+        address = ADDRESS_RE.search(block) or DIRECTIONAL_ADDRESS_RE.search(block)
+        clock = TIME_RANGE_RE.search(block) or CLOCK_RE.search(block)
+        if weekday_match:
+            weekday = weekday_match.group(0).strip(" :,") if address else block
         if not address or not clock:
             continue
         location = address.group(0).strip(" .,;")
         prefix = block[:address.start()].strip(" -,:;")
-        name = prefix.rsplit(":", 1)[-1].strip(" -,:;")
-        if CLOCK_RE.search(name):
-            name = re.sub(CLOCK_RE, "", name)
-            name = re.sub(r"\b(?:to|through|until)\b|[-–—]", " ", name, flags=re.I)
-            name = _clean_text(name).strip(" -,:;")
+        # The stop name follows the complete time range. Splitting on a colon
+        # corrupts times such as 4:30-6:00, which previously made live rows unusable.
+        name = prefix[clock.end():].strip(" -,:;")
         name = name or location
         summary = _clean_text(f"{weekday} {block}")
         records.append(_text_record(
