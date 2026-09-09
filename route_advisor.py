@@ -41,6 +41,45 @@ from tools.travel_time_provider import get_road_route_matrix
 load_dotenv()
 configure_telemetry()
 
+
+CONTRIBUTION_LABELS = {
+    "food_access_gap": "food-access gap",
+    "poverty": "economic hardship",
+    "no_vehicle": "households without a vehicle",
+    "population_served": "population reach",
+    "transit_burden": "transit burden",
+    "existing_coverage": "limited existing coverage",
+}
+
+
+def _stop_name(tract: dict, index: int) -> str:
+    for key in ("community_area", "place_name", "municipality", "name", "tract_name"):
+        value = str(tract.get(key) or "").strip()
+        if value:
+            return value
+    region = str(tract.get("region_name") or tract.get("county_name") or "").strip()
+    return f"{region or 'Selected study area'} priority area {tract.get('rank') or index + 1}"
+
+
+def _selection_reason(tract: dict) -> str:
+    contributions = tract.get("score_contributions") or {}
+    drivers = [
+        CONTRIBUTION_LABELS.get(key, key.replace("_", " "))
+        for key, value in sorted(
+            contributions.items(), key=lambda item: float(item[1] or 0), reverse=True
+        )
+        if float(value or 0) > 0
+    ][:2]
+    households = tract.get("households_total")
+    parts = [
+        f"Scout rank {tract.get('rank') or '—'} with need score {float(tract.get('need_score') or 0):.0f}"
+    ]
+    if drivers:
+        parts.append(f"strongest measured factors: {', '.join(drivers)}")
+    if households is not None:
+        parts.append(f"represents {float(households):,.0f} households")
+    return "; ".join(parts) + "."
+
 SYSTEM_PROMPT = f"""You are Router, LastMile Market's route-planning agent for {PILOT_RURAL_COUNTY['name']}. \
 Community organizers and regional planners ask you where a route or \
 distribution-schedule change — a mobile market stop, a food-bank delivery \
@@ -121,12 +160,22 @@ def run_route_advisor(top_tracts: list, hub: dict | None, time_window_hours: flo
         return {"status": "infeasible", "reason": "Scout returned no candidate tracts", "travel_time_source": "not_run", "selected_stops": [], "unselected_stops": []}
     origin = hub or OPERATIONS_HUB
     candidate_tracts = top_tracts[:5]
-    households = [max(float(row.get("households_total") or row.get("population") or 1), 1) for row in candidate_tracts]
-    total_households = sum(households)
+    represented_households = [
+        max(float(row.get("households_total") or 0), 0) for row in candidate_tracts
+    ]
+    demand_weights = [
+        households
+        if households > 0
+        else max(float(row.get("population") or 1), 1)
+        for row, households in zip(candidate_tracts, represented_households)
+    ]
+    total_households = sum(demand_weights)
     candidates = []
     allocated = 0.0
-    for index, (tract, household_count) in enumerate(zip(candidate_tracts, households)):
-        demand = load_lbs - allocated if index == len(candidate_tracts) - 1 else round(load_lbs * household_count / total_households, 2)
+    for index, (tract, household_count, demand_weight) in enumerate(
+        zip(candidate_tracts, represented_households, demand_weights)
+    ):
+        demand = load_lbs - allocated if index == len(candidate_tracts) - 1 else round(load_lbs * demand_weight / total_households, 2)
         allocated += demand
         candidates.append({
             "stop_id": str(tract.get("tract_fips")),
@@ -137,6 +186,8 @@ def run_route_advisor(top_tracts: list, hub: dict | None, time_window_hours: flo
             "households": household_count,
             "need_score": float(tract.get("need_score") or 0),
             "rank": tract.get("rank") or index + 1,
+            "name": _stop_name(tract, index),
+            "selection_reason": _selection_reason(tract),
             "community_area": tract.get("community_area"),
             "population": tract.get("population"),
             "score_components": tract.get("score_components") or {},
