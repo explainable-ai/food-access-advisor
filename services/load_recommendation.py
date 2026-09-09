@@ -11,19 +11,12 @@ from storage.inventory import ON_HAND_KEY, S3InventoryStore
 
 
 RISK_ORDER = {"critical": 0, "high": 1, "watch": 2, "medium": 3, "low": 4, "none": 5}
-SKU_CATEGORY_HINTS = {
-    "PRD-001": {"produce"},
-    "PRD-002": {"produce"},
-    "PRD-003": {"produce"},
-    "PRD-004": {"dairy"},
-    "PRD-005": {"dairy"},
-    "PRD-006": {"dairy"},
-    "PRD-007": {"protein", "frozen"},
-    "PRD-008": {"produce", "frozen"},
-    "PRD-009": {"pantry"},
-    "PRD-010": {"pantry"},
-    "PRD-011": {"protein", "pantry"},
-    "PRD-012": {"pantry"},
+NAME_CATEGORY_HINTS = {
+    "produce": ("produce", "apple", "potato", "fruit", "vegetable"),
+    "dairy": ("dairy", "milk", "cheese", "egg"),
+    "protein": ("protein", "chicken", "bean"),
+    "frozen": ("frozen",),
+    "pantry": ("pantry", "shelf-stable", "shelf stable", "rice", "oatmeal", "grain"),
 }
 
 
@@ -43,13 +36,19 @@ def _risk(item: dict[str, Any]) -> str:
 
 
 def _categories(item: dict[str, Any]) -> set[str]:
-    values = {
-        str(item.get("category") or "").strip().lower(),
-        str(item.get("temperature_zone") or "").strip().lower(),
-    }
-    values.discard("")
-    sku = str(item.get("sku") or item.get("item_id") or "").strip().upper()
-    values.update(SKU_CATEGORY_HINTS.get(sku, set()))
+    catalog_category = str(item.get("category") or "").strip().lower()
+    values = {catalog_category} if catalog_category else set()
+    values.update(catalog_category.replace("-", " ").split())
+    temperature_zone = str(item.get("temperature_zone") or "").strip().lower()
+    if temperature_zone == "frozen":
+        values.add("frozen")
+
+    # Compatibility for the already-deployed inventory object, which predates
+    # the catalog category field. New objects should carry `category` directly.
+    item_name = str(item.get("item") or item.get("name") or "").strip().lower()
+    for category, hints in NAME_CATEGORY_HINTS.items():
+        if any(hint in item_name for hint in hints):
+            values.add(category)
     return values
 
 
