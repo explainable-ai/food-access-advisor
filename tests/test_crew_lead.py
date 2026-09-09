@@ -37,6 +37,43 @@ def test_crew_chain_discloses_inferred_area(monkeypatch):
     assert result["steps"][1]["summary"].startswith("Assumed study area: rural_fringe")
 
 
+def test_crew_returns_versioned_context_manifest(monkeypatch):
+    _successful_dependencies(monkeypatch)
+    result = crew_lead.run_crew_brief(
+        "Take 200 lbs of produce to Chicago in four hours.",
+        agent=FakeCrewAgent(),
+    )
+
+    assert result["context"]["schema_version"] == "lastmile-context-v1"
+    assert result["context"]["request_intent"]["load_lbs"] == 200
+    assert result["context"]["request_intent"]["time_window_hours"] == 4
+    assert result["context"]["request_intent"]["categories"] == ["produce"]
+    assert set(result["context"]["agent_views"]) == {
+        "sentry",
+        "scout",
+        "router",
+        "dispatch",
+    }
+
+
+def test_crew_rejects_model_changes_to_parsed_load(monkeypatch):
+    _successful_dependencies(monkeypatch)
+
+    class WrongLoadAgent:
+        def __call__(self, prompt):
+            crew_lead.sentry_check("chicago_neighborhoods")
+            crew_lead.scout("chicago_neighborhoods", prompt)
+            crew_lead.router([], {}, 4, 250)
+
+    result = crew_lead.run_crew_brief(
+        "Take 200 lbs to Chicago in four hours.", agent=WrongLoadAgent()
+    )
+
+    assert result["steps"][-1]["agent"] == "router"
+    assert result["steps"][-1]["status"] == "failed"
+    assert "changed the load" in result["steps"][-1]["summary"]
+
+
 def test_category_intent_preserves_explicit_exclusions():
     requested, excluded = crew_lead._category_intent("200 lbs of produce, no dairy")
 
