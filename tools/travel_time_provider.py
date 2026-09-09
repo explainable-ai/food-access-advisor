@@ -17,6 +17,10 @@ def _cache_ttl_seconds():
     return max(float(os.getenv("ROUTING_CACHE_TTL_SECONDS", "300")), 0)
 
 
+def _cache_max_entries():
+    return max(int(os.getenv("ROUTING_CACHE_MAX_ENTRIES", "256")), 1)
+
+
 def _points_key(points):
     return tuple((round(float(point["lat"]), 5), round(float(point["lon"]), 5)) for point in points)
 
@@ -35,10 +39,18 @@ def _cached(key):
 
 
 def _remember(key, value):
-    if _cache_ttl_seconds() <= 0:
+    ttl = _cache_ttl_seconds()
+    if ttl <= 0:
         return value
     with _ROUTE_CACHE_LOCK:
-        _ROUTE_CACHE[key] = (monotonic(), value)
+        now = monotonic()
+        expired = [cache_key for cache_key, row in _ROUTE_CACHE.items() if now - row[0] > ttl]
+        for cache_key in expired:
+            _ROUTE_CACHE.pop(cache_key, None)
+        while len(_ROUTE_CACHE) >= _cache_max_entries():
+            oldest = min(_ROUTE_CACHE, key=lambda cache_key: _ROUTE_CACHE[cache_key][0])
+            _ROUTE_CACHE.pop(oldest, None)
+        _ROUTE_CACHE[key] = (now, value)
     return value
 
 
