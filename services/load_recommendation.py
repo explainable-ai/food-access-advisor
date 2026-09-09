@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
 from math import floor, gcd
+import os
 from typing import Any
 
 from strands import tool
@@ -19,6 +20,8 @@ NAME_CATEGORY_HINTS = {
     "frozen": ("frozen",),
     "pantry": ("pantry", "shelf-stable", "shelf stable", "rice", "oatmeal", "grain"),
 }
+ALLOCATION_MAX_STATES = max(int(os.getenv("LOAD_ALLOCATION_MAX_STATES", "6000")), 1)
+ALLOCATION_MAX_CANDIDATES = max(int(os.getenv("LOAD_ALLOCATION_MAX_CANDIDATES", "250000")), 1)
 
 
 def _available_quantity(item: dict[str, Any]) -> float:
@@ -93,6 +96,8 @@ def _allocate_quantities(items: list[dict[str, Any]], capacity_lbs: float) -> tu
     weights = [weight // divisor for weight in item_cents]
     empty = (0,) * len(items)
     combinations: dict[int, tuple[int, ...]] = {0: empty}
+    candidates_examined = 0
+    bounded = False
 
     for index, (item, weight) in enumerate(zip(items, weights)):
         available = min(floor(_available_quantity(item)), target // weight)
@@ -100,6 +105,10 @@ def _allocate_quantities(items: list[dict[str, Any]], capacity_lbs: float) -> tu
         for current_weight, counts in previous:
             max_quantity = min(available, (target - current_weight) // weight)
             for quantity in range(1, max_quantity + 1):
+                candidates_examined += 1
+                if candidates_examined > ALLOCATION_MAX_CANDIDATES or len(combinations) >= ALLOCATION_MAX_STATES:
+                    bounded = True
+                    break
                 next_weight = current_weight + quantity * weight
                 candidate = list(counts)
                 candidate[index] = quantity
@@ -107,6 +116,10 @@ def _allocate_quantities(items: list[dict[str, Any]], capacity_lbs: float) -> tu
                 existing = combinations.get(next_weight)
                 if existing is None or _allocation_score(candidate_tuple, items) > _allocation_score(existing, items):
                     combinations[next_weight] = candidate_tuple
+            if bounded:
+                break
+        if bounded:
+            break
 
     filled = max(combinations)
     remaining = max(0.0, float(capacity_lbs) - (filled * divisor / 100))
@@ -146,13 +159,17 @@ def build_load_recommendation(
     quantities, remaining = _allocate_quantities(ordered, capacity_lbs)
 
     suggestions = []
+    covered_requested_categories: set[str] = set()
     for item, qty in zip(ordered, quantities):
         if qty <= 0:
             continue
         unit_lbs = _unit_weight(item)
         used_lbs = round(qty * unit_lbs, 2)
         risk = _risk(item)
-        category_text = ", ".join(sorted(_categories(item))) or "catalog item"
+        item_categories = _categories(item)
+        matched_categories = sorted(item_categories & requested)
+        covered_requested_categories.update(matched_categories)
+        category_text = ", ".join(sorted(item_categories)) or "catalog item"
         suggestions.append({
             "item_id": item.get("item_id") or item.get("sku") or item.get("item"),
             "item": item.get("item") or item.get("name") or item.get("sku"),
@@ -160,7 +177,7 @@ def build_load_recommendation(
             "weight_lbs": used_lbs,
             "risk_status": risk,
             "category": str(item.get("category") or "") or None,
-            "matched_categories": sorted(_categories(item) & requested),
+            "matched_categories": matched_categories,
             "reason": (
                 f"Matches requested category ({category_text}); allocation is limited by on-hand inventory and the requested load."
                 if requested
@@ -179,7 +196,7 @@ def build_load_recommendation(
         "capacity_remaining_lbs": round(remaining, 2),
         "requested_categories": sorted(requested),
         "excluded_categories": sorted(excluded),
-        "category_match": not (requested or excluded) or bool(eligible),
+        "category_match": requested.issubset(covered_requested_categories),
         "allocation_basis": "requested category, on-hand quantity, stop household share, requested load, cold-chain risk",
         "source": "S3 inventory/on-hand.json",
     }

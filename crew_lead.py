@@ -109,6 +109,13 @@ def _category_intent(request: str) -> tuple[list[str], list[str]]:
                     )
                     or re.match(r"[- ]free\b", suffix)
                 )
+                if negated:
+                    cue = re.search(
+                        r"(?:\bno\b|\bwithout\b|\bexclude(?:d|ing)?\b|\bexcept\b)[^,.;:!?]*$",
+                        prefix,
+                    )
+                    if cue and re.search(r"\b(?:but|however|though|yet)\b", cue.group(0)):
+                        negated = False
                 (excluded if negated else requested).add(category)
     requested.difference_update(excluded)
     return sorted(requested), sorted(excluded)
