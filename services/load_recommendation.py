@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from math import floor
+from decimal import Decimal, ROUND_HALF_UP
+from math import floor, gcd
 from typing import Any
 
 from strands import tool
@@ -52,11 +53,64 @@ def _categories(item: dict[str, Any]) -> set[str]:
     return values
 
 
-def _matches_categories(item: dict[str, Any], requested_categories: set[str]) -> bool:
-    if not requested_categories:
-        return True
+def _matches_categories(
+    item: dict[str, Any],
+    requested_categories: set[str],
+    excluded_categories: set[str],
+) -> bool:
     tags = _categories(item)
-    return bool(tags & requested_categories)
+    if tags & excluded_categories:
+        return False
+    return not requested_categories or bool(tags & requested_categories)
+
+
+def _weight_cents(value: float) -> int:
+    return max(
+        int((Decimal(str(value)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)),
+        1,
+    )
+
+
+def _allocation_score(counts: tuple[int, ...], items: list[dict[str, Any]]) -> tuple[int, int, int]:
+    distinct = sum(quantity > 0 for quantity in counts)
+    risk_cost = sum(
+        RISK_ORDER.get(_risk(item), 99) * quantity
+        for item, quantity in zip(items, counts)
+    )
+    return distinct, -risk_cost, -sum(counts)
+
+
+def _allocate_quantities(items: list[dict[str, Any]], capacity_lbs: float) -> tuple[list[int], float]:
+    """Find the fullest bounded SKU combination, preferring a diverse mix."""
+    if not items:
+        return [], float(capacity_lbs)
+    target_cents = _weight_cents(capacity_lbs)
+    item_cents = [_weight_cents(_unit_weight(item)) for item in items]
+    divisor = target_cents
+    for weight in item_cents:
+        divisor = gcd(divisor, weight)
+    target = target_cents // divisor
+    weights = [weight // divisor for weight in item_cents]
+    empty = (0,) * len(items)
+    combinations: dict[int, tuple[int, ...]] = {0: empty}
+
+    for index, (item, weight) in enumerate(zip(items, weights)):
+        available = min(floor(_available_quantity(item)), target // weight)
+        previous = list(combinations.items())
+        for current_weight, counts in previous:
+            max_quantity = min(available, (target - current_weight) // weight)
+            for quantity in range(1, max_quantity + 1):
+                next_weight = current_weight + quantity * weight
+                candidate = list(counts)
+                candidate[index] = quantity
+                candidate_tuple = tuple(candidate)
+                existing = combinations.get(next_weight)
+                if existing is None or _allocation_score(candidate_tuple, items) > _allocation_score(existing, items):
+                    combinations[next_weight] = candidate_tuple
+
+    filled = max(combinations)
+    remaining = max(0.0, float(capacity_lbs) - (filled * divisor / 100))
+    return list(combinations[filled]), remaining
 
 
 def _stop_allocations(stops: list[dict[str, Any]], quantity: int) -> list[dict[str, Any]]:
@@ -80,31 +134,16 @@ def build_load_recommendation(
     inventory: list[dict[str, Any]],
     capacity_lbs: float,
     requested_categories: list[str] | None = None,
+    excluded_categories: list[str] | None = None,
 ) -> dict[str, Any]:
     if capacity_lbs <= 0:
         raise ValueError("capacity_lbs must be positive")
     stops = list(route.get("selected_stops") or [])
     requested = {str(value).strip().lower() for value in requested_categories or [] if str(value).strip()}
-    eligible = [item for item in inventory if _matches_categories(item, requested)]
+    excluded = {str(value).strip().lower() for value in excluded_categories or [] if str(value).strip()}
+    eligible = [item for item in inventory if _matches_categories(item, requested, excluded)]
     ordered = sorted(eligible, key=lambda item: (RISK_ORDER.get(_risk(item), 99), str(item.get("item") or item.get("sku") or "")))
-    remaining = float(capacity_lbs)
-    quantities = [0] * len(ordered)
-
-    # Allocate in explainable rounds so a broad request such as "produce"
-    # yields a useful mix instead of being monopolized by the first SKU.
-    while remaining >= 0.01:
-        progress = False
-        for index, item in enumerate(ordered):
-            unit_lbs = _unit_weight(item)
-            if quantities[index] >= floor(_available_quantity(item)):
-                continue
-            if unit_lbs > remaining + 1e-9:
-                continue
-            quantities[index] += 1
-            remaining = max(0.0, remaining - unit_lbs)
-            progress = True
-        if not progress:
-            break
+    quantities, remaining = _allocate_quantities(ordered, capacity_lbs)
 
     suggestions = []
     for item, qty in zip(ordered, quantities):
@@ -125,7 +164,11 @@ def build_load_recommendation(
             "reason": (
                 f"Matches requested category ({category_text}); allocation is limited by on-hand inventory and the requested load."
                 if requested
-                else f"Allocated from current inventory; cold-chain risk is {risk} and quantity is limited by the requested load."
+                else (
+                    f"Respects requested exclusions; allocation is limited by on-hand inventory and the requested load."
+                    if excluded
+                    else f"Allocated from current inventory; cold-chain risk is {risk} and quantity is limited by the requested load."
+                )
             ),
             "allocations": _stop_allocations(stops, qty),
         })
@@ -135,7 +178,8 @@ def build_load_recommendation(
         "capacity_lbs": round(capacity_lbs, 2),
         "capacity_remaining_lbs": round(remaining, 2),
         "requested_categories": sorted(requested),
-        "category_match": not requested or bool(eligible),
+        "excluded_categories": sorted(excluded),
+        "category_match": not (requested or excluded) or bool(eligible),
         "allocation_basis": "requested category, on-hand quantity, stop household share, requested load, cold-chain risk",
         "source": "S3 inventory/on-hand.json",
     }
