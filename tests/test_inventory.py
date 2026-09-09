@@ -3,7 +3,19 @@ import json
 
 import pytest
 
-from storage.inventory import InventoryObjectNotFound, InventoryStoreError, S3InventoryStore
+from storage.inventory import (
+    InventoryObjectNotFound,
+    InventoryStoreError,
+    S3InventoryStore,
+    clear_inventory_cache,
+)
+
+
+@pytest.fixture(autouse=True)
+def isolated_inventory_cache():
+    clear_inventory_cache()
+    yield
+    clear_inventory_cache()
 
 
 class FakeS3:
@@ -12,8 +24,10 @@ class FakeS3:
         self.etags = {}
         self.revision = 0
         self.conflict_once = False
+        self.get_calls = 0
 
     def get_object(self, Bucket, Key):
+        self.get_calls += 1
         if Key not in self.objects:
             error = RuntimeError("missing")
             error.response = {"Error": {"Code": "NoSuchKey"}}
@@ -113,3 +127,60 @@ def test_inventory_merge_retries_after_concurrent_update():
         {"item_id": "bananas", "qty": 4},
         {"item_id": "apples", "qty": 7},
     ]
+
+
+def test_inventory_read_uses_short_lived_cache(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+    s3 = FakeS3()
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/on-hand.json",
+        Body=json.dumps([{"item_id": "apples", "qty": 2}]).encode(),
+    )
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+
+    first = store.read("inventory/on-hand.json")
+    first[0]["qty"] = 999
+    second = store.read("inventory/on-hand.json")
+
+    assert s3.get_calls == 1
+    assert second == [{"item_id": "apples", "qty": 2}]
+
+
+def test_inventory_write_invalidates_cached_snapshot(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+    s3 = FakeS3()
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+    store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 2}])
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 2
+
+    store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 7}])
+
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 7
+    assert s3.get_calls == 2
+
+
+def test_inventory_read_many_returns_each_requested_object(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+    s3 = FakeS3()
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/on-hand.json",
+        Body=json.dumps([{"item_id": "apples", "qty": 2}]).encode(),
+    )
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/cold-chain.json",
+        Body=json.dumps([{"item_id": "apples", "risk_status": "low"}]).encode(),
+    )
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+
+    snapshot = store.read_many(
+        ("inventory/on-hand.json", "inventory/cold-chain.json")
+    )
+
+    assert set(snapshot) == {
+        "inventory/on-hand.json",
+        "inventory/cold-chain.json",
+    }
+    assert s3.get_calls == 2
