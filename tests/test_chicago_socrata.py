@@ -96,7 +96,7 @@ def test_sparse_unusable_rows_do_not_make_complete_socrata_feed_partial():
     assert batch.quality.status == EvidenceStatus.COMPLETE
     assert batch.quality.matched_rows == 100
     assert batch.quality.excluded_rows == 1
-    assert "small number of incomplete rows" in batch.quality.warnings[-1]
+    assert any("small number of incomplete rows" in warning for warning in batch.quality.warnings)
 
 
 def test_active_business_query_is_scoped_at_the_source():

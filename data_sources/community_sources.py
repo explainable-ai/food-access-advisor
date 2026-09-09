@@ -596,6 +596,9 @@ class CommunitySourceClient:
     def _merge_discovery_batches(
         source: CommunitySource,
         batches: list[ResourceEvidenceBatch],
+        *,
+        incomplete_pages: int = 0,
+        failed_pages: int = 0,
     ) -> ResourceEvidenceBatch:
         records = {
             record.entity_id: record
@@ -605,18 +608,26 @@ class CommunitySourceClient:
         if not records:
             return batches[0]
         retrieved = max(batch.citation.retrieved_at for batch in batches)
+        warnings = [
+            f"Followed {len(batches) - 1} relevant same-site page(s) after the approved landing page was incomplete."
+        ]
+        if incomplete_pages or failed_pages:
+            details = []
+            if incomplete_pages:
+                details.append(f"{incomplete_pages} relevant page(s) remained incomplete")
+            if failed_pages:
+                details.append(f"{failed_pages} relevant page(s) could not be fetched")
+            warnings.append(f"Discovery remained partial because {' and '.join(details)}.")
         return ResourceEvidenceBatch(
             source_id=source.source_id,
             records=list(records.values()),
             citation=_citation(source, retrieved),
             quality=DataQualityReport(
-                status=EvidenceStatus.COMPLETE,
+                status=EvidenceStatus.PARTIAL if incomplete_pages or failed_pages else EvidenceStatus.COMPLETE,
                 source_row_count=sum(batch.quality.source_row_count for batch in batches),
                 matched_rows=len(records),
                 excluded_rows=sum(batch.quality.excluded_rows for batch in batches),
-                warnings=[
-                    f"Followed {len(batches) - 1} relevant same-site page(s) after the approved landing page was incomplete."
-                ],
+                warnings=warnings,
             ),
         )
 
@@ -630,14 +641,25 @@ class CommunitySourceClient:
             return landing
 
         batches = [landing]
+        incomplete_pages = 0
+        failed_pages = 0
         for page_url in _discovery_pages(source, html):
             try:
                 page_html = self._fetch_html(source, page_url)
             except CommunitySourceError:
+                failed_pages += 1
                 continue
             page_source = replace(source, url=page_url)
-            batches.append(parse_source_html(page_source, page_html))
-        return self._merge_discovery_batches(source, batches)
+            batch = parse_source_html(page_source, page_html)
+            if batch.quality.status != EvidenceStatus.COMPLETE:
+                incomplete_pages += 1
+            batches.append(batch)
+        return self._merge_discovery_batches(
+            source,
+            batches,
+            incomplete_pages=incomplete_pages,
+            failed_pages=failed_pages,
+        )
 
 
 def source_registry() -> list[dict[str, Any]]:

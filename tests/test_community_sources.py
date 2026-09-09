@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
+import requests
 
 from data_sources.community_sources import (
     APPROVED_SOURCES,
@@ -11,6 +12,7 @@ from data_sources.community_sources import (
     parse_source_html,
     source_registry,
 )
+from data_sources.contracts import EvidenceStatus
 from services.direct_source_signals import refresh_direct_sources
 
 
@@ -170,7 +172,10 @@ class RoutingSession:
 
     def get(self, url, **_kwargs):
         self.calls.append(url)
-        return Response(url=url, body=self.pages[url])
+        page = self.pages[url]
+        if isinstance(page, Exception):
+            raise page
+        return Response(url=url, body=page)
 
 
 def test_client_rejects_redirect_outside_approved_hosts():
@@ -231,6 +236,72 @@ def test_client_does_not_crawl_when_approved_landing_page_is_complete():
 
     assert batch.quality.status == EvidenceStatus.COMPLETE
     assert session.calls == [source.url]
+
+
+def test_client_keeps_partial_status_when_relevant_discovery_page_is_incomplete():
+    source = CommunitySource(
+        "official_mobile_market",
+        "Official Mobile Market",
+        "https://www.chicagosfoodbank.org/mobile-market",
+        "chicago",
+        "mobile_market",
+        "Mobile market schedules.",
+    )
+    schedule_url = "https://www.chicagosfoodbank.org/mobile-market/schedule"
+    location_url = "https://www.chicagosfoodbank.org/mobile-market/locations"
+    session = RoutingSession({
+        source.url: """
+            <a href="/mobile-market/schedule">View schedule</a>
+            <a href="/mobile-market/locations">View locations</a>
+        """,
+        schedule_url: """
+            <script type="application/ld+json">
+            {"@type":"Event","@id":"market-1","name":"Free Grocery Mobile Market",
+             "description":"Mobile pantry distribution",
+             "startDate":"2026-09-10T10:00:00-05:00"}
+            </script>
+        """,
+        location_url: "<h2>Locations</h2><p>Check back soon.</p>",
+    })
+
+    batch = CommunitySourceClient(session=session).fetch(source)
+
+    assert batch.quality.status == EvidenceStatus.PARTIAL
+    assert [record.name for record in batch.records] == ["Free Grocery Mobile Market"]
+    assert "remained incomplete" in batch.quality.warnings[-1]
+
+
+def test_client_keeps_partial_status_when_relevant_discovery_page_fails():
+    source = CommunitySource(
+        "official_mobile_market",
+        "Official Mobile Market",
+        "https://www.chicagosfoodbank.org/mobile-market",
+        "chicago",
+        "mobile_market",
+        "Mobile market schedules.",
+    )
+    schedule_url = "https://www.chicagosfoodbank.org/mobile-market/schedule"
+    calendar_url = "https://www.chicagosfoodbank.org/mobile-market/calendar"
+    session = RoutingSession({
+        source.url: """
+            <a href="/mobile-market/schedule">View schedule</a>
+            <a href="/mobile-market/calendar">View calendar</a>
+        """,
+        schedule_url: """
+            <script type="application/ld+json">
+            {"@type":"Event","@id":"market-1","name":"Free Grocery Mobile Market",
+             "description":"Mobile pantry distribution",
+             "startDate":"2026-09-10T10:00:00-05:00"}
+            </script>
+        """,
+        calendar_url: requests.RequestException("timeout"),
+    })
+
+    batch = CommunitySourceClient(session=session).fetch(source)
+
+    assert batch.quality.status == EvidenceStatus.PARTIAL
+    assert [record.name for record in batch.records] == ["Free Grocery Mobile Market"]
+    assert "could not be fetched" in batch.quality.warnings[-1]
 
 
 def test_registry_contains_only_https_approved_sources():
