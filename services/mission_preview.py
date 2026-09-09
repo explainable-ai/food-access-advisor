@@ -188,7 +188,15 @@ def _cold_chain_risk(item: dict[str, Any]) -> str | None:
     return value if value in KNOWN_COLD_CHAIN_RISKS else None
 
 
-def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: float, *, inventory_store: S3InventoryStore | None = None, mission_id_factory=None) -> dict[str, Any]:
+def run_mission_ops(
+    route: dict[str, Any],
+    load_lbs: float,
+    time_window_hours: float,
+    *,
+    requested_categories: list[str] | None = None,
+    inventory_store: S3InventoryStore | None = None,
+    mission_id_factory=None,
+) -> dict[str, Any]:
     """Draft a route-based mission without replacing existing previews."""
     if load_lbs <= 0 or time_window_hours <= 0:
         raise ValueError("load_lbs and time_window_hours must be positive")
@@ -210,8 +218,13 @@ def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: f
         })
     route_minutes = float(route.get("route_minutes") or 0)
     capacity_used = float(route.get("capacity_used") or 0)
-    route_load_lbs = min(capacity_used, load_lbs)
-    load = build_load_recommendation(route, inventory, route_load_lbs)
+    route_load_lbs = load_lbs
+    load = build_load_recommendation(
+        route,
+        inventory,
+        route_load_lbs,
+        requested_categories=requested_categories,
+    )
     recommended = float(load["recommended_weight_lbs"])
     suggested_ids = {
         _inventory_identity(item) for item in load["items"] if _inventory_identity(item)
@@ -224,7 +237,8 @@ def run_mission_ops(route: dict[str, Any], load_lbs: float, time_window_hours: f
         {"check": "route", "status": "Ready", "finding": f"Router produced {len(route['selected_stops'])} viable stops.", "data_used": ["Router selected_stops", "Router route status"]},
         {"check": "time_window", "status": "Ready" if route_minutes <= time_limit_minutes else "Blocked", "finding": f"Route requires {route_minutes:g} minutes against a {time_limit_minutes:g}-minute window.", "data_used": ["Router route_minutes", "Crew request time_window_hours"]},
         {"check": "vehicle_capacity", "status": "Ready" if capacity_used <= load_lbs else "Blocked", "finding": f"Planned route load is {capacity_used:g} lbs against a {load_lbs:g}-lb limit.", "data_used": ["Router capacity_used", "Crew request load_lbs"]},
-        {"check": "inventory", "status": "Ready" if recommended >= route_load_lbs else "Partial", "finding": f"On-hand inventory supports {recommended:g} lbs against the selected route's {route_load_lbs:g}-lb modeled demand.", "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}", "Router capacity_used"]},
+        {"check": "inventory", "status": "Ready" if recommended >= route_load_lbs else "Partial", "finding": f"On-hand inventory supports {recommended:g} lbs against the requested {route_load_lbs:g}-lb load.", "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}", "Crew request load_lbs"]},
+        {"check": "request_match", "status": "Ready" if load["category_match"] else "Partial", "finding": (f"Suggested items match the requested categories: {', '.join(load['requested_categories'])}." if load["requested_categories"] and load["category_match"] else (f"No on-hand items matched the requested categories: {', '.join(load['requested_categories'])}." if load["requested_categories"] else "No product category constraint was requested.")), "data_used": ["Crew request", f"s3://{store.bucket}/{ON_HAND_KEY}"]},
         {"check": "cold_chain", "status": "Ready" if suggested_ids and not missing_cold_chain else "Unknown", "finding": (f"Every suggested item has a matching cold-chain risk record ({len(suggested_ids)} evaluated)." if suggested_ids and not missing_cold_chain else f"Missing cold-chain evidence for {len(missing_cold_chain)} suggested item(s): {', '.join(missing_cold_chain) or 'no suggested items to evaluate'}."), "data_used": [f"s3://{store.bucket}/{COLD_CHAIN_KEY}"]},
     ]
     blocked = any(check["status"] == "Blocked" for check in checks)
