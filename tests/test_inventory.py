@@ -1,9 +1,23 @@
 import io
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import pytest
 
-from storage.inventory import InventoryObjectNotFound, InventoryStoreError, S3InventoryStore
+from storage.inventory import (
+    InventoryObjectNotFound,
+    InventoryStoreError,
+    S3InventoryStore,
+    clear_inventory_cache,
+)
+
+
+@pytest.fixture(autouse=True)
+def isolated_inventory_cache():
+    clear_inventory_cache()
+    yield
+    clear_inventory_cache()
 
 
 class FakeS3:
@@ -12,8 +26,10 @@ class FakeS3:
         self.etags = {}
         self.revision = 0
         self.conflict_once = False
+        self.get_calls = 0
 
     def get_object(self, Bucket, Key):
+        self.get_calls += 1
         if Key not in self.objects:
             error = RuntimeError("missing")
             error.response = {"Error": {"Code": "NoSuchKey"}}
@@ -113,3 +129,136 @@ def test_inventory_merge_retries_after_concurrent_update():
         {"item_id": "bananas", "qty": 4},
         {"item_id": "apples", "qty": 7},
     ]
+
+
+def test_inventory_read_uses_short_lived_cache(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+    s3 = FakeS3()
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/on-hand.json",
+        Body=json.dumps([{"item_id": "apples", "qty": 2}]).encode(),
+    )
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+
+    first = store.read("inventory/on-hand.json")
+    first[0]["qty"] = 999
+    second = store.read("inventory/on-hand.json")
+
+    assert s3.get_calls == 1
+    assert second == [{"item_id": "apples", "qty": 2}]
+
+
+def test_inventory_write_invalidates_cached_snapshot(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+    s3 = FakeS3()
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+    store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 2}])
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 2
+
+    store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 7}])
+
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 7
+    assert s3.get_calls == 2
+
+
+def test_inventory_read_many_returns_each_requested_object(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+    s3 = FakeS3()
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/on-hand.json",
+        Body=json.dumps([{"item_id": "apples", "qty": 2}]).encode(),
+    )
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/cold-chain.json",
+        Body=json.dumps([{"item_id": "apples", "risk_status": "low"}]).encode(),
+    )
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+
+    snapshot = store.read_many(
+        ("inventory/on-hand.json", "inventory/cold-chain.json")
+    )
+
+    assert set(snapshot) == {
+        "inventory/on-hand.json",
+        "inventory/cold-chain.json",
+    }
+    assert s3.get_calls == 2
+
+
+def test_concurrent_write_prevents_stale_read_from_repopulating_cache(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+
+    class PausedReadS3(FakeS3):
+        def __init__(self):
+            super().__init__()
+            self.read_started = Event()
+            self.allow_read_to_finish = Event()
+
+        def get_object(self, Bucket, Key):
+            response = super().get_object(Bucket, Key)
+            self.read_started.set()
+            assert self.allow_read_to_finish.wait(timeout=2)
+            return response
+
+    s3 = PausedReadS3()
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+    store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 2}])
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        stale_read = executor.submit(store.read, "inventory/on-hand.json")
+        assert s3.read_started.wait(timeout=2)
+        store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 7}])
+        s3.allow_read_to_finish.set()
+        assert stale_read.result()[0]["qty"] == 2
+
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 7
+    assert s3.get_calls == 2
+
+
+@pytest.mark.parametrize(
+    "clear_kwargs",
+    [
+        {"bucket": "bucket"},
+        {"key": "inventory/on-hand.json"},
+    ],
+)
+def test_partial_clear_invalidates_in_flight_cache_miss(monkeypatch, clear_kwargs):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+
+    class PausedReadS3(FakeS3):
+        def __init__(self):
+            super().__init__()
+            self.read_started = Event()
+            self.allow_read_to_finish = Event()
+
+        def get_object(self, Bucket, Key):
+            response = super().get_object(Bucket, Key)
+            self.read_started.set()
+            assert self.allow_read_to_finish.wait(timeout=2)
+            return response
+
+    s3 = PausedReadS3()
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/on-hand.json",
+        Body=json.dumps([{"item_id": "apples", "qty": 2}]).encode(),
+    )
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        stale_read = executor.submit(store.read, "inventory/on-hand.json")
+        assert s3.read_started.wait(timeout=2)
+        s3.put_object(
+            Bucket="bucket",
+            Key="inventory/on-hand.json",
+            Body=json.dumps([{"item_id": "apples", "qty": 7}]).encode(),
+        )
+        clear_inventory_cache(**clear_kwargs)
+        s3.allow_read_to_finish.set()
+        assert stale_read.result()[0]["qty"] == 2
+
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 7
+    assert s3.get_calls == 2

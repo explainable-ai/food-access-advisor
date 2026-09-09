@@ -123,6 +123,46 @@ def test_dispatch_limits_load_to_route_demand_and_discloses_missing_cold_chain()
     assert "apples" in cold_chain["finding"]
 
 
+def test_dispatch_reads_inventory_snapshot_together_and_reports_timing():
+    class InventoryStore:
+        bucket = "inventory-bucket"
+        requested_keys = None
+
+        def read_many(self, keys):
+            self.requested_keys = tuple(keys)
+            return {
+                ON_HAND_KEY: [
+                    {
+                        "item_id": "apples",
+                        "item": "Apple Bag",
+                        "qty": 20,
+                        "unit_weight_lbs": 3,
+                    }
+                ],
+                COLD_CHAIN_KEY: [
+                    {"item_id": "apples", "risk_status": "low"}
+                ],
+            }
+
+    store = InventoryStore()
+    result = run_mission_ops(
+        {
+            "status": "optimal",
+            "selected_stops": [{"stop_id": "tract-1", "demand": 30}],
+            "route_minutes": 60,
+            "capacity_used": 30,
+        },
+        30,
+        2,
+        inventory_store=store,
+        mission_id_factory=lambda: "mission-timed",
+    )
+
+    assert store.requested_keys == (ON_HAND_KEY, COLD_CHAIN_KEY)
+    assert result["performance"]["inventory_read_ms"] >= 0
+    assert result["performance"]["dispatch_total_ms"] >= 0
+
+
 def test_produce_request_returns_only_produce_and_fills_requested_weight():
     class InventoryStore:
         bucket = "inventory-bucket"
