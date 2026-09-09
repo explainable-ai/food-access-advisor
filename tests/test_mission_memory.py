@@ -114,7 +114,8 @@ def test_memory_converts_floats_before_dynamodb_write():
 
     item = table.items[("mission_review", "mission-1")]
     assert item["request_intent"]["load_lbs"] == Decimal("24.5")
-    assert item["mission_snapshot"]["suggested_load"][0]["weight_lbs"] == Decimal("24.0")
+    assert item["suggested_load"][0]["weight_lbs"] == Decimal("24.0")
+    assert "mission_snapshot" not in item
 
 
 def test_memory_rejects_blocked_approval_and_unguarded_draft():
