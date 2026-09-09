@@ -160,12 +160,22 @@ def run_route_advisor(top_tracts: list, hub: dict | None, time_window_hours: flo
         return {"status": "infeasible", "reason": "Scout returned no candidate tracts", "travel_time_source": "not_run", "selected_stops": [], "unselected_stops": []}
     origin = hub or OPERATIONS_HUB
     candidate_tracts = top_tracts[:5]
-    households = [max(float(row.get("households_total") or row.get("population") or 1), 1) for row in candidate_tracts]
-    total_households = sum(households)
+    represented_households = [
+        max(float(row.get("households_total") or 0), 0) for row in candidate_tracts
+    ]
+    demand_weights = [
+        households
+        if households > 0
+        else max(float(row.get("population") or 1), 1)
+        for row, households in zip(candidate_tracts, represented_households)
+    ]
+    total_households = sum(demand_weights)
     candidates = []
     allocated = 0.0
-    for index, (tract, household_count) in enumerate(zip(candidate_tracts, households)):
-        demand = load_lbs - allocated if index == len(candidate_tracts) - 1 else round(load_lbs * household_count / total_households, 2)
+    for index, (tract, household_count, demand_weight) in enumerate(
+        zip(candidate_tracts, represented_households, demand_weights)
+    ):
+        demand = load_lbs - allocated if index == len(candidate_tracts) - 1 else round(load_lbs * demand_weight / total_households, 2)
         allocated += demand
         candidates.append({
             "stop_id": str(tract.get("tract_fips")),

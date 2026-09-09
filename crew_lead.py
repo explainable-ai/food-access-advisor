@@ -109,6 +109,14 @@ _CATEGORY_PATTERNS = {
     "frozen": (r"\bfrozen\b",),
     "pantry": (r"\bpantry\b", r"\bshelf[- ]stable\b", r"\bgrain(?:s)?\b"),
 }
+_CUSTOM_HUB_PATTERN = re.compile(
+    r"\b(?:hub|depot|warehouse|origin)\b"
+    r"|"
+    r"\b(?:lat|latitude|lon|lng|longitude)\b"
+    r"|"
+    r"-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+",
+    re.IGNORECASE,
+)
 
 
 def _category_intent(request: str) -> tuple[list[str], list[str]]:
@@ -143,6 +151,11 @@ def _category_intent(request: str) -> tuple[list[str], list[str]]:
 def _requested_categories(request: str) -> list[str]:
     """Backward-compatible positive category extractor."""
     return _category_intent(request)[0]
+
+
+def _has_explicit_custom_hub(request: str) -> bool:
+    """Return whether the request appears to specify a non-default hub."""
+    return bool(_CUSTOM_HUB_PATTERN.search(request))
 
 
 def _timed(step: dict[str, Any], started_at: float) -> dict[str, Any]:
@@ -301,6 +314,7 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
         agent is None
         and state.load_lbs is not None
         and state.time_window_hours is not None
+        and not _has_explicit_custom_hub(request)
     )
     token = _current_run.set(state)
     try:

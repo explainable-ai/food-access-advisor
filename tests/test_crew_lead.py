@@ -1,5 +1,6 @@
 import crew_lead
 import agent as scout_agent
+import route_advisor
 from services.load_recommendation import build_load_recommendation, household_load_plan
 from services.mission_preview import run_mission_ops
 from storage.inventory import COLD_CHAIN_KEY, ON_HAND_KEY
@@ -50,6 +51,37 @@ def test_complete_request_uses_deterministic_fast_path(monkeypatch):
         "router",
         "dispatch",
     ]
+
+
+def test_request_with_explicit_custom_hub_uses_agent_fallback(monkeypatch):
+    _successful_dependencies(monkeypatch)
+    captured = {}
+
+    def route_advisor_with_hub(tracts, hub, hours, load):
+        captured["hub"] = hub
+        return {
+            "status": "optimal",
+            "selected_stops": [{"stop_id": "17031010100"}],
+            "route_minutes": 180,
+            "capacity_used": 200,
+        }
+
+    class HubAwareAgent:
+        def __call__(self, prompt):
+            crew_lead.sentry_check("chicago_neighborhoods")
+            crew_lead.scout("chicago_neighborhoods", prompt, area_was_inferred=False)
+            crew_lead.router([], {"lat": 41.91, "lon": -87.68}, 4, 200)
+            crew_lead.dispatch({}, 200, 4)
+
+    monkeypatch.setattr(crew_lead, "run_route_advisor", route_advisor_with_hub)
+    monkeypatch.setattr(crew_lead, "build_crew_lead", lambda: HubAwareAgent())
+
+    result = crew_lead.run_crew_brief(
+        "Take 200 lbs of produce in four hours from depot 41.91, -87.68."
+    )
+
+    assert result["orchestration_mode"] == "agent_fallback"
+    assert captured["hub"] == {"lat": 41.91, "lon": -87.68}
 
 
 def test_crew_chain_discloses_inferred_area(monkeypatch):
@@ -356,3 +388,35 @@ def test_router_assigns_human_readable_stop_name_and_reason():
     reason = _selection_reason(tract)
     assert "food-access gap" in reason
     assert "2,200 households" in reason
+
+
+def test_router_preserves_missing_household_evidence_for_load_planning(monkeypatch):
+    def passthrough_route(**kwargs):
+        candidates = kwargs["candidates"]
+        return {
+            "status": "optimal",
+            "selected_stops": [candidates[0]],
+            "unselected_stops": candidates[1:],
+            "route_minutes": 60,
+            "capacity_used": candidates[0]["demand"],
+        }
+
+    monkeypatch.setattr(route_advisor, "optimize_route", passthrough_route)
+
+    result = route_advisor.run_route_advisor(
+        [
+            {
+                "tract_fips": "17031010100",
+                "centroid_lat": 41.9,
+                "centroid_lon": -87.7,
+                "population": 900,
+                "households_total": None,
+            }
+        ],
+        {"lat": 41.8, "lon": -87.6},
+        4,
+        200,
+        matrix_fn=lambda points: [[0 for _ in points] for _ in points],
+    )
+
+    assert result["selected_stops"][0]["households"] == 0
