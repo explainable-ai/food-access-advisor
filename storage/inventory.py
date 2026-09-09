@@ -102,10 +102,12 @@ def clear_inventory_cache(bucket: str | None = None, key: str | None = None) -> 
     """Clear cached inventory snapshots, optionally scoped to one object."""
     global _CACHE_EPOCH
     with _CACHE_LOCK:
+        # Every clear invalidates cache misses already fetching from S3. The
+        # completed entries removed below remain scoped to the caller's filter.
+        _CACHE_EPOCH += 1
         if bucket is None and key is None:
             _READ_CACHE.clear()
             _CACHE_GENERATIONS.clear()
-            _CACHE_EPOCH += 1
             return
         candidates = set(_READ_CACHE) | set(_CACHE_GENERATIONS)
         if bucket is not None and key is not None:
