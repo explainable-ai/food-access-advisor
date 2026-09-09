@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+import json
+import math
 import re
 from time import perf_counter
 from typing import Any, Literal
@@ -15,6 +17,11 @@ from agent import run_site_advisor
 from config import OPERATIONS_HUB
 from model import build_model
 from route_advisor import run_route_advisor
+from services.context_engineering import (
+    ContextEnvelope,
+    build_context_envelope,
+    record_agent_context,
+)
 from services.mission_preview import run_mission_ops
 from watchdog_agent import run_watchdog
 
@@ -36,17 +43,25 @@ class CrewBriefResponse(BaseModel):
     mission_id: str | None = None
     final_summary: str
     request_intent: dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
     total_duration_ms: int = 0
 
 
 class _RunState:
     def __init__(self, explicit_area: StudyArea | None, request: str):
         self.explicit_area = explicit_area
-        self.study_area: StudyArea | None = explicit_area
         self.steps: list[dict[str, Any]] = []
-        self.load_lbs: float | None = None
-        self.time_window_hours: float | None = None
         self.requested_categories, self.excluded_categories = _category_intent(request)
+        self.context: ContextEnvelope = build_context_envelope(
+            request,
+            study_area=explicit_area,
+            categories=self.requested_categories,
+            excluded_categories=self.excluded_categories,
+        )
+        intent = self.context.request_intent
+        self.study_area: StudyArea | None = intent.study_area
+        self.load_lbs: float | None = intent.load_lbs
+        self.time_window_hours: float | None = intent.time_window_hours
         self.started_at = perf_counter()
 
 
@@ -79,6 +94,7 @@ def _area(state: _RunState, requested: str) -> StudyArea:
 
 
 def _append(state: _RunState, step: dict[str, Any]) -> dict[str, Any]:
+    record_agent_context(state.context, step["agent"], step.get("data") or {})
     state.steps.append(step)
     return step
 
@@ -181,8 +197,22 @@ def router(top_tracts: list, hub: dict, time_window_hours: float, load_lbs: floa
     try:
         if time_window_hours <= 0 or load_lbs <= 0:
             raise ValueError("The request must include a positive time window and load")
+        if state.time_window_hours is not None and not math.isclose(
+            float(time_window_hours), state.time_window_hours
+        ):
+            raise ValueError(
+                "Crew Lead changed the time window extracted from the staff request"
+            )
+        if state.load_lbs is not None and not math.isclose(
+            float(load_lbs), state.load_lbs
+        ):
+            raise ValueError(
+                "Crew Lead changed the load extracted from the staff request"
+            )
         state.time_window_hours = float(time_window_hours)
         state.load_lbs = float(load_lbs)
+        state.context.request_intent.time_window_hours = state.time_window_hours
+        state.context.request_intent.load_lbs = state.load_lbs
         scout_data = state.steps[-1]["data"]
         candidates = scout_data.get("ranked_tracts") or scout_data.get("top_tracts") or []
         data = run_route_advisor(candidates, hub or OPERATIONS_HUB, time_window_hours, load_lbs)
@@ -241,6 +271,11 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
         prompt = request.strip()
         if study_area:
             prompt += f"\n\n(Study area specified: {study_area})"
+        prompt += (
+            "\n\nAuthoritative parsed request context (use every non-null constraint "
+            "exactly):\n"
+            + json.dumps(state.context.request_intent.model_dump(), sort_keys=True)
+        )
         (agent or build_crew_lead())(prompt)
     finally:
         _current_run.reset(token)
@@ -251,6 +286,9 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
         state.steps.append({"agent": next_agent, "status": "failed", "summary": f"Crew Lead stopped before {next_agent.title()} completed its required step.", "data": {}})
     final = state.steps[-1]
     mission_id = final.get("data", {}).get("mission_id") if final.get("agent") == "dispatch" else None
+    state.context.request_intent.study_area = state.study_area
+    state.context.request_intent.load_lbs = state.load_lbs
+    state.context.request_intent.time_window_hours = state.time_window_hours
     return CrewBriefResponse(
         steps=state.steps,
         mission_id=mission_id,
@@ -262,5 +300,6 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
             "excluded_categories": state.excluded_categories,
             "study_area": state.study_area,
         },
+        context=state.context.model_dump(),
         total_duration_ms=max(0, round((perf_counter() - state.started_at) * 1000)),
     ).model_dump()
