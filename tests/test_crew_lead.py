@@ -19,7 +19,7 @@ def _successful_dependencies(monkeypatch):
     monkeypatch.setattr(crew_lead, "run_watchdog", lambda area: {"status": "complete", "checked": 0})
     monkeypatch.setattr(crew_lead, "run_site_advisor", lambda area, scenario: {"study_area": area, "ranked_count": 12, "top_tracts": [{"tract_fips": "17031010100"}]})
     monkeypatch.setattr(crew_lead, "run_route_advisor", lambda tracts, hub, hours, load: {"status": "optimal", "selected_stops": [{"stop_id": "17031010100"}], "route_minutes": 180, "capacity_used": 200})
-    monkeypatch.setattr(crew_lead, "run_mission_ops", lambda route, load, hours: {"mission_id": "mission-test", "status": "Ready", "route": route, "suggested_load": []})
+    monkeypatch.setattr(crew_lead, "run_mission_ops", lambda route, load, hours, **kwargs: {"mission_id": "mission-test", "status": "Ready", "route": route, "suggested_load": []})
 
 
 def test_crew_chain_uses_recorded_outputs_and_explicit_area(monkeypatch):
@@ -99,10 +99,50 @@ def test_dispatch_limits_load_to_route_demand_and_discloses_missing_cold_chain()
         mission_id_factory=lambda: "mission-test",
     )
 
-    assert result["load_recommendation"]["capacity_lbs"] == 40
-    assert result["load_recommendation"]["recommended_weight_lbs"] == 40
+    assert result["load_recommendation"]["capacity_lbs"] == 200
+    assert result["load_recommendation"]["recommended_weight_lbs"] == 100
     cold_chain = next(
         check for check in result["readiness_checks"] if check["check"] == "cold_chain"
     )
     assert cold_chain["status"] == "Unknown"
     assert "apples" in cold_chain["finding"]
+
+
+def test_produce_request_returns_only_produce_and_fills_requested_weight():
+    class InventoryStore:
+        bucket = "inventory-bucket"
+
+        def read(self, key):
+            if key == ON_HAND_KEY:
+                return [
+                    {"item_id": "PRD-001", "sku": "PRD-001", "item": "Fresh Produce Box", "qty": 20, "unit_weight_lbs": 12},
+                    {"item_id": "PRD-002", "sku": "PRD-002", "item": "Apple Bag", "qty": 20, "unit_weight_lbs": 3},
+                    {"item_id": "PRD-003", "sku": "PRD-003", "item": "Potato Bag", "qty": 20, "unit_weight_lbs": 5},
+                    {"item_id": "PRD-004", "sku": "PRD-004", "item": "Whole Milk Case", "qty": 20, "unit_weight_lbs": 35},
+                ]
+            assert key == COLD_CHAIN_KEY
+            return [
+                {"item_id": "PRD-001", "risk_status": "none"},
+                {"item_id": "PRD-002", "risk_status": "none"},
+                {"item_id": "PRD-003", "risk_status": "none"},
+                {"item_id": "PRD-004", "risk_status": "high"},
+            ]
+
+    result = run_mission_ops(
+        {
+            "status": "optimal",
+            "selected_stops": [{"stop_id": "tract-1", "demand": 200}],
+            "route_minutes": 120,
+            "capacity_used": 200,
+        },
+        200,
+        4,
+        requested_categories=["produce"],
+        inventory_store=InventoryStore(),
+        mission_id_factory=lambda: "mission-produce",
+    )
+
+    load = result["load_recommendation"]
+    assert load["recommended_weight_lbs"] == 200
+    assert {item["item_id"] for item in load["items"]} == {"PRD-001", "PRD-002", "PRD-003"}
+    assert load["category_match"] is True
