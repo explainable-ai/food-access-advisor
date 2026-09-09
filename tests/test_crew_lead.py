@@ -123,7 +123,6 @@ def test_dispatch_limits_load_to_route_demand_and_discloses_missing_cold_chain()
     assert "apples" in cold_chain["finding"]
 
 
-
 def test_dispatch_reads_inventory_snapshot_together_and_reports_timing():
     class InventoryStore:
         bucket = "inventory-bucket"
