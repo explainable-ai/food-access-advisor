@@ -73,3 +73,17 @@ def test_context_defaults_unspecified_geography_to_chicago_and_discloses_it():
 
     assert context.request_intent.study_area == "chicago_neighborhoods"
     assert context.request_intent.study_area_source == "default"
+
+
+def test_context_parses_grouped_numeric_constraints():
+    context = build_context_envelope(
+        "Deliver 1,250 pounds within 2 hours in McHenry County.",
+        study_area=None,
+        categories=[],
+        excluded_categories=[],
+    )
+
+    assert context.request_intent.load_lbs == 1250
+    assert context.request_intent.time_window_hours == 2
+    assert context.request_intent.study_area == "rural_fringe"
+    assert context.request_intent.study_area_source == "inferred"

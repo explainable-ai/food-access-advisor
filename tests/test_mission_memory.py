@@ -65,6 +65,9 @@ def _mission(status="Ready"):
         "suggested_load": [
             {"item_id": "PRD-001", "quantity": 2, "weight_lbs": 24.0}
         ],
+        "readiness_checks": [
+            {"check": "route", "status": "Ready", "finding": "Route is viable."}
+        ],
         "human_review_required": True,
         "dispatch_enabled": False,
         "not_for_real_dispatch": True,
@@ -120,11 +123,30 @@ def test_memory_converts_floats_before_dynamodb_write():
 
 def test_memory_rejects_blocked_approval_and_unguarded_draft():
     memory, _ = _memory()
+    blocked = _mission("Blocked")
+    blocked["readiness_checks"] = [
+        {"check": "time_window", "status": "Blocked", "finding": "Too long."}
+    ]
     with pytest.raises(ValueError, match="blocked"):
         memory.record_review(
             mission_id="mission-1",
             action="approve",
-            mission=_mission("Blocked"),
+            mission=blocked,
+            reviewed_by="staff@example.com",
+        )
+
+
+def test_memory_rejects_status_that_conflicts_with_readiness_checks():
+    memory, _ = _memory()
+    tampered = _mission("Ready")
+    tampered["readiness_checks"] = [
+        {"check": "time_window", "status": "Blocked", "finding": "Too long."}
+    ]
+    with pytest.raises(ValueError, match="must match readiness checks"):
+        memory.record_review(
+            mission_id="mission-1",
+            action="approve",
+            mission=tampered,
             reviewed_by="staff@example.com",
         )
 

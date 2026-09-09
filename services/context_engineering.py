@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+from config import PILOT_RURAL_COUNTY
 
 
 AgentName = Literal["sentry", "scout", "router", "dispatch"]
@@ -34,7 +35,26 @@ _NUMBER_WORDS = {
     "eleven": 11.0,
     "twelve": 12.0,
 }
-_NUMBER_TOKEN = r"(?:\d+(?:\.\d+)?|" + "|".join(_NUMBER_WORDS) + r")"
+_NUMBER_TOKEN = (
+    r"(?:"
+    r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+    r"|"
+    + "|".join(_NUMBER_WORDS)
+    + r")"
+)
+_RURAL_COUNTY_NAMES = sorted(
+    {
+        county.lower()
+        for area in PILOT_RURAL_COUNTY.get("resource_areas", [])
+        for county in area.get("counties", [])
+        if county.lower() != "cook"
+    }
+)
+_RURAL_COUNTY_PATTERN = (
+    r"\b(?:"
+    + "|".join(re.escape(name) for name in _RURAL_COUNTY_NAMES)
+    + r")(?:\s+county)?\b"
+)
 
 
 class RequestIntentContext(BaseModel):
@@ -87,7 +107,7 @@ class ContextEnvelope(BaseModel):
 
 def _number(token: str) -> float:
     lowered = token.lower()
-    return _NUMBER_WORDS[lowered] if lowered in _NUMBER_WORDS else float(token)
+    return _NUMBER_WORDS[lowered] if lowered in _NUMBER_WORDS else float(token.replace(",", ""))
 
 
 def _first_measure(request: str, unit_pattern: str) -> float | None:
@@ -100,10 +120,12 @@ def _first_measure(request: str, unit_pattern: str) -> float | None:
 
 def _infer_area(request: str) -> tuple[StudyArea | None, str]:
     lowered = request.lower()
-    if re.search(r"\brural\b|\bfringe\b|\bkane\b|\bkendall\b|\bgrundy\b", lowered):
+    if re.search(r"\brural\b|\bfringe\b", lowered):
         return "rural_fringe", "inferred"
     if re.search(r"\bchicago\b|\bcook county\b|\bneighborhood", lowered):
         return "chicago_neighborhoods", "inferred"
+    if re.search(_RURAL_COUNTY_PATTERN, lowered):
+        return "rural_fringe", "inferred"
     return "chicago_neighborhoods", "default"
 
 

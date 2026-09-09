@@ -16,6 +16,8 @@ from storage.operations_repository import DEFAULT_TABLE_NAME
 
 ReviewAction = Literal["approve", "reject"]
 MISSION_REVIEW_TYPE = "mission_review"
+_BLOCKED_STATUSES = {"blocked"}
+_PARTIAL_STATUSES = {"partial", "unknown"}
 
 
 class MissionMemoryError(RuntimeError):
@@ -54,6 +56,23 @@ def _stop_identity(stop: dict[str, Any]) -> str:
     return str(stop.get("tract_fips") or stop.get("stop_id") or "").strip()
 
 
+def _derived_status(readiness_checks: Any) -> str | None:
+    if not isinstance(readiness_checks, list) or not readiness_checks:
+        return None
+    statuses = [
+        str(check.get("status", "")).strip().lower()
+        for check in readiness_checks
+        if isinstance(check, dict)
+    ]
+    if not statuses:
+        return None
+    if any(status in _BLOCKED_STATUSES for status in statuses):
+        return "Blocked"
+    if any(status in _PARTIAL_STATUSES for status in statuses):
+        return "Partial"
+    return "Ready"
+
+
 class DynamoDBMissionMemory:
     """Persist immutable staff reviews and retrieve approved summaries only."""
 
@@ -84,8 +103,19 @@ class DynamoDBMissionMemory:
             raise ValueError("Reviewed demo missions must keep dispatch disabled")
         if mission.get("not_for_real_dispatch") is not True:
             raise ValueError("Reviewed missions must retain the synthetic-demo guard")
-        if action == "approve" and str(mission.get("status")) == "Blocked":
-            raise ValueError("A blocked mission cannot become approved memory")
+        status = str(mission.get("status") or "").strip()
+        derived_status = _derived_status(mission.get("readiness_checks"))
+        if action == "approve":
+            if derived_status is None:
+                raise ValueError(
+                    "Approved mission reviews require readiness checks from the issued draft"
+                )
+            if status and derived_status != status:
+                raise ValueError(
+                    "Mission status must match readiness checks from the issued draft"
+                )
+            if derived_status == "Blocked":
+                raise ValueError("A blocked mission cannot become approved memory")
 
     def record_review(
         self,
