@@ -1,5 +1,7 @@
 import io
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import pytest
 
@@ -183,4 +185,34 @@ def test_inventory_read_many_returns_each_requested_object(monkeypatch):
         "inventory/on-hand.json",
         "inventory/cold-chain.json",
     }
+    assert s3.get_calls == 2
+
+
+def test_concurrent_write_prevents_stale_read_from_repopulating_cache(monkeypatch):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+
+    class PausedReadS3(FakeS3):
+        def __init__(self):
+            super().__init__()
+            self.read_started = Event()
+            self.allow_read_to_finish = Event()
+
+        def get_object(self, Bucket, Key):
+            response = super().get_object(Bucket, Key)
+            self.read_started.set()
+            assert self.allow_read_to_finish.wait(timeout=2)
+            return response
+
+    s3 = PausedReadS3()
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+    store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 2}])
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        stale_read = executor.submit(store.read, "inventory/on-hand.json")
+        assert s3.read_started.wait(timeout=2)
+        store.write("inventory/on-hand.json", [{"item_id": "apples", "qty": 7}])
+        s3.allow_read_to_finish.set()
+        assert stale_read.result()[0]["qty"] == 2
+
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 7
     assert s3.get_calls == 2
