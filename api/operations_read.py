@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
+from api.auth import require_staff_user
 from services.mission_preview import build_mission_preview
+from storage.mission_memory import (
+    DynamoDBMissionMemory,
+    MissionMemoryConflict,
+    MissionMemoryError,
+    get_mission_memory,
+)
 from storage.operations_repository import (
     OperationsDataError,
     OperationsRepository,
@@ -15,6 +23,14 @@ from storage.operations_repository import (
 
 
 router = APIRouter(prefix="/api/operations", tags=["mission-operations"])
+
+
+class MissionReviewRequest(BaseModel):
+    action: Literal["approve", "reject"]
+    mission: dict[str, Any]
+    study_area: Literal["chicago_neighborhoods", "rural_fringe"] | None = None
+    request_intent: dict[str, Any] = Field(default_factory=dict)
+    note: str = Field(default="", max_length=2000)
 
 
 def _list(entity_type: str, repository: OperationsRepository) -> list[dict[str, Any]]:
@@ -99,4 +115,68 @@ def mission_preview(
             raise HTTPException(status_code=404, detail=f"Scenario {scenario_id} was not found")
         return build_mission_preview(item, repository)
     except OperationsDataError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/missions/{mission_id}/review")
+def review_mission(
+    mission_id: str,
+    request: MissionReviewRequest,
+    staff_user: dict[str, Any] = Depends(require_staff_user),
+    memory: DynamoDBMissionMemory = Depends(get_mission_memory),
+):
+    """Persist a staff decision; only approvals become retrievable memory."""
+    reviewed_by = str(
+        staff_user.get("email")
+        or staff_user.get("username")
+        or staff_user.get("cognito:username")
+        or staff_user.get("sub")
+    )
+    try:
+        review = memory.record_review(
+            mission_id=mission_id,
+            action=request.action,
+            mission=request.mission,
+            reviewed_by=reviewed_by,
+            note=request.note,
+            study_area=request.study_area,
+            request_intent=request.request_intent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except MissionMemoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except MissionMemoryError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "status": "review_recorded",
+        "message": (
+            "Approved mission added to operational memory."
+            if request.action == "approve"
+            else "Rejection recorded for audit; the draft was not added to memory."
+        ),
+        "memory_eligible": request.action == "approve",
+        "review": review,
+    }
+
+
+@router.get("/mission-memory")
+def approved_mission_memory(
+    study_area: Literal["chicago_neighborhoods", "rural_fringe"] | None = None,
+    categories: str | None = Query(default=None),
+    limit: int = Query(default=5, ge=1, le=20),
+    _staff_user: dict[str, Any] = Depends(require_staff_user),
+    memory: DynamoDBMissionMemory = Depends(get_mission_memory),
+):
+    """Return compact approved mission summaries, excluding rejected drafts."""
+    requested_categories = [
+        value.strip().lower() for value in (categories or "").split(",") if value.strip()
+    ]
+    try:
+        return memory.list_approved(
+            study_area=study_area,
+            categories=requested_categories,
+            limit=limit,
+        )
+    except MissionMemoryError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
