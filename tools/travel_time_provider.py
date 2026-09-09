@@ -1,12 +1,57 @@
 """Road-network travel times and directions from configured providers."""
 
 import os
+from threading import Lock
+from time import monotonic
 
 import boto3
 import requests
 
 
 METERS_PER_MILE = 1609.344
+_ROUTE_CACHE: dict[tuple, tuple[float, object]] = {}
+_ROUTE_CACHE_LOCK = Lock()
+
+
+def _cache_ttl_seconds():
+    return max(float(os.getenv("ROUTING_CACHE_TTL_SECONDS", "300")), 0)
+
+
+def _cache_max_entries():
+    return max(int(os.getenv("ROUTING_CACHE_MAX_ENTRIES", "256")), 1)
+
+
+def _points_key(points):
+    return tuple((round(float(point["lat"]), 5), round(float(point["lon"]), 5)) for point in points)
+
+
+def _cached(key):
+    ttl = _cache_ttl_seconds()
+    if ttl <= 0:
+        return None
+    with _ROUTE_CACHE_LOCK:
+        row = _ROUTE_CACHE.get(key)
+        if row and monotonic() - row[0] <= ttl:
+            return row[1]
+        if row:
+            _ROUTE_CACHE.pop(key, None)
+    return None
+
+
+def _remember(key, value):
+    ttl = _cache_ttl_seconds()
+    if ttl <= 0:
+        return value
+    with _ROUTE_CACHE_LOCK:
+        now = monotonic()
+        expired = [cache_key for cache_key, row in _ROUTE_CACHE.items() if now - row[0] > ttl]
+        for cache_key in expired:
+            _ROUTE_CACHE.pop(cache_key, None)
+        while len(_ROUTE_CACHE) >= _cache_max_entries():
+            oldest = min(_ROUTE_CACHE, key=lambda cache_key: _ROUTE_CACHE[cache_key][0])
+            _ROUTE_CACHE.pop(oldest, None)
+        _ROUTE_CACHE[key] = (now, value)
+    return value
 
 
 class TravelTimeProviderError(RuntimeError):
@@ -237,11 +282,23 @@ def _configured_provider(provider_name=None):
 
 
 def get_road_route_matrix(points, provider_name=None):
-    return _configured_provider(provider_name).calculate_matrix(points)
+    provider = (provider_name or os.getenv("ROUTING_PROVIDER", "aws_location")).strip().lower()
+    key = ("matrix", provider, _points_key(points))
+    cached = _cached(key)
+    if cached is not None:
+        return [list(row) for row in cached]
+    matrix = _configured_provider(provider).calculate_matrix(points)
+    _remember(key, tuple(tuple(row) for row in matrix))
+    return matrix
 
 
 def get_road_route_directions(points, alternatives=2):
-    routes = _configured_provider().directions(points, alternatives=alternatives)
+    provider = os.getenv("ROUTING_PROVIDER", "aws_location").strip().lower()
+    key = ("directions", provider, int(alternatives), _points_key(points))
+    routes = _cached(key)
+    if routes is None:
+        routes = _configured_provider(provider).directions(points, alternatives=alternatives)
+        _remember(key, routes)
     primary = dict(routes[0])
     primary["alternatives"] = routes[1:]
     return primary

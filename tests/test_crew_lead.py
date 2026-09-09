@@ -1,5 +1,6 @@
 import crew_lead
 import agent as scout_agent
+from services.load_recommendation import build_load_recommendation
 from services.mission_preview import run_mission_ops
 from storage.inventory import COLD_CHAIN_KEY, ON_HAND_KEY
 
@@ -19,7 +20,7 @@ def _successful_dependencies(monkeypatch):
     monkeypatch.setattr(crew_lead, "run_watchdog", lambda area: {"status": "complete", "checked": 0})
     monkeypatch.setattr(crew_lead, "run_site_advisor", lambda area, scenario: {"study_area": area, "ranked_count": 12, "top_tracts": [{"tract_fips": "17031010100"}]})
     monkeypatch.setattr(crew_lead, "run_route_advisor", lambda tracts, hub, hours, load: {"status": "optimal", "selected_stops": [{"stop_id": "17031010100"}], "route_minutes": 180, "capacity_used": 200})
-    monkeypatch.setattr(crew_lead, "run_mission_ops", lambda route, load, hours: {"mission_id": "mission-test", "status": "Ready", "route": route, "suggested_load": []})
+    monkeypatch.setattr(crew_lead, "run_mission_ops", lambda route, load, hours, **kwargs: {"mission_id": "mission-test", "status": "Ready", "route": route, "suggested_load": []})
 
 
 def test_crew_chain_uses_recorded_outputs_and_explicit_area(monkeypatch):
@@ -34,6 +35,20 @@ def test_crew_chain_discloses_inferred_area(monkeypatch):
     _successful_dependencies(monkeypatch)
     result = crew_lead.run_crew_brief("Take 200 lbs to the rural fringe in four hours.", agent=FakeCrewAgent("rural_fringe"))
     assert result["steps"][1]["summary"].startswith("Assumed study area: rural_fringe")
+
+
+def test_category_intent_preserves_explicit_exclusions():
+    requested, excluded = crew_lead._category_intent("200 lbs of produce, no dairy")
+
+    assert requested == ["produce"]
+    assert excluded == ["dairy"]
+
+
+def test_category_intent_stops_negation_at_adversative():
+    requested, excluded = crew_lead._category_intent("200 lbs, no dairy but produce")
+
+    assert requested == ["produce"]
+    assert excluded == ["dairy"]
 
 
 def test_rural_scout_scores_complete_tract_universe_before_top_n(monkeypatch):
@@ -99,10 +114,115 @@ def test_dispatch_limits_load_to_route_demand_and_discloses_missing_cold_chain()
         mission_id_factory=lambda: "mission-test",
     )
 
-    assert result["load_recommendation"]["capacity_lbs"] == 40
-    assert result["load_recommendation"]["recommended_weight_lbs"] == 40
+    assert result["load_recommendation"]["capacity_lbs"] == 200
+    assert result["load_recommendation"]["recommended_weight_lbs"] == 100
     cold_chain = next(
         check for check in result["readiness_checks"] if check["check"] == "cold_chain"
     )
     assert cold_chain["status"] == "Unknown"
     assert "apples" in cold_chain["finding"]
+
+
+def test_produce_request_returns_only_produce_and_fills_requested_weight():
+    class InventoryStore:
+        bucket = "inventory-bucket"
+
+        def read(self, key):
+            if key == ON_HAND_KEY:
+                return [
+                    {"item_id": "PRD-001", "sku": "PRD-001", "item": "Fresh Produce Box", "qty": 20, "unit_weight_lbs": 12},
+                    {"item_id": "PRD-002", "sku": "PRD-002", "item": "Apple Bag", "qty": 20, "unit_weight_lbs": 3},
+                    {"item_id": "PRD-003", "sku": "PRD-003", "item": "Potato Bag", "qty": 20, "unit_weight_lbs": 5},
+                    {"item_id": "PRD-004", "sku": "PRD-004", "item": "Whole Milk Case", "qty": 20, "unit_weight_lbs": 35},
+                ]
+            assert key == COLD_CHAIN_KEY
+            return [
+                {"item_id": "PRD-001", "risk_status": "none"},
+                {"item_id": "PRD-002", "risk_status": "none"},
+                {"item_id": "PRD-003", "risk_status": "none"},
+                {"item_id": "PRD-004", "risk_status": "high"},
+            ]
+
+    result = run_mission_ops(
+        {
+            "status": "optimal",
+            "selected_stops": [{"stop_id": "tract-1", "demand": 200}],
+            "route_minutes": 120,
+            "capacity_used": 200,
+        },
+        200,
+        4,
+        requested_categories=["produce"],
+        inventory_store=InventoryStore(),
+        mission_id_factory=lambda: "mission-produce",
+    )
+
+    load = result["load_recommendation"]
+    assert load["recommended_weight_lbs"] == 200
+    assert {item["item_id"] for item in load["items"]} == {"PRD-001", "PRD-002", "PRD-003"}
+    assert load["category_match"] is True
+
+
+def test_load_allocator_reconsiders_skus_to_fill_exact_weight():
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Apple Bag", "qty": 20, "unit_weight_lbs": 3},
+            {"item": "Fresh Produce Box", "qty": 20, "unit_weight_lbs": 12},
+            {"item": "Potato Bag", "qty": 20, "unit_weight_lbs": 5},
+        ],
+        24,
+        requested_categories=["produce"],
+    )
+
+    assert load["recommended_weight_lbs"] == 24
+    assert load["capacity_remaining_lbs"] == 0
+
+
+def test_load_allocator_excludes_prohibited_category():
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Apple Bag", "qty": 100, "unit_weight_lbs": 3},
+            {"item": "Whole Milk Case", "qty": 100, "unit_weight_lbs": 35},
+        ],
+        30,
+        requested_categories=["produce"],
+        excluded_categories=["dairy"],
+    )
+
+    assert load["recommended_weight_lbs"] == 30
+    assert [item["item"] for item in load["items"]] == ["Apple Bag"]
+
+
+def test_load_category_match_requires_all_requested_categories():
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Fresh Produce Box", "qty": 20, "unit_weight_lbs": 10, "category": "produce"},
+            {"item": "Whole Milk Case", "qty": 0, "unit_weight_lbs": 10, "category": "dairy"},
+        ],
+        100,
+        requested_categories=["produce", "dairy"],
+    )
+
+    assert load["recommended_weight_lbs"] == 100
+    assert load["category_match"] is False
+
+
+def test_load_allocator_caps_search_work(monkeypatch):
+    monkeypatch.setattr("services.load_recommendation.ALLOCATION_MAX_STATES", 50)
+    monkeypatch.setattr("services.load_recommendation.ALLOCATION_MAX_CANDIDATES", 100)
+
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Item A", "qty": 200, "unit_weight_lbs": 1.01, "category": "produce"},
+            {"item": "Item B", "qty": 200, "unit_weight_lbs": 1.03, "category": "produce"},
+            {"item": "Item C", "qty": 200, "unit_weight_lbs": 1.07, "category": "produce"},
+        ],
+        200,
+        requested_categories=["produce"],
+    )
+
+    assert load["recommended_weight_lbs"] <= 200

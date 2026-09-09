@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+import re
+from time import perf_counter
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -26,21 +28,26 @@ class CrewStep(BaseModel):
     status: StepStatus
     summary: str
     data: dict[str, Any] = Field(default_factory=dict)
+    duration_ms: int = 0
 
 
 class CrewBriefResponse(BaseModel):
     steps: list[CrewStep]
     mission_id: str | None = None
     final_summary: str
+    request_intent: dict[str, Any] = Field(default_factory=dict)
+    total_duration_ms: int = 0
 
 
 class _RunState:
-    def __init__(self, explicit_area: StudyArea | None):
+    def __init__(self, explicit_area: StudyArea | None, request: str):
         self.explicit_area = explicit_area
         self.study_area: StudyArea | None = explicit_area
         self.steps: list[dict[str, Any]] = []
         self.load_lbs: float | None = None
         self.time_window_hours: float | None = None
+        self.requested_categories, self.excluded_categories = _category_intent(request)
+        self.started_at = perf_counter()
 
 
 _current_run: ContextVar[_RunState | None] = ContextVar("lastmile_crew_run", default=None)
@@ -76,10 +83,58 @@ def _append(state: _RunState, step: dict[str, Any]) -> dict[str, Any]:
     return step
 
 
+_CATEGORY_PATTERNS = {
+    "produce": (r"\bproduce\b", r"\bfruit(?:s)?\b", r"\bvegetable(?:s)?\b"),
+    "dairy": (r"\bdairy\b", r"\bmilk\b", r"\bcheese\b", r"\begg(?:s)?\b"),
+    "protein": (r"\bprotein\b", r"\bchicken\b", r"\bbean(?:s)?\b"),
+    "frozen": (r"\bfrozen\b",),
+    "pantry": (r"\bpantry\b", r"\bshelf[- ]stable\b", r"\bgrain(?:s)?\b"),
+}
+
+
+def _category_intent(request: str) -> tuple[list[str], list[str]]:
+    """Extract supported category requirements and explicit exclusions."""
+    lowered = request.lower()
+    requested: set[str] = set()
+    excluded: set[str] = set()
+    for category, patterns in _CATEGORY_PATTERNS.items():
+        for pattern in patterns:
+            for match in re.finditer(pattern, lowered):
+                prefix = lowered[max(0, match.start() - 32) : match.start()]
+                suffix = lowered[match.end() : match.end() + 8]
+                negated = bool(
+                    re.search(
+                        r"(?:\bno\b|\bwithout\b|\bexclude(?:d|ing)?\b|\bexcept\b)\s+(?:\w+[ -]+){0,2}$",
+                        prefix,
+                    )
+                    or re.match(r"[- ]free\b", suffix)
+                )
+                if negated:
+                    cue = re.search(
+                        r"(?:\bno\b|\bwithout\b|\bexclude(?:d|ing)?\b|\bexcept\b)[^,.;:!?]*$",
+                        prefix,
+                    )
+                    if cue and re.search(r"\b(?:but|however|though|yet)\b", cue.group(0)):
+                        negated = False
+                (excluded if negated else requested).add(category)
+    requested.difference_update(excluded)
+    return sorted(requested), sorted(excluded)
+
+
+def _requested_categories(request: str) -> list[str]:
+    """Backward-compatible positive category extractor."""
+    return _category_intent(request)[0]
+
+
+def _timed(step: dict[str, Any], started_at: float) -> dict[str, Any]:
+    return {**step, "duration_ms": max(0, round((perf_counter() - started_at) * 1000))}
+
+
 @tool
 def sentry_check(study_area: str) -> dict:
     """Check flagged changes in one of the two supported study areas."""
     state = _state_for("sentry")
+    started_at = perf_counter()
     try:
         area = _area(state, study_area)
         data = run_watchdog(area)
@@ -92,7 +147,7 @@ def sentry_check(study_area: str) -> dict:
             step = {"agent": "sentry", "status": "ok", "summary": summary, "data": data}
     except Exception as exc:
         step = {"agent": "sentry", "status": "failed", "summary": f"Sentry check failed: {exc}", "data": {}}
-    return _append(state, step)
+    return _append(state, _timed(step, started_at))
 
 
 @tool
@@ -100,6 +155,7 @@ def scout(study_area: str, scenario: str, area_was_inferred: bool = False) -> di
     """Rank tracts using Scout's existing scoring path and disclose inferred areas."""
     del area_was_inferred
     state = _state_for("scout")
+    started_at = perf_counter()
     try:
         area = _area(state, study_area)
         inferred = state.explicit_area is None
@@ -109,10 +165,11 @@ def scout(study_area: str, scenario: str, area_was_inferred: bool = False) -> di
             step = {"agent": "scout", "status": "no_result", "summary": "Scout found no viable tracts in the selected study area.", "data": data}
         else:
             note = f"Assumed study area: {area} (not specified in request). " if inferred else ""
-            step = {"agent": "scout", "status": "ok", "summary": f"{note}Ranked {count} tracts; top 3 selected.", "data": {**data, "area_was_inferred": inferred}}
+            candidate_count = len(data.get("top_tracts") or [])
+            step = {"agent": "scout", "status": "ok", "summary": f"{note}Ranked {count} tracts; {candidate_count} highest-scoring candidates sent to Router.", "data": {**data, "area_was_inferred": inferred}}
     except Exception as exc:
         step = {"agent": "scout", "status": "failed", "summary": f"Scout ranking failed: {exc}", "data": {}}
-    return _append(state, step)
+    return _append(state, _timed(step, started_at))
 
 
 @tool
@@ -120,19 +177,22 @@ def router(top_tracts: list, hub: dict, time_window_hours: float, load_lbs: floa
     """Build a constrained route from Scout's recorded top tracts."""
     del top_tracts
     state = _state_for("router")
+    started_at = perf_counter()
     try:
         if time_window_hours <= 0 or load_lbs <= 0:
             raise ValueError("The request must include a positive time window and load")
         state.time_window_hours = float(time_window_hours)
         state.load_lbs = float(load_lbs)
-        data = run_route_advisor(state.steps[-1]["data"]["top_tracts"], hub or OPERATIONS_HUB, time_window_hours, load_lbs)
+        scout_data = state.steps[-1]["data"]
+        candidates = scout_data.get("ranked_tracts") or scout_data.get("top_tracts") or []
+        data = run_route_advisor(candidates, hub or OPERATIONS_HUB, time_window_hours, load_lbs)
         if data.get("status") != "optimal" or not data.get("selected_stops"):
             step = {"agent": "router", "status": "no_result", "summary": f"Router found no viable route: {data.get('reason') or 'constraints were not satisfied'}.", "data": data}
         else:
             step = {"agent": "router", "status": "ok", "summary": f"Route built: {len(data['selected_stops'])} stops, {float(data.get('route_minutes') or 0) / 60:.1f} hrs, within capacity.", "data": data}
     except Exception as exc:
         step = {"agent": "router", "status": "failed", "summary": f"Router failed: {exc}", "data": {}}
-    return _append(state, step)
+    return _append(state, _timed(step, started_at))
 
 
 @tool
@@ -140,14 +200,21 @@ def dispatch(route: dict, load_lbs: float, time_window_hours: float) -> dict:
     """Draft a mission from Router's recorded route and live S3 inventory."""
     del route, load_lbs, time_window_hours
     state = _state_for("dispatch")
+    started_at = perf_counter()
     try:
-        data = run_mission_ops(state.steps[-1]["data"], state.load_lbs, state.time_window_hours)
+        data = run_mission_ops(
+            state.steps[-1]["data"],
+            state.load_lbs,
+            state.time_window_hours,
+            requested_categories=state.requested_categories,
+            excluded_categories=state.excluded_categories,
+        )
         status = "no_result" if data.get("status") == "Blocked" else "ok"
         summary = "Mission is blocked by a readiness check." if status == "no_result" else "Mission drafted with suggested load — ready for human review."
         step = {"agent": "dispatch", "status": status, "summary": summary, "data": data}
     except Exception as exc:
         step = {"agent": "dispatch", "status": "failed", "summary": f"Dispatch failed: {exc}", "data": {}}
-    return _append(state, step)
+    return _append(state, _timed(step, started_at))
 
 
 SYSTEM_PROMPT = """You are the Crew Lead for LastMile Market. Extract the positive load in pounds
@@ -168,7 +235,7 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
     """Run the real tool chain and return only captured tool outputs."""
     if not request.strip():
         raise ValueError("request must not be blank")
-    state = _RunState(study_area)
+    state = _RunState(study_area, request)
     token = _current_run.set(state)
     try:
         prompt = request.strip()
@@ -184,4 +251,16 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
         state.steps.append({"agent": next_agent, "status": "failed", "summary": f"Crew Lead stopped before {next_agent.title()} completed its required step.", "data": {}})
     final = state.steps[-1]
     mission_id = final.get("data", {}).get("mission_id") if final.get("agent") == "dispatch" else None
-    return CrewBriefResponse(steps=state.steps, mission_id=mission_id, final_summary=final["summary"]).model_dump()
+    return CrewBriefResponse(
+        steps=state.steps,
+        mission_id=mission_id,
+        final_summary=final["summary"],
+        request_intent={
+            "load_lbs": state.load_lbs,
+            "time_window_hours": state.time_window_hours,
+            "categories": state.requested_categories,
+            "excluded_categories": state.excluded_categories,
+            "study_area": state.study_area,
+        },
+        total_duration_ms=max(0, round((perf_counter() - state.started_at) * 1000)),
+    ).model_dump()

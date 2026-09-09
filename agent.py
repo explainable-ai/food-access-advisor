@@ -105,7 +105,9 @@ def run_site_advisor(study_area: str, scenario: str, top_n: int = 12) -> dict:
         ranked = score_gaps(get_all_rural_tracts(), load_resource_cache("rural", require_complete_coverage=True), top_n=top_n)
     else:
         raise ValueError("study_area must be 'chicago_neighborhoods' or 'rural_fringe'")
-    return {"study_area": study_area, "scenario": scenario, "ranked_tracts": ranked, "top_tracts": ranked[:3], "ranked_count": len(ranked)}
+    # Router receives a small, scored candidate pool so it can choose the best
+    # feasible combination instead of being forced to use Scout's first three.
+    return {"study_area": study_area, "scenario": scenario, "ranked_tracts": ranked, "top_tracts": ranked[:5], "ranked_count": len(ranked)}
 
 
 if __name__ == "__main__":

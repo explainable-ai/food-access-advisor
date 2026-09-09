@@ -1,5 +1,6 @@
 import pytest
 
+from tools import travel_time_provider
 from tools.travel_time_provider import OpenRouteServiceProvider, TravelTimeProviderError
 
 
@@ -84,3 +85,51 @@ def test_missing_key_is_explicit(monkeypatch):
     monkeypatch.delenv("OPENROUTESERVICE_API_KEY", raising=False)
     with pytest.raises(TravelTimeProviderError):
         OpenRouteServiceProvider()
+
+
+def test_road_matrix_reuses_short_lived_cache(monkeypatch):
+    travel_time_provider._ROUTE_CACHE.clear()
+    calls = []
+    points = [{"lat": 1, "lon": 2}, {"lat": 3, "lon": 4}]
+
+    class Provider:
+        def calculate_matrix(self, received):
+            calls.append(received)
+            return [[0, 10], [10, 0]]
+
+    monkeypatch.setenv("ROUTING_CACHE_TTL_SECONDS", "300")
+    monkeypatch.setattr(
+        travel_time_provider,
+        "_configured_provider",
+        lambda name=None: Provider(),
+    )
+
+    first = travel_time_provider.get_road_route_matrix(points, "openrouteservice")
+    second = travel_time_provider.get_road_route_matrix(points, "openrouteservice")
+
+    assert first == second
+    assert len(calls) == 1
+
+
+def test_route_cache_is_bounded(monkeypatch):
+    travel_time_provider._ROUTE_CACHE.clear()
+
+    class Provider:
+        def calculate_matrix(self, received):
+            return [[0, 10], [10, 0]]
+
+    monkeypatch.setenv("ROUTING_CACHE_TTL_SECONDS", "300")
+    monkeypatch.setenv("ROUTING_CACHE_MAX_ENTRIES", "2")
+    monkeypatch.setattr(
+        travel_time_provider,
+        "_configured_provider",
+        lambda name=None: Provider(),
+    )
+
+    for offset in range(3):
+        travel_time_provider.get_road_route_matrix(
+            [{"lat": 1 + offset, "lon": 2}, {"lat": 3, "lon": 4}],
+            "openrouteservice",
+        )
+
+    assert len(travel_time_provider._ROUTE_CACHE) == 2
