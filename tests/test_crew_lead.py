@@ -44,6 +44,13 @@ def test_category_intent_preserves_explicit_exclusions():
     assert excluded == ["dairy"]
 
 
+def test_category_intent_stops_negation_at_adversative():
+    requested, excluded = crew_lead._category_intent("200 lbs, no dairy but produce")
+
+    assert requested == ["produce"]
+    assert excluded == ["dairy"]
+
+
 def test_rural_scout_scores_complete_tract_universe_before_top_n(monkeypatch):
     tracts = [{"tract_fips": str(index)} for index in range(30)]
     monkeypatch.setattr(scout_agent, "get_all_rural_tracts", lambda: tracts)
@@ -114,6 +121,7 @@ def test_dispatch_limits_load_to_route_demand_and_discloses_missing_cold_chain()
     )
     assert cold_chain["status"] == "Unknown"
     assert "apples" in cold_chain["finding"]
+
 
 
 def test_dispatch_reads_inventory_snapshot_together_and_reports_timing():
@@ -226,3 +234,36 @@ def test_load_allocator_excludes_prohibited_category():
 
     assert load["recommended_weight_lbs"] == 30
     assert [item["item"] for item in load["items"]] == ["Apple Bag"]
+
+
+def test_load_category_match_requires_all_requested_categories():
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Fresh Produce Box", "qty": 20, "unit_weight_lbs": 10, "category": "produce"},
+            {"item": "Whole Milk Case", "qty": 0, "unit_weight_lbs": 10, "category": "dairy"},
+        ],
+        100,
+        requested_categories=["produce", "dairy"],
+    )
+
+    assert load["recommended_weight_lbs"] == 100
+    assert load["category_match"] is False
+
+
+def test_load_allocator_caps_search_work(monkeypatch):
+    monkeypatch.setattr("services.load_recommendation.ALLOCATION_MAX_STATES", 50)
+    monkeypatch.setattr("services.load_recommendation.ALLOCATION_MAX_CANDIDATES", 100)
+
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Item A", "qty": 200, "unit_weight_lbs": 1.01, "category": "produce"},
+            {"item": "Item B", "qty": 200, "unit_weight_lbs": 1.03, "category": "produce"},
+            {"item": "Item C", "qty": 200, "unit_weight_lbs": 1.07, "category": "produce"},
+        ],
+        200,
+        requested_categories=["produce"],
+    )
+
+    assert load["recommended_weight_lbs"] <= 200
