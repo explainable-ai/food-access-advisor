@@ -1,5 +1,6 @@
 import crew_lead
 import agent as scout_agent
+from services.load_recommendation import build_load_recommendation
 from services.mission_preview import run_mission_ops
 from storage.inventory import COLD_CHAIN_KEY, ON_HAND_KEY
 
@@ -34,6 +35,13 @@ def test_crew_chain_discloses_inferred_area(monkeypatch):
     _successful_dependencies(monkeypatch)
     result = crew_lead.run_crew_brief("Take 200 lbs to the rural fringe in four hours.", agent=FakeCrewAgent("rural_fringe"))
     assert result["steps"][1]["summary"].startswith("Assumed study area: rural_fringe")
+
+
+def test_category_intent_preserves_explicit_exclusions():
+    requested, excluded = crew_lead._category_intent("200 lbs of produce, no dairy")
+
+    assert requested == ["produce"]
+    assert excluded == ["dairy"]
 
 
 def test_rural_scout_scores_complete_tract_universe_before_top_n(monkeypatch):
@@ -146,3 +154,35 @@ def test_produce_request_returns_only_produce_and_fills_requested_weight():
     assert load["recommended_weight_lbs"] == 200
     assert {item["item_id"] for item in load["items"]} == {"PRD-001", "PRD-002", "PRD-003"}
     assert load["category_match"] is True
+
+
+def test_load_allocator_reconsiders_skus_to_fill_exact_weight():
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Apple Bag", "qty": 20, "unit_weight_lbs": 3},
+            {"item": "Fresh Produce Box", "qty": 20, "unit_weight_lbs": 12},
+            {"item": "Potato Bag", "qty": 20, "unit_weight_lbs": 5},
+        ],
+        24,
+        requested_categories=["produce"],
+    )
+
+    assert load["recommended_weight_lbs"] == 24
+    assert load["capacity_remaining_lbs"] == 0
+
+
+def test_load_allocator_excludes_prohibited_category():
+    load = build_load_recommendation(
+        {"selected_stops": [{"stop_id": "tract-1"}]},
+        [
+            {"item": "Apple Bag", "qty": 100, "unit_weight_lbs": 3},
+            {"item": "Whole Milk Case", "qty": 100, "unit_weight_lbs": 35},
+        ],
+        30,
+        requested_categories=["produce"],
+        excluded_categories=["dairy"],
+    )
+
+    assert load["recommended_weight_lbs"] == 30
+    assert [item["item"] for item in load["items"]] == ["Apple Bag"]
