@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 import math
 import os
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from datetime import datetime, timezone
+from threading import Lock
+from time import monotonic
 from typing import Any, Iterable
 
 import boto3
@@ -13,6 +17,11 @@ import boto3
 
 ON_HAND_KEY = "inventory/on-hand.json"
 COLD_CHAIN_KEY = "inventory/cold-chain.json"
+
+_CACHE_LOCK = Lock()
+_READ_CACHE: dict[
+    tuple[str, str], tuple[float, list[dict[str, Any]], str | None]
+] = {}
 
 
 class InventoryStoreError(RuntimeError):
@@ -78,6 +87,28 @@ def _merge_item(current: dict[str, Any], update: dict[str, Any]) -> dict[str, An
     return merged
 
 
+def _cache_ttl_seconds() -> float:
+    """Return the short read-through cache TTL; zero disables caching."""
+    raw = os.getenv("INVENTORY_CACHE_TTL_SECONDS", "15")
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 15.0
+
+
+def clear_inventory_cache(bucket: str | None = None, key: str | None = None) -> None:
+    """Clear cached inventory snapshots, optionally scoped to one object."""
+    with _CACHE_LOCK:
+        if bucket is None and key is None:
+            _READ_CACHE.clear()
+            return
+        for cache_key in list(_READ_CACHE):
+            if (bucket is None or cache_key[0] == bucket) and (
+                key is None or cache_key[1] == key
+            ):
+                _READ_CACHE.pop(cache_key, None)
+
+
 class S3InventoryStore:
     """Read and update inventory directly in the configured evidence bucket."""
 
@@ -95,7 +126,19 @@ class S3InventoryStore:
         region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
         self.s3 = s3_client or boto3.client("s3", region_name=region)
 
-    def read_with_etag(self, key: str) -> tuple[list[dict[str, Any]], str | None]:
+    def read_with_etag(
+        self, key: str, *, use_cache: bool = True
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        cache_key = (self.bucket, key)
+        ttl = _cache_ttl_seconds()
+        if use_cache and ttl > 0:
+            now = monotonic()
+            with _CACHE_LOCK:
+                cached = _READ_CACHE.get(cache_key)
+                if cached and cached[0] > now:
+                    return deepcopy(cached[1]), cached[2]
+                if cached:
+                    _READ_CACHE.pop(cache_key, None)
         try:
             response = self.s3.get_object(Bucket=self.bucket, Key=key)
             payload = json.loads(response["Body"].read())
@@ -106,10 +149,23 @@ class S3InventoryStore:
             raise InventoryStoreError(f"Could not read inventory object {key}") from exc
         if not isinstance(payload, list) or not all(isinstance(row, dict) for row in payload):
             raise InventoryStoreError(f"Inventory object {key} must contain a JSON array of objects")
-        return payload, response.get("ETag")
+        etag = response.get("ETag")
+        if use_cache and ttl > 0:
+            with _CACHE_LOCK:
+                _READ_CACHE[cache_key] = (monotonic() + ttl, deepcopy(payload), etag)
+        return payload, etag
 
     def read(self, key: str) -> list[dict[str, Any]]:
         return self.read_with_etag(key)[0]
+
+    def read_many(self, keys: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
+        """Read independent inventory objects concurrently on a cold cache."""
+        keys = list(dict.fromkeys(keys))
+        if not keys:
+            return {}
+        with ThreadPoolExecutor(max_workers=min(4, len(keys))) as executor:
+            values = executor.map(self.read, keys)
+            return dict(zip(keys, values))
 
     def write(
         self,
@@ -152,6 +208,7 @@ class S3InventoryStore:
                     f"Inventory object {key} changed during update"
                 ) from exc
             raise InventoryStoreError(f"Could not write inventory object {key}") from exc
+        clear_inventory_cache(self.bucket, key)
         return {"key": key, "version_key": version_key}
 
     def merge(self, key: str, updates: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -159,7 +216,9 @@ class S3InventoryStore:
         update_by_id = {_identity(item): item for item in updates}
         for attempt in range(3):
             try:
-                current, etag = self.read_with_etag(key)
+                # Merge must always compare against the latest ETag rather than
+                # a short-lived read cache entry.
+                current, etag = self.read_with_etag(key, use_cache=False)
             except InventoryObjectNotFound:
                 current, etag = [], None
             merged = []
