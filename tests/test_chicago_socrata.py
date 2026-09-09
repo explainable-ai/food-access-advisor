@@ -76,6 +76,29 @@ def test_unusable_row_keeps_otherwise_usable_batch_partial():
     assert "1 unusable" in batch.quality.warnings[0]
 
 
+def test_sparse_unusable_rows_do_not_make_complete_socrata_feed_partial():
+    rows = [
+        {
+            "inspection_id": str(index),
+            "dba_name": f"Market {index}",
+            "facility_type": "Grocery Store",
+        }
+        for index in range(1, 101)
+    ]
+    rows.append({
+        "inspection_id": "101",
+        "dba_name": "",
+        "facility_type": "Grocery Store",
+    })
+
+    batch = client(rows).fetch_food_inspections()
+
+    assert batch.quality.status == EvidenceStatus.COMPLETE
+    assert batch.quality.matched_rows == 100
+    assert batch.quality.excluded_rows == 1
+    assert any("small number of incomplete rows" in warning for warning in batch.quality.warnings)
+
+
 def test_active_business_query_is_scoped_at_the_source():
     adapter = client([])
     adapter.fetch_active_food_businesses()
