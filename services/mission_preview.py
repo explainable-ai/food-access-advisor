@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
@@ -199,13 +200,24 @@ def run_mission_ops(
     mission_id_factory=None,
 ) -> dict[str, Any]:
     """Draft a route-based mission without replacing existing previews."""
+    started_at = perf_counter()
     if load_lbs <= 0 or time_window_hours <= 0:
         raise ValueError("load_lbs and time_window_hours must be positive")
     if route.get("status") != "optimal" or not route.get("selected_stops"):
         raise ValueError("Dispatch requires a viable route with at least one selected stop")
     store = inventory_store or S3InventoryStore()
-    on_hand = store.read(ON_HAND_KEY)
-    cold_chain = store.read(COLD_CHAIN_KEY)
+    inventory_started_at = perf_counter()
+    if hasattr(store, "read_many"):
+        snapshot = store.read_many((ON_HAND_KEY, COLD_CHAIN_KEY))
+        on_hand = snapshot[ON_HAND_KEY]
+        cold_chain = snapshot[COLD_CHAIN_KEY]
+    else:
+        # Preserve compatibility with small test and local inventory stores.
+        on_hand = store.read(ON_HAND_KEY)
+        cold_chain = store.read(COLD_CHAIN_KEY)
+    inventory_read_ms = max(
+        0, round((perf_counter() - inventory_started_at) * 1000)
+    )
     cold_risk_by_id = {
         _inventory_identity(item): _cold_chain_risk(item)
         for item in cold_chain
@@ -247,4 +259,19 @@ def run_mission_ops(
     partial = any(check["status"] in {"Partial", "Unknown"} for check in checks)
     status = "Blocked" if blocked else ("Partial" if partial else "Ready")
     make_id = mission_id_factory or (lambda: f"mission-{uuid4().hex[:12]}")
-    return {"mission_id": make_id(), "status": status, "route": route, "suggested_load": load["items"], "load_recommendation": load, "readiness_checks": checks, "human_review_required": True, "dispatch_enabled": False}
+    return {
+        "mission_id": make_id(),
+        "status": status,
+        "route": route,
+        "suggested_load": load["items"],
+        "load_recommendation": load,
+        "readiness_checks": checks,
+        "performance": {
+            "inventory_read_ms": inventory_read_ms,
+            "dispatch_total_ms": max(
+                0, round((perf_counter() - started_at) * 1000)
+            ),
+        },
+        "human_review_required": True,
+        "dispatch_enabled": False,
+    }
