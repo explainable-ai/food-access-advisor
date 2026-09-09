@@ -11,6 +11,20 @@ from storage.inventory import ON_HAND_KEY, S3InventoryStore
 
 
 RISK_ORDER = {"critical": 0, "high": 1, "watch": 2, "medium": 3, "low": 4, "none": 5}
+SKU_CATEGORY_HINTS = {
+    "PRD-001": {"produce"},
+    "PRD-002": {"produce"},
+    "PRD-003": {"produce"},
+    "PRD-004": {"dairy"},
+    "PRD-005": {"dairy"},
+    "PRD-006": {"dairy"},
+    "PRD-007": {"protein", "frozen"},
+    "PRD-008": {"produce", "frozen"},
+    "PRD-009": {"pantry"},
+    "PRD-010": {"pantry"},
+    "PRD-011": {"protein", "pantry"},
+    "PRD-012": {"pantry"},
+}
 
 
 def _available_quantity(item: dict[str, Any]) -> float:
@@ -26,6 +40,24 @@ def _unit_weight(item: dict[str, Any]) -> float:
 
 def _risk(item: dict[str, Any]) -> str:
     return str(item.get("cold_chain_risk") or item.get("risk_status") or "none").strip().lower()
+
+
+def _categories(item: dict[str, Any]) -> set[str]:
+    values = {
+        str(item.get("category") or "").strip().lower(),
+        str(item.get("temperature_zone") or "").strip().lower(),
+    }
+    values.discard("")
+    sku = str(item.get("sku") or item.get("item_id") or "").strip().upper()
+    values.update(SKU_CATEGORY_HINTS.get(sku, set()))
+    return values
+
+
+def _matches_categories(item: dict[str, Any], requested_categories: set[str]) -> bool:
+    if not requested_categories:
+        return True
+    tags = _categories(item)
+    return bool(tags & requested_categories)
 
 
 def _stop_allocations(stops: list[dict[str, Any]], quantity: int) -> list[dict[str, Any]]:
@@ -44,39 +76,68 @@ def _stop_allocations(stops: list[dict[str, Any]], quantity: int) -> list[dict[s
     return rows
 
 
-def build_load_recommendation(route: dict[str, Any], inventory: list[dict[str, Any]], capacity_lbs: float) -> dict[str, Any]:
+def build_load_recommendation(
+    route: dict[str, Any],
+    inventory: list[dict[str, Any]],
+    capacity_lbs: float,
+    requested_categories: list[str] | None = None,
+) -> dict[str, Any]:
     if capacity_lbs <= 0:
         raise ValueError("capacity_lbs must be positive")
     stops = list(route.get("selected_stops") or [])
-    ordered = sorted(inventory, key=lambda item: (RISK_ORDER.get(_risk(item), 99), str(item.get("item") or item.get("sku") or "")))
+    requested = {str(value).strip().lower() for value in requested_categories or [] if str(value).strip()}
+    eligible = [item for item in inventory if _matches_categories(item, requested)]
+    ordered = sorted(eligible, key=lambda item: (RISK_ORDER.get(_risk(item), 99), str(item.get("item") or item.get("sku") or "")))
     remaining = float(capacity_lbs)
+    quantities = [0] * len(ordered)
+
+    # Allocate in explainable rounds so a broad request such as "produce"
+    # yields a useful mix instead of being monopolized by the first SKU.
+    while remaining >= 0.01:
+        progress = False
+        for index, item in enumerate(ordered):
+            unit_lbs = _unit_weight(item)
+            if quantities[index] >= floor(_available_quantity(item)):
+                continue
+            if unit_lbs > remaining + 1e-9:
+                continue
+            quantities[index] += 1
+            remaining = max(0.0, remaining - unit_lbs)
+            progress = True
+        if not progress:
+            break
+
     suggestions = []
-    for item in ordered:
-        available = _available_quantity(item)
-        unit_lbs = _unit_weight(item)
-        qty = min(floor(remaining / unit_lbs), floor(available))
+    for item, qty in zip(ordered, quantities):
         if qty <= 0:
             continue
+        unit_lbs = _unit_weight(item)
         used_lbs = round(qty * unit_lbs, 2)
         risk = _risk(item)
+        category_text = ", ".join(sorted(_categories(item))) or "catalog item"
         suggestions.append({
             "item_id": item.get("item_id") or item.get("sku") or item.get("item"),
             "item": item.get("item") or item.get("name") or item.get("sku"),
             "qty": qty,
             "weight_lbs": used_lbs,
             "risk_status": risk,
-            "reason": f"Prioritized because cold-chain risk is {risk}; quantity is limited by on-hand inventory and remaining vehicle capacity.",
+            "category": str(item.get("category") or "") or None,
+            "matched_categories": sorted(_categories(item) & requested),
+            "reason": (
+                f"Matches requested category ({category_text}); allocation is limited by on-hand inventory and the requested load."
+                if requested
+                else f"Allocated from current inventory; cold-chain risk is {risk} and quantity is limited by the requested load."
+            ),
             "allocations": _stop_allocations(stops, qty),
         })
-        remaining = max(0.0, remaining - used_lbs)
-        if remaining < 0.01:
-            break
     return {
         "items": suggestions,
         "recommended_weight_lbs": round(capacity_lbs - remaining, 2),
         "capacity_lbs": round(capacity_lbs, 2),
         "capacity_remaining_lbs": round(remaining, 2),
-        "allocation_basis": "cold-chain risk, on-hand quantity, stop household share, vehicle capacity",
+        "requested_categories": sorted(requested),
+        "category_match": not requested or bool(eligible),
+        "allocation_basis": "requested category, on-hand quantity, stop household share, requested load, cold-chain risk",
         "source": "S3 inventory/on-hand.json",
     }
 
