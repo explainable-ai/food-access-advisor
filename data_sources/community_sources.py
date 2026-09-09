@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from html import unescape
 from html.parser import HTMLParser
@@ -29,7 +29,22 @@ from data_sources.contracts import (
 )
 
 MAX_RESPONSE_BYTES = 2_000_000
+MAX_DISCOVERY_PAGES = 3
 USER_AGENT = "FoodAccessAdvisor-CommunityWatch/1.0 (+https://github.com/explainable-ai)"
+
+DISCOVERY_TERMS = (
+    "schedule", "calendar", "event", "location", "hours", "find food",
+    "food distribution", "mobile market", "mobile pantry", "farmers market",
+    "groceries", "program",
+)
+DISCOVERY_EXCLUSIONS = (
+    "donate", "career", "privacy", "login", "sign in", "instagram",
+    "facebook", "linkedin", "youtube", "contact", "newsletter",
+)
+NON_HTML_SUFFIXES = (
+    ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".zip", ".csv",
+    ".json", ".xml", ".ics",
+)
 
 SEMANTIC_KEYWORDS: dict[str, tuple[str, ...]] = {
     "direct_assistance": (
@@ -153,6 +168,46 @@ def keyword_matches(text: str) -> dict[str, list[str]]:
         for group, terms in SEMANTIC_KEYWORDS.items()
         if any(term.casefold() in haystack for term in terms)
     }
+
+
+def _same_site_page(seed_url: str, href: str) -> str | None:
+    """Return a safe same-host HTML URL, stripping fragments and credentials."""
+    candidate = urlparse(urljoin(seed_url, href))
+    seed = urlparse(seed_url)
+    if (
+        candidate.scheme != "https"
+        or candidate.hostname != seed.hostname
+        or candidate.username
+        or candidate.password
+        or candidate.path.casefold().endswith(NON_HTML_SUFFIXES)
+    ):
+        return None
+    return candidate._replace(fragment="").geturl()
+
+
+def _discovery_pages(source: CommunitySource, html: str) -> list[str]:
+    """Rank a bounded set of relevant links from an approved source page."""
+    parser = _PageParser()
+    parser.feed(html)
+    seed = urlparse(source.url)._replace(fragment="").geturl()
+    ranked: dict[str, int] = {}
+    for href, label in parser.links:
+        page = _same_site_page(source.url, href)
+        if not page or page == seed:
+            continue
+        searchable = _clean_text(f"{label} {urlparse(page).path}").casefold()
+        if any(term in searchable for term in DISCOVERY_EXCLUSIONS):
+            continue
+        score = sum(1 for term in DISCOVERY_TERMS if term in searchable)
+        score += sum(
+            2 for term in SEMANTIC_KEYWORDS.get("direct_assistance", ())
+            if term in searchable
+        )
+        if score:
+            ranked[page] = max(score, ranked.get(page, 0))
+    return [
+        page for page, _ in sorted(ranked.items(), key=lambda item: (-item[1], item[0]))
+    ][:MAX_DISCOVERY_PAGES]
 
 
 class _PageParser(HTMLParser):
@@ -509,28 +564,80 @@ class CommunitySourceClient:
         self.session = session or requests.Session()
         self.timeout_seconds = timeout_seconds
 
-    def fetch(self, source: CommunitySource) -> ResourceEvidenceBatch:
-        expected = urlparse(source.url)
-        if expected.scheme != "https" or expected.hostname not in ALLOWED_HOSTS:
-            raise ValueError("Community source is not on the approved HTTPS allowlist")
+    def _fetch_html(self, source: CommunitySource, url: str) -> str:
+        expected = urlparse(url)
+        seed = urlparse(source.url)
+        if (
+            expected.scheme != "https"
+            or expected.hostname not in ALLOWED_HOSTS
+            or expected.hostname != seed.hostname
+        ):
+            raise ValueError("Community source page is not on its approved HTTPS host")
         try:
             response = self.session.get(
-                source.url,
+                url,
                 headers={"Accept": "text/html,application/xhtml+xml", "User-Agent": USER_AGENT},
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()
         except requests.RequestException as exc:
             raise CommunitySourceError(f"{source.name} request failed: {exc}") from exc
-        final_url = urlparse(response.url or source.url)
-        if final_url.scheme != "https" or final_url.hostname not in ALLOWED_HOSTS:
+        final_url = urlparse(response.url or url)
+        if final_url.scheme != "https" or final_url.hostname != seed.hostname:
             raise CommunitySourceError(f"{source.name} redirected outside the approved source allowlist")
         if len(response.content) > MAX_RESPONSE_BYTES:
             raise CommunitySourceError(f"{source.name} response exceeded {MAX_RESPONSE_BYTES} bytes")
         content_type = response.headers.get("Content-Type", "text/html").casefold()
         if "html" not in content_type:
             raise CommunitySourceError(f"{source.name} returned unsupported content type {content_type!r}")
-        return parse_source_html(source, response.text)
+        return response.text
+
+    @staticmethod
+    def _merge_discovery_batches(
+        source: CommunitySource,
+        batches: list[ResourceEvidenceBatch],
+    ) -> ResourceEvidenceBatch:
+        records = {
+            record.entity_id: record
+            for batch in batches
+            for record in batch.records
+        }
+        if not records:
+            return batches[0]
+        retrieved = max(batch.citation.retrieved_at for batch in batches)
+        return ResourceEvidenceBatch(
+            source_id=source.source_id,
+            records=list(records.values()),
+            citation=_citation(source, retrieved),
+            quality=DataQualityReport(
+                status=EvidenceStatus.COMPLETE,
+                source_row_count=sum(batch.quality.source_row_count for batch in batches),
+                matched_rows=len(records),
+                excluded_rows=sum(batch.quality.excluded_rows for batch in batches),
+                warnings=[
+                    f"Followed {len(batches) - 1} relevant same-site page(s) after the approved landing page was incomplete."
+                ],
+            ),
+        )
+
+    def fetch(self, source: CommunitySource) -> ResourceEvidenceBatch:
+        expected = urlparse(source.url)
+        if expected.scheme != "https" or expected.hostname not in ALLOWED_HOSTS:
+            raise ValueError("Community source is not on the approved HTTPS allowlist")
+        html = self._fetch_html(source, source.url)
+        landing = parse_source_html(source, html)
+        if landing.quality.status == EvidenceStatus.COMPLETE:
+            return landing
+
+        batches = [landing]
+        for page_url in _discovery_pages(source, html):
+            try:
+                page_html = self._fetch_html(source, page_url)
+            except CommunitySourceError:
+                continue
+            page_source = replace(source, url=page_url)
+            batches.append(parse_source_html(page_source, page_html))
+        return self._merge_discovery_batches(source, batches)
 
 
 def source_registry() -> list[dict[str, Any]]:

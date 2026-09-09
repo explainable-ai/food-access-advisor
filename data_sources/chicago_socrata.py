@@ -203,8 +203,10 @@ class ChicagoSocrataClient:
     @staticmethod
     def _batch(dataset, citation, rows, records, excluded, stale=False, unusable=0):
         missing = sum(1 for record in records if record.lat is None or record.lon is None)
+        unusable_fraction = unusable / len(rows) if rows else 0.0
         status = (
-            EvidenceStatus.PARTIAL if unusable
+            EvidenceStatus.PARTIAL
+            if unusable and (not records or unusable_fraction > 0.05)
             else EvidenceStatus.STALE_CACHE if stale
             else EvidenceStatus.COMPLETE
         )
@@ -214,6 +216,10 @@ class ChicagoSocrataClient:
             warnings.append(
                 f"{excluded} rows were excluded ({out_of_scope} out-of-scope; "
                 f"{unusable} unusable)."
+            )
+        if unusable and status == EvidenceStatus.COMPLETE:
+            warnings.append(
+                "A small number of incomplete rows were skipped without invalidating the usable dataset."
             )
         if missing:
             warnings.append(

@@ -163,10 +163,74 @@ class Session:
         return self.response
 
 
+class RoutingSession:
+    def __init__(self, pages):
+        self.pages = pages
+        self.calls = []
+
+    def get(self, url, **_kwargs):
+        self.calls.append(url)
+        return Response(url=url, body=self.pages[url])
+
+
 def test_client_rejects_redirect_outside_approved_hosts():
     client = CommunitySourceClient(session=Session(Response(url="https://evil.example/events")))
     with pytest.raises(CommunitySourceError, match="redirected outside"):
         client.fetch(SOURCE)
+
+
+def test_client_follows_only_relevant_same_site_pages_after_partial_landing():
+    source = CommunitySource(
+        "official_mobile_market",
+        "Official Mobile Market",
+        "https://www.chicagosfoodbank.org/mobile-market",
+        "chicago",
+        "mobile_market",
+        "Mobile market schedules.",
+    )
+    schedule_url = "https://www.chicagosfoodbank.org/mobile-market/schedule"
+    session = RoutingSession({
+        source.url: f"""
+            <h1>Mobile Market</h1>
+            <a href=\"/mobile-market/schedule\">View the mobile market schedule</a>
+            <a href=\"https://evil.example/food-schedule\">Unapproved schedule</a>
+            <a href=\"/donate\">Donate</a>
+        """,
+        schedule_url: """
+            <script type=\"application/ld+json\">
+            {"@type":"Event","@id":"market-1","name":"Free Grocery Mobile Market",
+             "description":"Mobile pantry distribution",
+             "startDate":"2026-09-10T10:00:00-05:00"}
+            </script>
+        """,
+    })
+
+    batch = CommunitySourceClient(session=session).fetch(source)
+
+    assert session.calls == [source.url, schedule_url]
+    assert batch.quality.status == EvidenceStatus.COMPLETE
+    assert [record.name for record in batch.records] == ["Free Grocery Mobile Market"]
+    assert "Followed 1 relevant same-site page" in batch.quality.warnings[0]
+
+
+def test_client_does_not_crawl_when_approved_landing_page_is_complete():
+    source = next(
+        item for item in APPROVED_SOURCES
+        if item.source_id == "fresh_moves_mobile_market"
+    )
+    html = """
+        <h2>Regular Mobile Market Schedule</h2>
+        <p>MONDAYS:</p>
+        <p>10:00 AM - 11:30 AM: Roosevelt Square, 1242 S Loomis St</p>
+        <a href=\"/events\">More events</a>
+        <h2>What's On The Bus</h2>
+    """
+    session = RoutingSession({source.url: html})
+
+    batch = CommunitySourceClient(session=session).fetch(source)
+
+    assert batch.quality.status == EvidenceStatus.COMPLETE
+    assert session.calls == [source.url]
 
 
 def test_registry_contains_only_https_approved_sources():
