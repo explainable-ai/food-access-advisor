@@ -102,6 +102,22 @@ class DynamoDBMissionMemory:
         self._validate_review(mission_id, action, mission)
         reviewed_at = datetime.now(timezone.utc).isoformat()
         route = mission.get("route") or {}
+        compact_load = [
+            {
+                key: product.get(key)
+                for key in (
+                    "item_id",
+                    "sku",
+                    "item",
+                    "quantity",
+                    "unit_weight_lbs",
+                    "weight_lbs",
+                )
+                if product.get(key) is not None
+            }
+            for product in mission.get("suggested_load") or []
+            if isinstance(product, dict)
+        ]
         item = {
             "entity_type": MISSION_REVIEW_TYPE,
             "entity_id": mission_id,
@@ -122,8 +138,21 @@ class DynamoDBMissionMemory:
                 for product in mission.get("suggested_load") or []
                 if (value := _identity(product))
             ],
+            "suggested_load": compact_load,
+            "route_metrics": {
+                key: route.get(key)
+                for key in ("route_minutes", "capacity_used", "travel_time_source")
+                if route.get(key) is not None
+            },
+            "readiness_statuses": [
+                {
+                    "check": check.get("check"),
+                    "status": check.get("status"),
+                }
+                for check in mission.get("readiness_checks") or []
+                if isinstance(check, dict)
+            ],
             "mission_status": mission.get("status"),
-            "mission_snapshot": mission,
             "data_classification": "synthetic_demo",
             "not_for_real_dispatch": True,
         }
@@ -141,7 +170,7 @@ class DynamoDBMissionMemory:
             raise MissionMemoryError(
                 f"Could not record review for mission {mission_id}"
             ) from exc
-        return _json_safe({key: value for key, value in item.items() if key != "mission_snapshot"})
+        return _json_safe(item)
 
     def list_approved(
         self,
@@ -194,6 +223,9 @@ class DynamoDBMissionMemory:
                         "request_intent",
                         "selected_stop_ids",
                         "suggested_item_ids",
+                        "suggested_load",
+                        "route_metrics",
+                        "readiness_statuses",
                         "mission_status",
                         "review_note",
                     )
