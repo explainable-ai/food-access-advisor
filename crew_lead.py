@@ -44,6 +44,9 @@ class CrewBriefResponse(BaseModel):
     final_summary: str
     request_intent: dict[str, Any] = Field(default_factory=dict)
     context: dict[str, Any] = Field(default_factory=dict)
+    orchestration_mode: Literal["deterministic_fast_path", "agent_fallback"] = (
+        "deterministic_fast_path"
+    )
     total_duration_ms: int = 0
 
 
@@ -261,11 +264,44 @@ def build_crew_lead() -> Agent:
     return Agent(name="LastMile Market Crew Lead", model=build_model(), system_prompt=SYSTEM_PROMPT, tools=[sentry_check, scout, router, dispatch], tool_executor=SequentialToolExecutor(), callback_handler=None)
 
 
+def _run_deterministic_chain(state: _RunState, request: str) -> None:
+    """Run the same four tool-backed agents without model orchestration latency."""
+    area = state.study_area or "chicago_neighborhoods"
+    sentry_check(area)
+    if state.steps[-1]["status"] != "ok":
+        return
+    scout(
+        area,
+        request,
+        area_was_inferred=state.explicit_area is None,
+    )
+    if state.steps[-1]["status"] != "ok":
+        return
+    router(
+        state.steps[-1]["data"].get("top_tracts") or [],
+        OPERATIONS_HUB,
+        float(state.time_window_hours),
+        float(state.load_lbs),
+    )
+    if state.steps[-1]["status"] != "ok":
+        return
+    dispatch(
+        state.steps[-1]["data"],
+        float(state.load_lbs),
+        float(state.time_window_hours),
+    )
+
+
 def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: Agent | None = None) -> dict[str, Any]:
     """Run the real tool chain and return only captured tool outputs."""
     if not request.strip():
         raise ValueError("request must not be blank")
     state = _RunState(study_area, request)
+    use_fast_path = (
+        agent is None
+        and state.load_lbs is not None
+        and state.time_window_hours is not None
+    )
     token = _current_run.set(state)
     try:
         prompt = request.strip()
@@ -276,7 +312,10 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
             "exactly):\n"
             + json.dumps(state.context.request_intent.model_dump(), sort_keys=True)
         )
-        (agent or build_crew_lead())(prompt)
+        if use_fast_path:
+            _run_deterministic_chain(state, request.strip())
+        else:
+            (agent or build_crew_lead())(prompt)
     finally:
         _current_run.reset(token)
     if not state.steps:
@@ -301,5 +340,8 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
             "study_area": state.study_area,
         },
         context=state.context.model_dump(),
+        orchestration_mode=(
+            "deterministic_fast_path" if use_fast_path else "agent_fallback"
+        ),
         total_duration_ms=max(0, round((perf_counter() - state.started_at) * 1000)),
     ).model_dump()

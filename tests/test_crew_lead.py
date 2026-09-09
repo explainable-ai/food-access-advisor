@@ -1,6 +1,6 @@
 import crew_lead
 import agent as scout_agent
-from services.load_recommendation import build_load_recommendation
+from services.load_recommendation import build_load_recommendation, household_load_plan
 from services.mission_preview import run_mission_ops
 from storage.inventory import COLD_CHAIN_KEY, ON_HAND_KEY
 
@@ -29,6 +29,27 @@ def test_crew_chain_uses_recorded_outputs_and_explicit_area(monkeypatch):
     assert [step["agent"] for step in result["steps"]] == ["sentry", "scout", "router", "dispatch"]
     assert result["mission_id"] == "mission-test"
     assert "Assumed study area" not in result["steps"][1]["summary"]
+
+
+def test_complete_request_uses_deterministic_fast_path(monkeypatch):
+    _successful_dependencies(monkeypatch)
+    monkeypatch.setattr(
+        crew_lead,
+        "build_crew_lead",
+        lambda: (_ for _ in ()).throw(AssertionError("Bedrock should not run")),
+    )
+
+    result = crew_lead.run_crew_brief(
+        "Take 200 lbs of produce to Chicago in four hours."
+    )
+
+    assert result["orchestration_mode"] == "deterministic_fast_path"
+    assert [step["agent"] for step in result["steps"]] == [
+        "sentry",
+        "scout",
+        "router",
+        "dispatch",
+    ]
 
 
 def test_crew_chain_discloses_inferred_area(monkeypatch):
@@ -303,3 +324,35 @@ def test_load_allocator_caps_search_work(monkeypatch):
     )
 
     assert load["recommended_weight_lbs"] <= 200
+
+
+def test_household_range_produces_capped_explainable_load_target():
+    plan = household_load_plan(
+        [{"households": 1000}, {"households": 500}],
+        400,
+    )
+
+    assert plan["represented_households"] == 1500
+    assert plan["service_households_min"] == 15
+    assert plan["service_households_max"] == 45
+    assert plan["load_range_lbs"] == {"min": 150.0, "max": 675.0}
+    assert plan["target_load_lbs"] == 400
+    assert "capped" in plan["method"]
+
+
+def test_router_assigns_human_readable_stop_name_and_reason():
+    tract = {
+        "community_area": "Austin",
+        "rank": 1,
+        "need_score": 91,
+        "households_total": 2200,
+        "score_contributions": {"food_access_gap": 25, "no_vehicle": 18},
+    }
+
+    assert crew_lead.run_route_advisor.__module__ == "route_advisor"
+    from route_advisor import _selection_reason, _stop_name
+
+    assert _stop_name(tract, 0) == "Austin"
+    reason = _selection_reason(tract)
+    assert "food-access gap" in reason
+    assert "2,200 households" in reason

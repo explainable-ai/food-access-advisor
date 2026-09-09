@@ -22,6 +22,45 @@ NAME_CATEGORY_HINTS = {
 }
 ALLOCATION_MAX_STATES = max(int(os.getenv("LOAD_ALLOCATION_MAX_STATES", "6000")), 1)
 ALLOCATION_MAX_CANDIDATES = max(int(os.getenv("LOAD_ALLOCATION_MAX_CANDIDATES", "250000")), 1)
+HOUSEHOLD_REACH_MIN_RATE = max(float(os.getenv("HOUSEHOLD_REACH_MIN_RATE", "0.01")), 0)
+HOUSEHOLD_REACH_MAX_RATE = max(float(os.getenv("HOUSEHOLD_REACH_MAX_RATE", "0.03")), HOUSEHOLD_REACH_MIN_RATE)
+LBS_PER_HOUSEHOLD_MIN = max(float(os.getenv("LBS_PER_HOUSEHOLD_MIN", "10")), 0.01)
+LBS_PER_HOUSEHOLD_MAX = max(float(os.getenv("LBS_PER_HOUSEHOLD_MAX", "15")), LBS_PER_HOUSEHOLD_MIN)
+
+
+def household_load_plan(stops: list[dict[str, Any]], capacity_lbs: float) -> dict[str, Any]:
+    """Convert represented households into an explainable service and load range."""
+    represented = round(
+        sum(max(float(stop.get("households") or 0), 0) for stop in stops)
+    )
+    if represented <= 0:
+        return {
+            "represented_households": 0,
+            "service_households_min": None,
+            "service_households_max": None,
+            "load_range_lbs": {"min": None, "max": None},
+            "target_load_lbs": round(capacity_lbs, 2),
+            "method": "requested load used because household evidence was unavailable",
+        }
+    service_min = max(1, round(represented * HOUSEHOLD_REACH_MIN_RATE))
+    service_max = max(service_min, round(represented * HOUSEHOLD_REACH_MAX_RATE))
+    minimum_lbs = round(service_min * LBS_PER_HOUSEHOLD_MIN, 2)
+    maximum_lbs = round(service_max * LBS_PER_HOUSEHOLD_MAX, 2)
+    midpoint = (minimum_lbs + maximum_lbs) / 2
+    target = round(min(float(capacity_lbs), midpoint), 2)
+    return {
+        "represented_households": represented,
+        "service_households_min": service_min,
+        "service_households_max": service_max,
+        "load_range_lbs": {"min": minimum_lbs, "max": maximum_lbs},
+        "target_load_lbs": target,
+        "capacity_lbs": round(capacity_lbs, 2),
+        "method": (
+            f"{HOUSEHOLD_REACH_MIN_RATE:.0%}-{HOUSEHOLD_REACH_MAX_RATE:.0%} expected reach; "
+            f"{LBS_PER_HOUSEHOLD_MIN:g}-{LBS_PER_HOUSEHOLD_MAX:g} lbs per household; "
+            "capped by requested vehicle/load capacity"
+        ),
+    }
 
 
 def _available_quantity(item: dict[str, Any]) -> float:
@@ -154,9 +193,11 @@ def build_load_recommendation(
     stops = list(route.get("selected_stops") or [])
     requested = {str(value).strip().lower() for value in requested_categories or [] if str(value).strip()}
     excluded = {str(value).strip().lower() for value in excluded_categories or [] if str(value).strip()}
+    household_plan = household_load_plan(stops, capacity_lbs)
+    target_lbs = float(household_plan["target_load_lbs"])
     eligible = [item for item in inventory if _matches_categories(item, requested, excluded)]
     ordered = sorted(eligible, key=lambda item: (RISK_ORDER.get(_risk(item), 99), str(item.get("item") or item.get("sku") or "")))
-    quantities, remaining = _allocate_quantities(ordered, capacity_lbs)
+    quantities, target_remaining = _allocate_quantities(ordered, target_lbs)
 
     suggestions = []
     covered_requested_categories: set[str] = set()
@@ -191,13 +232,15 @@ def build_load_recommendation(
         })
     return {
         "items": suggestions,
-        "recommended_weight_lbs": round(capacity_lbs - remaining, 2),
+        "recommended_weight_lbs": round(target_lbs - target_remaining, 2),
+        "target_load_lbs": round(target_lbs, 2),
         "capacity_lbs": round(capacity_lbs, 2),
-        "capacity_remaining_lbs": round(remaining, 2),
+        "capacity_remaining_lbs": round(capacity_lbs - (target_lbs - target_remaining), 2),
+        "household_plan": household_plan,
         "requested_categories": sorted(requested),
         "excluded_categories": sorted(excluded),
         "category_match": requested.issubset(covered_requested_categories),
-        "allocation_basis": "requested category, on-hand quantity, stop household share, requested load, cold-chain risk",
+        "allocation_basis": "household service range, pounds per household, requested capacity, category, on-hand quantity, stop household share, and cold-chain risk",
         "source": "S3 inventory/on-hand.json",
     }
 
