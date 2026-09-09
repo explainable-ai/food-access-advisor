@@ -22,6 +22,8 @@ _CACHE_LOCK = Lock()
 _READ_CACHE: dict[
     tuple[str, str], tuple[float, list[dict[str, Any]], str | None]
 ] = {}
+_CACHE_GENERATIONS: dict[tuple[str, str], int] = {}
+_CACHE_EPOCH = 0
 
 
 class InventoryStoreError(RuntimeError):
@@ -98,15 +100,24 @@ def _cache_ttl_seconds() -> float:
 
 def clear_inventory_cache(bucket: str | None = None, key: str | None = None) -> None:
     """Clear cached inventory snapshots, optionally scoped to one object."""
+    global _CACHE_EPOCH
     with _CACHE_LOCK:
         if bucket is None and key is None:
             _READ_CACHE.clear()
+            _CACHE_GENERATIONS.clear()
+            _CACHE_EPOCH += 1
             return
-        for cache_key in list(_READ_CACHE):
+        candidates = set(_READ_CACHE) | set(_CACHE_GENERATIONS)
+        if bucket is not None and key is not None:
+            candidates.add((bucket, key))
+        for cache_key in candidates:
             if (bucket is None or cache_key[0] == bucket) and (
                 key is None or cache_key[1] == key
             ):
                 _READ_CACHE.pop(cache_key, None)
+                _CACHE_GENERATIONS[cache_key] = (
+                    _CACHE_GENERATIONS.get(cache_key, 0) + 1
+                )
 
 
 class S3InventoryStore:
@@ -131,9 +142,13 @@ class S3InventoryStore:
     ) -> tuple[list[dict[str, Any]], str | None]:
         cache_key = (self.bucket, key)
         ttl = _cache_ttl_seconds()
+        cache_epoch = 0
+        cache_generation = 0
         if use_cache and ttl > 0:
             now = monotonic()
             with _CACHE_LOCK:
+                cache_epoch = _CACHE_EPOCH
+                cache_generation = _CACHE_GENERATIONS.get(cache_key, 0)
                 cached = _READ_CACHE.get(cache_key)
                 if cached and cached[0] > now:
                     return deepcopy(cached[1]), cached[2]
@@ -152,7 +167,15 @@ class S3InventoryStore:
         etag = response.get("ETag")
         if use_cache and ttl > 0:
             with _CACHE_LOCK:
-                _READ_CACHE[cache_key] = (monotonic() + ttl, deepcopy(payload), etag)
+                if (
+                    _CACHE_EPOCH == cache_epoch
+                    and _CACHE_GENERATIONS.get(cache_key, 0) == cache_generation
+                ):
+                    _READ_CACHE[cache_key] = (
+                        monotonic() + ttl,
+                        deepcopy(payload),
+                        etag,
+                    )
         return payload, etag
 
     def read(self, key: str) -> list[dict[str, Any]]:
