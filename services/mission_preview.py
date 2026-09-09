@@ -272,6 +272,7 @@ def run_mission_ops(
                 0, round((perf_counter() - started_at) * 1000)
             ),
         },
+        "not_for_real_dispatch": True,
         "human_review_required": True,
         "dispatch_enabled": False,
     }
