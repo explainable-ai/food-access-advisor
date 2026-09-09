@@ -216,3 +216,49 @@ def test_concurrent_write_prevents_stale_read_from_repopulating_cache(monkeypatc
 
     assert store.read("inventory/on-hand.json")[0]["qty"] == 7
     assert s3.get_calls == 2
+
+
+@pytest.mark.parametrize(
+    "clear_kwargs",
+    [
+        {"bucket": "bucket"},
+        {"key": "inventory/on-hand.json"},
+    ],
+)
+def test_partial_clear_invalidates_in_flight_cache_miss(monkeypatch, clear_kwargs):
+    monkeypatch.setenv("INVENTORY_CACHE_TTL_SECONDS", "30")
+
+    class PausedReadS3(FakeS3):
+        def __init__(self):
+            super().__init__()
+            self.read_started = Event()
+            self.allow_read_to_finish = Event()
+
+        def get_object(self, Bucket, Key):
+            response = super().get_object(Bucket, Key)
+            self.read_started.set()
+            assert self.allow_read_to_finish.wait(timeout=2)
+            return response
+
+    s3 = PausedReadS3()
+    s3.put_object(
+        Bucket="bucket",
+        Key="inventory/on-hand.json",
+        Body=json.dumps([{"item_id": "apples", "qty": 2}]).encode(),
+    )
+    store = S3InventoryStore(bucket="bucket", s3_client=s3)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        stale_read = executor.submit(store.read, "inventory/on-hand.json")
+        assert s3.read_started.wait(timeout=2)
+        s3.put_object(
+            Bucket="bucket",
+            Key="inventory/on-hand.json",
+            Body=json.dumps([{"item_id": "apples", "qty": 7}]).encode(),
+        )
+        clear_inventory_cache(**clear_kwargs)
+        s3.allow_read_to_finish.set()
+        assert stale_read.result()[0]["qty"] == 2
+
+    assert store.read("inventory/on-hand.json")[0]["qty"] == 7
+    assert s3.get_calls == 2
