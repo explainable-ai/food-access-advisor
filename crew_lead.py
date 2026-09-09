@@ -46,7 +46,7 @@ class _RunState:
         self.steps: list[dict[str, Any]] = []
         self.load_lbs: float | None = None
         self.time_window_hours: float | None = None
-        self.requested_categories = _requested_categories(request)
+        self.requested_categories, self.excluded_categories = _category_intent(request)
         self.started_at = perf_counter()
 
 
@@ -92,14 +92,31 @@ _CATEGORY_PATTERNS = {
 }
 
 
-def _requested_categories(request: str) -> list[str]:
-    """Extract only supported catalog constraints; never invent a category."""
+def _category_intent(request: str) -> tuple[list[str], list[str]]:
+    """Extract supported category requirements and explicit exclusions."""
     lowered = request.lower()
-    return [
-        category
-        for category, patterns in _CATEGORY_PATTERNS.items()
-        if any(re.search(pattern, lowered) for pattern in patterns)
-    ]
+    requested: set[str] = set()
+    excluded: set[str] = set()
+    for category, patterns in _CATEGORY_PATTERNS.items():
+        for pattern in patterns:
+            for match in re.finditer(pattern, lowered):
+                prefix = lowered[max(0, match.start() - 32) : match.start()]
+                suffix = lowered[match.end() : match.end() + 8]
+                negated = bool(
+                    re.search(
+                        r"(?:\bno\b|\bwithout\b|\bexclude(?:d|ing)?\b|\bexcept\b)\s+(?:\w+[ -]+){0,2}$",
+                        prefix,
+                    )
+                    or re.match(r"[- ]free\b", suffix)
+                )
+                (excluded if negated else requested).add(category)
+    requested.difference_update(excluded)
+    return sorted(requested), sorted(excluded)
+
+
+def _requested_categories(request: str) -> list[str]:
+    """Backward-compatible positive category extractor."""
+    return _category_intent(request)[0]
 
 
 def _timed(step: dict[str, Any], started_at: float) -> dict[str, Any]:
@@ -183,6 +200,7 @@ def dispatch(route: dict, load_lbs: float, time_window_hours: float) -> dict:
             state.load_lbs,
             state.time_window_hours,
             requested_categories=state.requested_categories,
+            excluded_categories=state.excluded_categories,
         )
         status = "no_result" if data.get("status") == "Blocked" else "ok"
         summary = "Mission is blocked by a readiness check." if status == "no_result" else "Mission drafted with suggested load — ready for human review."
@@ -234,6 +252,7 @@ def run_crew_brief(request: str, study_area: StudyArea | None = None, *, agent: 
             "load_lbs": state.load_lbs,
             "time_window_hours": state.time_window_hours,
             "categories": state.requested_categories,
+            "excluded_categories": state.excluded_categories,
             "study_area": state.study_area,
         },
         total_duration_ms=max(0, round((perf_counter() - state.started_at) * 1000)),
