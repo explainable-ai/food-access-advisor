@@ -16,18 +16,40 @@ LastMile Market helps mobile-grocery teams decide **where to serve, how to route
 | `food-access-advisor` (this repository) | FastAPI, the Last Mile Crew, scoring, routing, evidence monitoring, persistence, data preparation, authentication enforcement, and AWS deployment |
 | [`food-equity-navigator`](https://github.com/explainable-ai/food-equity-navigator) | The React/MapLibre interface published by Lovable at `lastmilemarket.lovable.app` |
 
-The Lovable application is not a separate demo or mock backend. It calls this API. **Brief the Crew** is the fast path; Prioritize Sites, Route Planning, Mission Review, and Access Watch expose the same agents' work as an editable control panel.
+The Lovable application is not a separate demo or mock backend. It calls this API. **Brief the Crew** is the fast path; Prioritize Sites, Route Planning, Mission Review, and Access Watch expose the same role outputs and deterministic services as an editable control panel.
 
 ## The Last Mile Crew
 
-| Product name | Existing implementation | Responsibility |
-| --- | --- | --- |
-| **Scout** | `agent.py` | Ranks Chicago and Chicagoland rural-fringe tracts using transparent evidence and adjustable weights |
-| **Router** | `route_advisor.py` | Selects and sequences stops under road-time, service-time, vehicle-capacity, and maximum-stop constraints |
-| **Dispatch** | `services/mission_preview.py` | Builds a reviewable mission and household-based suggested load from available inventory |
-| **Sentry** | `watchdog_agent.py` | Monitors approved public sources, records evidence quality, and routes material changes to human review |
+| Product role | Code identity | Runtime shape | Responsibility |
+| --- | --- | --- | --- |
+| **Scout** | `agent.py`: `build_advisor()` / `run_site_advisor()` | Standalone Strands agent entry point plus deterministic Crew tool stage | Ranks Chicago and Chicagoland rural-fringe tracts using transparent evidence and adjustable weights |
+| **Router** | `route_advisor.py`: `build_route_advisor()` / `run_route_advisor()` | Standalone Strands agent entry point plus deterministic Crew tool stage | Selects and sequences stops under road-time, service-time, vehicle-capacity, and maximum-stop constraints |
+| **Dispatch** | `crew_lead.py`: `dispatch()` and `services/mission_preview.py` | Deterministic Crew tool stage, not a standalone Strands `Agent` | Builds a reviewable mission and household-based suggested load from available inventory |
+| **Sentry** | `watchdog_agent.py`: `build_watchdog()` / `run_watchdog()` | Standalone Strands agent entry point plus deterministic Crew tool stage; an additional tool-free reporter summarizes monitoring runs | Monitors approved public sources, records evidence quality, and routes material changes to human review |
 
-`crew_lead.py` coordinates Sentry → Scout → Router → Dispatch. Deterministic tools perform scoring, optimization, inventory arithmetic, validation, and persistence. Amazon Bedrock with the Strands Agents SDK supplies orchestration and explanation where interpretation is needed; it does not replace the auditable calculations.
+### Crew Lead and the agent framework
+
+`crew_lead.py` creates the explicitly named Strands `Agent` **LastMile Market Crew Lead**. It does not conduct four agent-to-agent conversations. Its fast path calls four specialized, tool-backed roles exactly once and in strict order:
+
+```text
+sentry_check() → scout() → router() → dispatch()
+```
+
+Structured results move forward through the chain: Scout's `top_tracts` become Router's candidates, and Router's route becomes Dispatch's mission input. A failed or `no_result` stage stops the run. The same four functions can also be executed through the deterministic fallback, avoiding model-orchestration latency while preserving the workflow and output contract.
+
+Amazon Bedrock with the Strands Agents SDK provides Crew Lead tool selection, request interpretation, and bounded explanation where needed. Deterministic services remain authoritative for scoring, optimization, inventory arithmetic, load calculation, validation, and persistence. Scout, Router, and Sentry also retain standalone Strands agent entry points for their focused workflows; Dispatch intentionally remains a deterministic mission-preparation stage.
+
+### Agent guardrails
+
+- **Ordered tools:** `SequentialToolExecutor` and the Crew Lead prompt enforce Sentry → Scout → Router → Dispatch.
+- **Structured handoffs:** only recorded tool outputs are passed forward; Crew Lead is instructed not to invent or rewrite tool data.
+- **Deterministic authority:** scores, routes, household-range loads, capacity checks, and inventory rules are calculated in code.
+- **Schema validation:** FastAPI/Pydantic contracts reject malformed requests and responses.
+- **Failure isolation:** a failed or empty stage ends the run; partial work is not silently saved as a successful mission.
+- **Evidence quality:** partial or stale Sentry findings remain labeled and are never promoted to verified changes automatically.
+- **Authorization:** Cognito and `staff` membership protect Crew runs, reviews, inventory mutations, and approvals.
+- **Human approval:** the Crew drafts; an authorized person accepts or rejects the mission.
+- **Demo safety:** synthetic records remain marked `not_for_real_dispatch`.
 
 ## Architecture
 
@@ -38,9 +60,10 @@ flowchart TB
     FE -->|"Authorization Code + PKCE"| COG["Amazon Cognito · staff group"]
     COG -->|"access token"| API
 
-    API --> CREW["Last Mile Crew · Scout · Router · Dispatch · Sentry"]
-    CREW --> DET["Scoring · route optimization · load calculation · validation"]
-    CREW --> AI["Strands Agents SDK · Amazon Bedrock"]
+    API --> LEAD["Strands Crew Lead"]
+    LEAD --> STAGES["Ordered tools · Sentry → Scout → Router → Dispatch"]
+    STAGES --> DET["Scoring · route optimization · load calculation · validation"]
+    LEAD --> AI["Amazon Bedrock"]
     DET --> REVIEW["Mission Review · human accept or reject"]
 
     API --> STORE["Amazon S3 · evidence, prepared data, inventory"]
@@ -137,4 +160,3 @@ After a backend merge:
 ## License
 
 [MIT](LICENSE)
-
