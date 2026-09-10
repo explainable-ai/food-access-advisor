@@ -1,539 +1,162 @@
-# LastMile Market
+# LastMile Market — backend and agent services
 
-A Strands Agents SDK operations system for the **Agents for Humans**
-hackathon (Good Neighbor track). LastMile Market plans our mobile grocery
-store's runs from the same evidence-backed food-access scoring that powered
-the project's original advisory workflow.
+LastMile Market helps mobile-grocery teams decide **where to serve, how to route a vehicle, what to load, and what changed in the community**. It combines transparent census-tract scoring, road-route planning, inventory constraints, continuously checked public evidence, and staff approval in one operational workflow.
 
-The existing modules and internal function names remain stable. Product-facing
-surfaces call the team **The Last Mile Crew**:
+**For:** mobile-market operators, food-access organizations, public-health teams, and regional planners.  
+**Why it matters:** food-access decisions are often spread across disconnected datasets and manual planning steps. LastMile Market turns those inputs into an explainable mission while keeping every recommendation reviewable and editable by a person.
 
-- **Scout** (`agent.py`) — ranks tracts by need in either supported study area.
-- **Router** (`route_advisor.py`) — builds a capacity- and time-constrained
-  mobile-market route from Scout's top tracts.
-- **Dispatch** (`services/mission_preview.py`) — checks readiness and drafts a
-  human-reviewable mission with an S3-backed suggested load.
-- **Sentry** (`watchdog_agent.py`) — scheduled, closes the loop by
-  working through Scout and Router' flagged tracts and reporting whether a
-  resource or route change ever actually appeared/happened.
+> The GitHub repository retains the engineering name `food-access-advisor`. The product is **LastMile Market**. Renaming the repository is intentionally out of scope because deployment, Lovable, and AWS integrations already depend on its current identity.
 
-`crew_lead.py` adds a Crew Lead over those existing boundaries. It runs
-Sentry → Scout → Router → Dispatch for `POST /crew/brief`, preserves the exact
-tool results in a structured step log, and stops on the first failed or empty
-result. The original API routes remain unchanged.
+[Open the live LastMile Market app](https://lastmilemarket.lovable.app) · [API health](https://fo-a5bf5a1a8c9949e0b87db3669a6eb545.ecs.us-east-1.on.aws/health) · [API documentation](https://fo-a5bf5a1a8c9949e0b87db3669a6eb545.ecs.us-east-1.on.aws/docs) · [Frontend repository](https://github.com/explainable-ai/food-equity-navigator)
 
-`orchestration.py` formalizes these three with Strands' `GraphBuilder`
-(without adding a fourth agent — see
-[Orchestration, API, and the planning-workspace UI](#orchestration-api-and-the-planning-workspace-ui)),
-and a React + FastAPI planning workspace (map, ranked-answer workspaces,
-follow-up tracking) sits on top for a browser-based demo instead of three
-command-line scripts.
+## One product, two repositories
+
+| Repository | Responsibility |
+| --- | --- |
+| `food-access-advisor` (this repository) | FastAPI, the Last Mile Crew, scoring, routing, evidence monitoring, persistence, data preparation, authentication enforcement, and AWS deployment |
+| [`food-equity-navigator`](https://github.com/explainable-ai/food-equity-navigator) | The React/MapLibre interface published by Lovable at `lastmilemarket.lovable.app` |
+
+The Lovable application is not a separate demo or mock backend. It calls this API. **Brief the Crew** is the fast path; Prioritize Sites, Route Planning, Mission Review, and Access Watch expose the same role outputs and deterministic services as an editable control panel.
+
+## The Last Mile Crew
+
+| Product role | Code identity | Runtime shape | Responsibility |
+| --- | --- | --- | --- |
+| **Scout** | `agent.py`: `build_advisor()` / `run_site_advisor()` | Standalone Strands agent entry point plus deterministic Crew tool stage | Ranks Chicago and Chicagoland rural-fringe tracts using transparent evidence and adjustable weights |
+| **Router** | `route_advisor.py`: `build_route_advisor()` / `run_route_advisor()` | Standalone Strands agent entry point plus deterministic Crew tool stage | Selects and sequences stops under road-time, service-time, vehicle-capacity, and maximum-stop constraints |
+| **Dispatch** | `crew_lead.py`: `dispatch()` and `services/mission_preview.py` | Deterministic Crew tool stage, not a standalone Strands `Agent` | Builds a reviewable mission and household-based suggested load from available inventory |
+| **Sentry** | `watchdog_agent.py`: `build_watchdog()` / `run_watchdog()` | Standalone Strands agent entry point plus deterministic Crew tool stage; an additional tool-free reporter summarizes monitoring runs | Monitors approved public sources, records evidence quality, and routes material changes to human review |
+
+### Crew Lead and the agent framework
+
+`crew_lead.py` creates the explicitly named Strands `Agent` **LastMile Market Crew Lead**. It does not conduct four agent-to-agent conversations. Its fast path calls four specialized, tool-backed roles exactly once and in strict order:
+
+```text
+sentry_check() → scout() → router() → dispatch()
+```
+
+Structured results move forward through the chain: Scout's `top_tracts` become Router's candidates, and Router's route becomes Dispatch's mission input. A failed or `no_result` stage stops the run. The same four functions can also be executed through the deterministic fallback, avoiding model-orchestration latency while preserving the workflow and output contract.
+
+Amazon Bedrock with the Strands Agents SDK provides Crew Lead tool selection, request interpretation, and bounded explanation where needed. Deterministic services remain authoritative for scoring, optimization, inventory arithmetic, load calculation, validation, and persistence. Scout, Router, and Sentry also retain standalone Strands agent entry points for their focused workflows; Dispatch intentionally remains a deterministic mission-preparation stage.
+
+### Agent guardrails
+
+- **Ordered tools:** `SequentialToolExecutor` and the Crew Lead prompt enforce Sentry → Scout → Router → Dispatch.
+- **Structured handoffs:** only recorded tool outputs are passed forward; Crew Lead is instructed not to invent or rewrite tool data.
+- **Deterministic authority:** scores, routes, household-range loads, capacity checks, and inventory rules are calculated in code.
+- **Schema validation:** FastAPI/Pydantic contracts reject malformed requests and responses.
+- **Failure isolation:** a failed or empty stage ends the run; partial work is not silently saved as a successful mission.
+- **Evidence quality:** partial or stale Sentry findings remain labeled and are never promoted to verified changes automatically.
+- **Authorization:** Cognito and `staff` membership protect Crew runs, reviews, inventory mutations, and approvals.
+- **Human approval:** the Crew drafts; an authorized person accepts or rejects the mission.
+- **Demo safety:** synthetic records remain marked `not_for_real_dispatch`.
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    U["Community organizer\n(plain-language question)"] --> ADV[Scout]
-    ADV -->|1| AD[get_low_access_tracts]
-    ADV -->|2| ER[get_existing_resources]
-    ADV -->|3| GS[score_gaps]
-    ADV -->|4| EB[write_evidence_brief]
-    ADV -->|5| FLAG[flag_top_tract_for_recheck]
+flowchart TB
+    U["Public visitor or staff operator"] --> FE["Lovable · React · MapLibre"]
+    FE -->|"public reads"| API["ECS Express Gateway · FastAPI"]
+    FE -->|"Authorization Code + PKCE"| COG["Amazon Cognito · staff group"]
+    COG -->|"access token"| API
 
-    AD -.reads.-> ATLAS[(USDA Food Access Research Atlas\nLRAM/SRAM, local SQLite)]
-    ER -.queries.-> OSM[(OpenStreetMap\nOverpass API)]
-    EB -.LLM call.-> BEDROCK[(Amazon Bedrock)]
-    FLAG -->|writes pending row, type=site| LOG[(flagged_tracts.db)]
+    API --> LEAD["Strands Crew Lead"]
+    LEAD --> STAGES["Ordered tools · Sentry → Scout → Router → Dispatch"]
+    STAGES --> DET["Scoring · route optimization · load calculation · validation"]
+    LEAD --> AI["Amazon Bedrock"]
+    DET --> REVIEW["Mission Review · human accept or reject"]
 
-    GS -->|ranked tracts| ADV
-    EB -->|cited paragraph| ADV
-    ADV --> ANSWER["Ranked recommendation\n+ citable brief"]
-
-    P["Regional planner\n(routing question)"] --> RA[Router]
-    RA -->|1| ADR[get_low_access_rural_tracts]
-    RA -->|2| ERR[get_rural_existing_resources]
-    RA -->|3| GS
-    RA -->|4| RB[write_route_brief]
-    RA -->|5| FLAGR[flag_top_route_for_recheck]
-
-    ADR -.reads.-> RATLAS[(USDA Atlas, rural county\nlocal SQLite)]
-    ERR -.queries.-> OSM
-    RB -.LLM call, discloses\ncapacity trade-off.-> BEDROCK
-    FLAGR -->|writes pending row, type=route| LOG
-
-    RB -->|cited paragraph| RA
-    RA --> RANSWER["Ranked route recommendation\n+ citable brief"]
-
-    SCHED["Scheduled trigger\n(e.g. monthly)"] --> WD[Sentry agent]
-    WD -->|1| RFT[read_flagged_tracts]
-    WD -->|2| ER2[get_existing_resources]
-    WD -->|2| ER3[get_rural_existing_resources]
-    WD -->|3| CRA[check_resource_appeared]
-    WD -->|4| UFT[update_flagged_tract]
-
-    RFT -.reads pending, any type.-> LOG
-    ER2 -.queries.-> OSM
-    ER3 -.queries.-> OSM
-    UFT -->|writes status| LOG
-    WD --> REPORT["Recheck summary\n(resolved / still needed)"]
-
-    LOG -.reads all rows.-> IMPACT[compute_impact_metrics]
-    IMPACT --> DASH["Impact dashboard\n(dashboard.py, Flask)"]
+    API --> STORE["Amazon S3 · evidence, prepared data, inventory"]
+    API --> DB["Amazon DynamoDB · findings, operations, audit"]
+    DET --> DATA["ACS · USDA SRAM · tract boundaries · CTA · Chicago data · approved community sources"]
+    DET --> ROUTE["OpenRouteService road routing"]
 ```
 
-Only `write_evidence_brief` and `write_route_brief` call a language model.
-Every other tool — `get_low_access_tracts`, `get_low_access_rural_tracts`,
-`get_existing_resources`, `get_rural_existing_resources`, `score_gaps`,
-`flag_top_tract_for_recheck`, `flag_top_route_for_recheck`,
-`read_flagged_tracts`, `check_resource_appeared`, `update_flagged_tract`,
-`compute_impact_metrics` — is deterministic: reading a local database,
-calling a public API, doing arithmetic, or writing a validated row. That
-split is deliberate: for a tool whose output might end up in a funding
-application, "here's the exact formula" is more defensible than "the
-model said so." `score_gaps` itself is shared unchanged between both
-Advisors — see its use in `route_advisor.py`.
+See [Architecture](docs/ARCHITECTURE.md) for trust boundaries and request flows.
 
-## Setup
+## Quick start
+
+Requirements: Python 3.12, Git, and optional AWS CLI/Docker for live integrations.
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+git clone https://github.com/explainable-ai/food-access-advisor.git
+cd food-access-advisor
+python -m venv .venv
+source .venv/bin/activate          # Windows PowerShell: .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
+cp .env.example .env              # Windows PowerShell: Copy-Item .env.example .env
 ```
 
-**AWS credentials** (Strands' default model provider is Amazon Bedrock):
-run `aws configure`, or copy `.env.example` to `.env` and fill in your keys.
-Your credentials need `bedrock:InvokeModel` (and
-`bedrock:InvokeModelWithResponseStream` if you use streaming) permission,
-and you may need to request model access for Claude in the Bedrock console
-first.
-
-### Data setup
-
-Scout and Router run out of the box against small, clearly-labeled sample
-tracts (see the docstrings in `tools/access_data.py` — `_sample_tracts`
-for the urban pilot city, `_sample_rural_tracts` for the rural pilot
-county) so you can smoke-test the plumbing immediately. For real
-data:
-
-1. **USDA 2025 SNAP-authorized Retailer Access Map (SRAM).** The current
-   production input is USDA's 2025 SRAM release on 2020 Census tract
-   geography. USDA distributes it as separate General, Driving Distance, and
-   Straight Line Distance CSV files. Extract the official ZIP into
-   `data/raw/sram_2025/`. The pipeline joins the General file to the selected
-   access file one-to-one on `CensusTract20`, rejects duplicate or incomplete
-   tract sets, and reads the official Windows-1252 encoding. Driving-distance
-   access is the production default because route planning depends on the road
-   network; straight-line access requires `--distance-method straight`.
-
-   Download and extract the official 2020 Census tract Gazetteer file to
-   `data/raw/census_2020_tract_centroids/2020_Gaz_tracts_national.txt`.
-   It supplies coordinates for the same 2020 tract geography. A 2010 Gazetteer
-   file must not be joined to current SRAM.
-
-   ```bash
-   python data/prep_atlas.py \
-     --input data/raw/sram_2025 \
-     --product SRAM \
-     --distance-method driving \
-     --centroids data/raw/census_2020_tract_centroids/2020_Gaz_tracts_national.txt \
-     --regions all
-   ```
-
-   The Cook County boundary layer contains all 1,332 Census tracts, while the
-   SRAM scoring database contains the 1,331 tracts covered by USDA. Census
-   water tract `17031990000` has no SRAM row and remains explicitly unshaded;
-   it is never assigned a fabricated zero-need score. The rural output contains
-   only USDA-classified rural tracts (`Urban=0`) in Cook, Kane, Kendall,
-   Grundy, Will, Kankakee, and McHenry Counties. Each database records the
-   access method, exact source files, geography vintage, tract count, tract
-   manifest checksum, and preparation timestamp. Legacy LRAM combined-file
-   ingestion remains available for reproducibility but requires matching 2010
-   coordinates and cannot be directly enriched with current ACS data.
-
-2. **OpenStreetMap** — no setup needed. Queried live via the public
-   Overpass API in `tools/existing_resources.py` for community gardens,
-   grocery stores, farms, and convenience stores (kept separate from real
-   grocery stores in scoring — see `tools/gap_scorer.py`, a corner store
-   isn't the same access as a supermarket). The rural query additionally
-   looks for `social_facility=food_bank` and `amenity=marketplace`.
-   Neither LRAM nor SRAM publish individual retailer coordinates, so OSM
-   is this project's only point-level resource layer — that's a real gap
-   worth knowing about, not a hidden one.
-3. **Census TIGER/Line tract boundaries** (for the planning-workspace
-   map's real tract polygons — optional, only needed for that UI): run
-   `python data/prep_tract_boundaries.py`. See
-   [Orchestration, API, and the planning-workspace UI](#orchestration-api-and-the-planning-workspace-ui)
-   below for details and a real caveat about this script's verification.
-
-The default `--regions all` run builds both `data/atlas_pilot_city.db` and
-`data/atlas_rural_county.db` from the validated SRAM bundle. Use `--regions
-urban` or `--regions rural` to build only one. Each database records the
-selected product, source file, thresholds, region, and preparation time in
-its `metadata` table. Tool responses label fallback records as
-`data_mode=sample` and prepared records as `data_mode=real`.
-
-4. **ACS poverty and vehicle access.** After preparing the Atlas database,
-   run `python data/prep_acs.py --year 2024 --regions all`. This calls the
-   official ACS 5-year API and persists poverty-universe, below-poverty,
-   total-household, and no-vehicle-household values by exact tract GEOID.
-   Set `CENSUS_API_KEY` for higher API limits; the public API can also run
-   without a key at lower limits. Direct enrichment requires matching tract
-   boundaries: SRAM and current ACS both use 2020 tract geography. LRAM uses
-   2010 tracts, so the prep command fails closed unless an explicit Census
-   tract crosswalk is added; it never joins incompatible polygons by GEOID
-   alone. An incomplete ACS response also rolls back without relabeling old
-   values as the new vintage.
-
-
-5. **Chicago food-insecurity and transportation context.** Export the Greater
-   Chicago Food Depository's current ACS tract layer as ArcGIS JSON and download
-   CTA's official static GTFS ZIP. Then build the checked-in scoring overlay:
-
-   ```bash
-   PYTHONPATH=. python data/prep_urban_context.py \
-     --database data/atlas_pilot_city.db \
-     --food-insecurity-snapshot data/raw/gcfd_acs_2024_tracts.json \
-     --cta-gtfs data/raw/cta_google_transit.zip \
-     --output data/urban_scoring_context.json
-   ```
-
-   The food-insecurity component is the tract share of residents below 200% of
-   the federal poverty level, the Food Depository's documented local proxy for
-   food-insecurity risk. Transportation remains separate from vehicle access:
-   its burden combines CTA stop proximity (40%), nearby route availability
-   (30%), and average scheduled weekday service (30%). Preparation fails when
-   any Chicago tract lacks transportation evidence; missing values are never
-   silently redistributed. The generated manifest records source checksums,
-   tract counts, and the calculation method.
-
-6. **Publish the production heatmap artifacts.** The ECS image intentionally
-   excludes generated SQLite files. After the Atlas and ACS preparation steps,
-   upload the validated database and publish the county-wide resource snapshot
-   from a workstation or scheduled ingestion job that can reach the source APIs:
-
-   ```bash
-   export EVIDENCE_BUCKET=food-access-evidence
-   aws s3 cp data/atlas_pilot_city.db \
-     "s3://$EVIDENCE_BUCKET/prepared-data/atlas_pilot_city.db"
-   python -m scripts.refresh_resource_cache
-   ```
-
-   ECS reads the database from
-   `s3://$EVIDENCE_BUCKET/prepared-data/atlas_pilot_city.db` into an atomic
-   `/tmp` cache and reads the existing-resource snapshot from
-   `s3://$EVIDENCE_BUCKET/resource-cache/urban.json`. Set
-   `TRACT_DATA_BUCKET` or `TRACT_DATA_KEY` only when overriding those defaults.
-   The task role needs `s3:GetObject` for both objects. Do not run the resource
-   refresh inside ECS when its network cannot reach Overpass; publish the
-   prepared snapshot before deploying the service.
-
-The Scout endpoints default to `study_area=chicago`, so neighborhood
-priorities are not diluted by suburban Cook County tracts. Pass
-`study_area=cook_county` to inspect the wider county context. The ranked-tract
-endpoints accept non-negative query weights named
-`food_access_gap`, `poverty`, `no_vehicle`, `population_served`,
-`transit_burden`, and `existing_coverage`. Weights are normalized to sum to
-one. Every result returns the normalized components, their point
-contributions, missing-evidence disclosures, a plain-language explanation,
-and a ±20% one-weight-at-a-time score/rank sensitivity range.
-
-To point the Scout at a different city, or the Router at a
-different rural county, edit `config.py` (county FIPS + bounding box) and
-re-run `data/prep_atlas.py`. Nothing else in the project hardcodes a
-location — that's the scalability story: the Atlas already covers every
-census tract in the country.
-
-## Run it
+For local development without Cognito, set `FOOD_ACCESS_AUTH_MODE=disabled`. Never use that value in AWS.
 
 ```bash
-python agent.py
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-```
-LastMile Market ready — pilot city: Chicago, IL
-> where's the highest-need spot for a new food resource?
-```
-
-```bash
-python route_advisor.py
-```
-
-```
-Router ready — rural pilot county: Alexander County, IL
-> where would a route change help most?
-```
-
-Each answer also flags its top tract in `data/flagged_tracts.db` for the
-Sentry to check later. Run the Sentry's recheck pass (normally fired on
-a schedule, e.g. EventBridge — here run manually) with:
-
-```bash
-python watchdog_agent.py
-```
-
-```
-LastMile Market Sentry — pilot city: Chicago, IL
-Running a single unattended recheck pass over the flagged-tracts backlog...
-```
-
-It reports how many flagged tracts it checked, how many now have a nearby
-resource, and how many are still needed — and updates each row accordingly.
-It checks "site" (urban) rows against Chicago's live OSM data at a 1-mile
-threshold, and "route" (rural) rows against Alexander County's live OSM
-data at a 10-mile threshold — never the wrong region's data for either.
-
-### Impact dashboard
-
-The design canvas's own stated success metric — "unclosed gaps trending
-down, per region, not pooled" plus "median days to resolution" — is
-computed by `tools/impact_metrics.py` and served as a small live-refreshing
-local dashboard:
-
-```bash
-python dashboard.py
-```
-
-Then open <http://127.0.0.1:5050>. It reads `data/flagged_tracts.db`
-directly (no LLM call) and shows, separately for the urban and rural
-regions: how many flagged tracts remain unclosed, how many resolved, and
-the median days it took to resolve them. Auto-refreshes every 30 seconds,
-so leaving it open while running the Sentry shows the numbers move.
-
-### Orchestration, API, and the planning-workspace UI
-
-Three additive layers sit on top of the three agents above — none of them
-change an agent's tools, prompts, or guardrails, and the CLI scripts above
-still work unmodified.
-
-**`orchestration.py` — GraphBuilder, honestly scoped.** A real, verified
-constraint from Strands' `GraphBuilder` shaped this: a single shared
-`Graph` can't do conditional cross-agent routing (`add_node` only accepts
-`AgentBase`/`MultiAgentBase` instances, and — confirmed directly against
-the installed `strands-agents` package's execution engine — *every* entry
-point fires on *every* `graph()` call, with no per-call way to pick just
-one). A shared graph containing all three agents would therefore run Site
-Scout, Router, and Sentry together on every invocation, which
-is wrong here. So `orchestration.py` wraps each agent in its own trivial
-single-node `Graph` (`build_site_graph()`, `build_route_graph()`,
-`build_watchdog_graph()`) and adds one plain-Python dispatcher,
-`route_request(mode, question)` — `mode` is an explicit field the caller
-supplies, never inferred by a model, matching this project's existing
-discipline of keeping region/mode selection out of anything the model
-could get wrong. The honest value this adds is a uniform `GraphResult`
-and graph-level timeout/session plumbing across all three agents — not
-new routing logic, which stays exactly the plain `if` it always was.
-
-**`api/` — a FastAPI backend.** `POST /api/site-advisor` and
-`POST /api/route-advisor` call `orchestration.route_request` (async, via
-`asyncio.to_thread`, so a slow agent call doesn't block the event loop);
-`GET /api/flagged-tracts` and `GET /api/impact-metrics` wrap
-`tools/flagged_tracts.py` and `tools/impact_metrics.py` directly;
-`GET /api/tract-boundaries` serves the GeoJSON `data/prep_tract_boundaries.py`
-produces. `POST /api/route-advisor/optimize` runs an exact constrained
-orienteering model for up to 15 candidate stops. It maximizes
-priority-weighted demand while enforcing depot return, maximum route time,
-service time per stop, vehicle capacity, maximum stops, and required
-existing stops. The response reports selected stop order, communities that
-gain or lose coverage, capacity use, and infeasibility. Supply a
-depot-plus-candidates road-network travel-time matrix when available; if it
-is omitted, the response is explicitly labelled
-`haversine_drive_time_estimate` rather than presented as road-network truth.
-Amazon Location calls are server-side through the Routes V2 `geo-routes`
-client. Grant the API/AgentCore execution role only
-`geo-routes:CalculateRouteMatrix` on the regional default provider; see
-[`deploy/AMAZON_LOCATION_SETUP.md`](deploy/AMAZON_LOCATION_SETUP.md).
-Run the API with:
-
-```bash
-uvicorn api.main:app --reload
-```
-
-Agent calls are the slow path (a full tool-calling loop plus at least
-one Bedrock round trip) — `model.py`'s `streaming=False` is a deliberate,
-already-tested fix for a real `ReadTimeoutError` this project hit earlier,
-so these endpoints don't attempt token-by-token SSE streaming; expect
-several seconds to over a minute per call, not a sub-second REST response.
-
-**Frontend application.** The production React + MapLibre interface is maintained separately in [`explainable-ai/food-equity-navigator`](https://github.com/explainable-ai/food-equity-navigator). This repository contains the backend API, agents, data preparation, and deployment resources only.
-
-## Test it
+Open <http://localhost:8000/health> and <http://localhost:8000/docs>.
 
 ```bash
 pytest
 ```
 
-`tools/gap_scorer.py`, `tools/recheck_status.py`, `tools/flagged_tracts.py`,
-`tools/impact_metrics.py`, `tools/telemetry.py`, `orchestration.py`,
-`api/main.py`, and the deterministic parts of `tools/access_data.py` /
-`tools/existing_resources.py` are pure Python (plus SQLite for the log)
-with no AWS dependency — all tested directly against temp databases,
-mocked HTTP calls, a fake `StrandsTelemetry`, or (for the API) FastAPI's
-own `TestClient` with the advisor calls mocked — no credentials, no live
-network required.
+Full local, data, Docker, AWS, Cognito, inventory, and troubleshooting instructions are in [Setup and Run — Backend API and AWS](docs/SETUP_AND_RUN.md).
 
-### Tracing and metrics (opt-in)
+## Data and explainability
 
-All three entrypoints call `tools/telemetry.py`'s `configure_telemetry()`
-at startup, which is a real no-op unless you set one of:
+- USDA 2025 SNAP-authorized Retailer Access Map (SRAM), aligned to 2020 Census tracts
+- Census ACS poverty, population, household, and no-vehicle measures
+- Census tract boundaries
+- Greater Chicago Food Depository food-insecurity context
+- CTA transportation context
+- Chicago Data Portal datasets and approved community-source pages for Access Watch
+- S3 inventory at `inventory/on-hand.json` and `inventory/cold-chain.json`
+- OpenRouteService road directions
 
-```bash
-export STRANDS_TELEMETRY_CONSOLE=1        # print spans + event-loop metrics
-export OTEL_EXPORTER_OTLP_ENDPOINT=<url>  # also export to an OTLP collector
-```
+The site-priority score normalizes adjustable contributions for food-access gap, poverty, no-vehicle households, population served, transit burden, and existing coverage. Responses include components, point contributions, missing-evidence disclosures, and sensitivity information. Suggested loads use household-reach ranges, request constraints, available-to-promise inventory, and vehicle capacity—not an LLM guess.
 
-With `STRANDS_TELEMETRY_CONSOLE` set, each run additionally prints its
-event-loop metrics (latency, token counts, tool-call counts) via Strands'
-own `metrics_to_string` — useful for actually seeing where a slow run's
-time went (model call vs. a specific tool) instead of guessing. OTLP
-export needs `opentelemetry-exporter-otlp-proto-http` installed
-separately; it's not in `requirements.txt` since it's unused unless you
-opt in.
+## API boundary
 
-### Running the Sentry on Bedrock AgentCore Runtime
+Public/read-only routes include health, maps, tract scores, ranked tracts, resources, route planning reads, impact metrics, and approved-source status. Staff actions—including `/crew/brief`, inventory updates, mission decisions, evidence reviews, and verification—require a valid Cognito access token issued to the configured app client with membership in the `staff` group.
 
-`watchdog_agent.py`'s manual run above is the local/test path. To actually
-host the Sentry as the scheduled service the architecture diagram above
-shows, `watchdog_agentcore_entry.py` wraps the same `build_watchdog()` in a
-`BedrockAgentCoreApp` for Amazon Bedrock AgentCore Runtime:
+Production is fail-closed:
 
-```bash
-agentcore configure --entrypoint watchdog_agentcore_entry.py --requirements-file requirements.txt
-agentcore deploy
-agentcore invoke '{"prompt": "Run today’s recheck pass over every pending flagged tract."}'
-```
+- missing or invalid token → `401`
+- authenticated user outside `staff` → `403`
+- required Cognito configuration missing → `503`
 
-`agentcore deploy` builds an ARM64 container in the cloud via CodeBuild and
-hosts it on AgentCore Runtime — no local Docker required. These commands
-come from the `bedrock-agentcore-starter-toolkit` package (added to
-`requirements.txt`); run `agentcore --help` to confirm current flags before
-deploying, since AWS is actively evolving this tooling. This deploy step
-needs your own AWS credentials and hasn't been run as part of this repo —
-`watchdog_agentcore_entry.py` is verified-correct code, not a live
-deployment.
+The browser never receives AWS credentials, routing secrets, or a Cognito client secret.
 
-Once deployed, **[`deploy/EVENTBRIDGE_SETUP.md`](deploy/EVENTBRIDGE_SETUP.md)**
-covers actually putting it on a recurring schedule: an EventBridge
-Scheduler rule, a small Lambda shim (`deploy/watchdog_scheduler_lambda.py`),
-and why the shim is needed rather than pointing Scheduler at AgentCore
-directly (Scheduler's direct invoke is synchronous and times out around
-30 seconds — well short of a full recheck pass). Like the deploy step
-above, this needs your own AWS credentials to actually run.
+## Deployment summary
 
-## Guardrails
+The container uses Python 3.12 and runs FastAPI with Uvicorn. CodeBuild builds the image, Amazon ECR stores it, and the ECS Express Gateway service exposes port 8000 with `/health` as the health check. The ECS task role—not the execution role—authorizes Bedrock, S3, DynamoDB, Secrets Manager, and other runtime calls.
 
-- **Stay-in-the-pilot-region is enforced in code, not just in the prompt,
-  for Scout and Router.** `get_low_access_tracts` / `get_existing_resources`
-  take no city/region/bounding-box arguments at all — both always resolve
-  to `config.PILOT_CITY`. `get_low_access_rural_tracts` /
-  `get_rural_existing_resources` are pinned the same way to
-  `config.PILOT_RURAL_COUNTY`. An earlier version accepted a `city` string
-  and free-form bounding-box floats that were never actually validated
-  against anything, which meant the only thing stopping the model from
-  answering for the wrong region was the system prompt asking it nicely.
-  That's fixed: there's no argument left for the model (or a bug) to
-  misuse, so the boundary holds even if the prompt is ignored, edited, or
-  the model just gets it wrong. The system prompt still tells each agent
-  to *say* when a question is out of scope — that's a wording/UX
-  instruction now, not the only thing enforcing the boundary.
-- **Scout, Router, and Sentry are three separate agents
-  with disjoint tool lists, not one agent with a mode flag — and
-  `orchestration.py`'s `GraphBuilder` wrapping doesn't change that.**
-  Neither planning agent has a tool that can write to a flagged tract's status;
-  the Sentry has no tool that can answer a siting or routing question or
-  make a new recommendation. `flag_top_tract_for_recheck` (Scout's
-  only write) hardcodes `recommendation_type="site"` and
-  `source_agent="advisor"`; `flag_top_route_for_recheck` (Router's
-  only write) hardcodes `recommendation_type="route"` and
-  `source_agent="route_advisor"` — neither is a model-settable argument,
-  so neither planning agent can mislabel a row as coming from the other.
-  `update_flagged_tract` (the Sentry's only write) takes a fixed,
-  validated status enum and writes to exactly one table — there's no
-  table-name or raw-SQL argument for a model to misuse. `route_request`'s
-  `mode` argument is likewise a plain caller-supplied string, never
-  something a model infers.
-- **The Router's capacity trade-off is a required disclosure, not
-  optional color.** A mobile route or delivery day has fixed stop
-  capacity, so "add a stop here" is usually really "move a stop from
-  somewhere else" — a Success-to-the-Successful risk found during the
-  rural systems-thinking pass (see `docs/design-canvas.html`).
-  `write_route_brief`'s own system prompt requires naming this trade-off
-  explicitly in every brief; it isn't left to the orchestrator prompt to
-  remember, since a content rule worth actually testing needs to live
-  where the sentence a reader sees is actually generated. The frontend's
-  Router workspace renders this paragraph in full, not truncated.
-- **The Sentry checks each flagged tract against the resources and
-  distance threshold that actually match its region.** A "site" row is
-  checked against `get_existing_resources` (urban) at the 1-mile default;
-  a "route" row is checked against `get_rural_existing_resources` (rural)
-  at `RURAL_NEARBY_THRESHOLD_MILES` (10 miles) — never the other region's
-  data, which would silently compare a tract to resources roughly 180
-  miles away and always report "still needed" regardless of what actually
-  opened nearby.
-- Every answer names the USDA Food Access Research Atlas and its
-  publication vintage.
-- Every output is framed as decision support, not a decision — a human
-  still chooses where to act.
-- No personal data is involved anywhere in this pipeline — every dataset
-  here is public, tract- or retailer-level, not individual-level.
+After a backend merge:
 
-## Roadmap
+1. Run `food-access-advisor-api-build` in CodeBuild.
+2. Confirm the image was pushed to ECR.
+3. Update the ECS service to the new immutable image tag or digest.
+4. Wait for deployment completion and verify `/health` and `/docs`.
+5. Run the smoke tests in [Setup and Run](docs/SETUP_AND_RUN.md).
 
-Supplemental source adapters and the Sentry snapshot/diff contract are now
-implemented. See [`docs/ADDITIONAL_DATA_AND_WATCHDOG.md`](docs/ADDITIONAL_DATA_AND_WATCHDOG.md)
-for the exact official sources, freshness rules, change semantics, and the
-production persistence boundary.
+## Known limitations
 
-AWS deployments use DynamoDB for Sentry metadata/state and S3 for full
-versioned evidence payloads, while local development remains SQLite by default.
-See [`deploy/AWS_PERSISTENCE_SETUP.md`](deploy/AWS_PERSISTENCE_SETUP.md).
+- Demonstration inventory and mission records are synthetic and marked `not_for_real_dispatch`.
+- External public sources can be stale, incomplete, rate-limited, or unavailable. Sentry reports evidence quality and never treats a parser failure as proof of closure.
+- Access Watch uses bounded, allowlisted same-site discovery. JavaScript-only sources may require a future rendered-page adapter.
+- The pilot is limited to Chicago/Cook County and 72 USDA-classified rural tracts across the approved Chicagoland fringe counties.
+- Every mission remains a recommendation until a staff member accepts it.
 
-- **Sentry on a real recurring schedule.** `watchdog_agentcore_entry.py`
-  is deployable today; [`deploy/EVENTBRIDGE_SETUP.md`](deploy/EVENTBRIDGE_SETUP.md)
-  now documents the EventBridge Scheduler + Lambda shim needed to actually
-  invoke the deployed AgentCore Runtime endpoint on a cadence, making the
-  architecture diagram's "Scheduled trigger" real instead of manual. Still
-  needs the deploy and schedule creation to actually be run with real AWS
-  credentials — that's a one-time setup step for whoever operates this,
-  not something this repo can do on its own.
-- **A structured ranked-tract endpoint for the frontend.** The planning
-  workspace currently renders each agent's composed text answer as one
-  evidence panel (see [above](#orchestration-api-and-the-planning-workspace-ui));
-  a `score_gaps`-shaped JSON endpoint would let the UI render a real
-  clickable ranked table instead.
-- **Verify the real tract-polygon map rendering and Census download.**
-  `data/prep_tract_boundaries.py` provides the backend boundary artifacts.
-  The rendered-map implementation and visual QA are maintained in
-  [`explainable-ai/food-equity-navigator`](https://github.com/explainable-ai/food-equity-navigator).
-- **Door-to-door transit travel time.** Chicago prioritization now includes
-  real CTA GTFS stop proximity, route availability, and scheduled weekday
-  service. A future routing engine can add walk, wait, transfer, and in-vehicle
-  time to specific food resources without replacing the explainable Phase 1
-  transportation evidence.
-- **Real rural Atlas data.** The Router's code is built and tested,
-  but `data/prep_atlas.py` doesn't yet build `data/atlas_rural_county.db`
-  from a real LRAM/SRAM download for Alexander County, IL — it runs on
-  illustrative sample data until that's done (see Data setup above).
-- **Trend forecasting.** A model trained across multiple Atlas vintages to
-  flag tracts trending toward low-access before they're fully flagged.
-  Academic precedent already exists for this technique, so it's the lowest
-  differentiation-per-effort of the remaining items — cut first if time is
-  short.
+## Documentation
 
-## Design docs
-
-The systems-thinking design work behind this project (stocks/flows, the
-broken loop, leverage point, guardrail rationale) lives in
-[`docs/design-canvas.html`](docs/design-canvas.html) — a static export of
-the working design canvas. [`docs/project-tracker.html`](docs/project-tracker.html)
-is a point-in-time export of the build tracker; it's a snapshot, not a
-live document, since the tracker keeps evolving after each export.
-
-GitHub's file viewer shows these as source, not rendered pages — download
-them and open locally in a browser, or enable **GitHub Pages** (Settings →
-Pages → Deploy from a branch → `/docs`) to get them served as real pages
-at `https://explainable-ai.github.io/food-access-advisor/design-canvas.html`
-and `.../project-tracker.html`.
+- [Setup and Run — Backend API and AWS](docs/SETUP_AND_RUN.md)
+- [System Architecture](docs/ARCHITECTURE.md)
+- [Context Engineering and Mission Memory](docs/CONTEXT_AND_MEMORY.md)
+- [Direct Source Watch](deploy/DIRECT_SOURCE_WATCH.md)
+- [Cognito and CORS](deploy/COGNITO_AND_CORS_SETUP.md)
+- [AWS Persistence](deploy/AWS_PERSISTENCE_SETUP.md)
+- [Companion frontend repository](https://github.com/explainable-ai/food-equity-navigator)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE)
