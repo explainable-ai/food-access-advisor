@@ -202,6 +202,12 @@ The deployed path uses:
 
 Keep the ECS **task role** separate from the **task execution role**. Application calls use the task role; image pull and logging startup use the execution role.
 
+### Agent runtime and guardrails
+
+The web request path uses one explicitly named Strands `Agent`, **LastMile Market Crew Lead**, which calls four tool-backed roles in strict order: `sentry_check()` → `scout()` → `router()` → `dispatch()`. This is structured tool orchestration, not four agent-to-agent conversations. Scout, Router, and Sentry also expose standalone Strands agent builders; Dispatch is a deterministic mission-preparation stage.
+
+The Crew Lead passes Scout's recorded `top_tracts` to Router and Router's recorded route to Dispatch. `SequentialToolExecutor`, schema validation, fail-fast stage handling, deterministic scoring/routing/load rules, Cognito `staff` authorization, evidence-quality labels, and human Accept/Reject form the runtime guardrails. The deterministic fallback calls the same four stage functions directly and preserves the same response contract.
+
 ## 10. Build and deploy
 
 ### AWS Console path
@@ -275,4 +281,3 @@ The backend must allow `https://lastmilemarket.lovable.app` in `FOOD_ACCESS_CORS
 - IAM policies are scoped to required actions and object/table resources.
 - Demo inventory and missions remain labeled synthetic and `not_for_real_dispatch`.
 - Human approval is required before a mission becomes operational.
-
