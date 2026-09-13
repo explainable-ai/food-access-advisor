@@ -92,6 +92,27 @@ def test_scarce_skus_are_coordinated_to_protect_every_stop_first():
     assert result["all_stops_protected"] is True
 
 
+def test_reserve_assignment_is_joint_across_stops():
+    result = build_load_recommendation(
+        {
+            "selected_stops": [
+                {"stop_id": "high-need", "sequence": 1, "need_score": 95, "households": 100, "demand": 10},
+                {"stop_id": "later-stop", "sequence": 2, "need_score": 20, "households": 100, "demand": 1},
+            ]
+        },
+        [
+            {"item_id": "heavy", "item": "Heavy Item", "qty": 1, "unit_weight_lbs": 10, "days_to_spoil": 3},
+            {"item_id": "light", "item": "Light Item", "qty": 1, "unit_weight_lbs": 1, "days_to_spoil": 0},
+        ],
+        11,
+    )
+
+    stop_reserves = {row["stop_id"]: row for row in result["stop_reserves"]}
+    assert stop_reserves["high-need"]["reserve_protected"] is True
+    assert stop_reserves["later-stop"]["reserve_protected"] is True
+    assert result["all_stops_protected"] is True
+
+
 def test_explicit_stop_nutrition_requests_drive_item_stop_match():
     result = build_load_recommendation(
         {

@@ -345,9 +345,75 @@ def optimize_equitable_allocations(
             )
         return max(min(remaining[item_index], capacity_units), 0)
 
-    # Reserve locks happen before objective fill. With scarce supply, higher-need
-    # stops are protected first; with sufficient supply every stop receives the
-    # configured minimum before any stop can absorb the remainder.
+    def _joint_reserve_assignments(target_stops: list[int]) -> dict[int, int] | None:
+        if not target_stops:
+            return {}
+        temp_remaining = remaining[:]
+        temp_stop_used = stop_used[:]
+        temp_allocated_counts = [row[:] for row in allocated_counts]
+        stop_rank = {stop_index: rank for rank, stop_index in enumerate(target_stops)}
+        unit_weights = [_unit_weight(item) for item in items]
+
+        def feasible_units_with_state(item_index: int, stop_index: int) -> int:
+            if temp_remaining[item_index] <= 0:
+                return 0
+            weight = unit_weights[item_index]
+            capacity_units = floor(
+                max(stop_caps[stop_index] - temp_stop_used[stop_index], 0.0) / weight
+                + 1e-9
+            )
+            limit = _item_stop_unit_limit(items[item_index], stops[stop_index])
+            if limit is not None:
+                capacity_units = min(
+                    capacity_units,
+                    max(limit - temp_allocated_counts[item_index][stop_index], 0),
+                )
+            return max(min(temp_remaining[item_index], capacity_units), 0)
+
+        def candidates(stop_index: int) -> list[int]:
+            options: list[tuple[float, float, float, int, int]] = []
+            for item_index in range(len(items)):
+                if feasible_units_with_state(item_index, stop_index) <= 0:
+                    continue
+                score = float(components[item_index][stop_index]["score_per_unit"])
+                weight = unit_weights[item_index]
+                options.append((score / weight, score, -weight, -item_index, item_index))
+            options.sort(reverse=True)
+            return [entry[-1] for entry in options]
+
+        assignments: dict[int, int] = {}
+        pending: set[int] = set(target_stops)
+
+        def search() -> bool:
+            if not pending:
+                return True
+            stop_options = []
+            for stop_index in pending:
+                options = candidates(stop_index)
+                if not options:
+                    return False
+                stop_options.append((len(options), stop_rank[stop_index], stop_index, options))
+            _, _, stop_index, options = min(stop_options)
+            pending.remove(stop_index)
+            for item_index in options:
+                assignments[stop_index] = item_index
+                temp_allocated_counts[item_index][stop_index] += 1
+                temp_remaining[item_index] -= 1
+                temp_stop_used[stop_index] += unit_weights[item_index]
+                if search():
+                    return True
+                temp_stop_used[stop_index] -= unit_weights[item_index]
+                temp_remaining[item_index] += 1
+                temp_allocated_counts[item_index][stop_index] -= 1
+                assignments.pop(stop_index, None)
+            pending.add(stop_index)
+            return False
+
+        return assignments if search() else None
+
+    # Reserve locks happen before objective fill. Reserve assignments are solved
+    # jointly so one stop's local best pick cannot prevent feasible protection
+    # for later stops in the same reserve pass.
     reserve_order = sorted(
         range(len(stops)),
         key=lambda index: (
@@ -356,27 +422,33 @@ def optimize_equitable_allocations(
         ),
         reverse=True,
     )
-    for stop_index in reserve_order:
-        reserved = 0
-        while reserved < min_reserve_units:
-            candidates = []
-            for item_index, item in enumerate(items):
-                if feasible_units(item_index, stop_index) <= 0:
-                    continue
-                score = float(
-                    components[item_index][stop_index]["score_per_unit"]
-                )
-                weight = _unit_weight(item)
-                candidates.append(
-                    (score / weight, score, -weight, -item_index, item_index)
-                )
-            if not candidates:
+    for reserve_round in range(max(min_reserve_units, 0)):
+        pending = [
+            stop_index
+            for stop_index in reserve_order
+            if sum(
+                allocated_counts[item_index][stop_index]
+                for item_index in range(len(items))
+            )
+            <= reserve_round
+        ]
+        while pending:
+            assignments = None
+            for target_count in range(len(pending), 0, -1):
+                candidate_stops = pending[:target_count]
+                assignments = _joint_reserve_assignments(candidate_stops)
+                if assignments:
+                    break
+            if not assignments:
                 break
-            item_index = max(candidates)[-1]
-            allocated_counts[item_index][stop_index] += 1
-            remaining[item_index] -= 1
-            stop_used[stop_index] += _unit_weight(items[item_index])
-            reserved += 1
+            for stop_index in pending:
+                if stop_index not in assignments:
+                    continue
+                item_index = assignments[stop_index]
+                allocated_counts[item_index][stop_index] += 1
+                remaining[item_index] -= 1
+                stop_used[stop_index] += _unit_weight(items[item_index])
+            pending = [stop_index for stop_index in pending if stop_index not in assignments]
 
     # Linear-objective fill. Utility per pound is the deterministic tie-breaker
     # required when stop weight capacity makes two high-utility assignments
