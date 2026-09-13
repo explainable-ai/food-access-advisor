@@ -473,6 +473,7 @@ def build_load_recommendation(
                 ),
                 "category": str(item.get("category") or "") or None,
                 "nutritional_category": _nutrition_category(item),
+                "temperature_zone": item.get("temperature_zone") or item.get("storage_zone"),
                 "matched_categories": matched_categories,
                 "cultural_tags": item.get("cultural_tags"),
                 "dietary_tags": item.get("dietary_tags"),
