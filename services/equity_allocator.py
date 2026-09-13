@@ -1,11 +1,9 @@
 """Deterministic joint item-to-stop allocation for LastMile Market.
 
-This module implements Dispatch's "Knapsack of Equity" objective without an
-LLM deciding quantities and without introducing a heavyweight solver runtime.
-The selected load is allocated across route stops using an explicit linear
-utility function and hard operational constraints.
+Dispatch's "Knapsack of Equity" is a transparent mathematical objective, not
+an LLM quantity decision and not a profit optimizer.
 
-Objective for item i at stop s::
+For selected inventory item ``i`` and route stop ``s``::
 
     utility[i,s] = w_v * vulnerability[s]
                  + w_n * nutrition_match[i,s]
@@ -13,16 +11,16 @@ Objective for item i at stop s::
 
     maximize sum(Q[i,s] * utility[i,s])
 
-The allocator protects a minimum reserve at planned stops first, then assigns
-remaining units by objective value per pound while respecting stop demand,
-on-hand selected quantities, and optional per-household item caps. The method
-is deterministic and bounded, but is intentionally not represented as an
-exact MILP solution.
+The allocator first protects minimum stop reserves, then assigns remaining
+units by objective value per pound while respecting selected inventory,
+vehicle/load limits inherited from the payload plan, multi-stop route demand
+caps, and optional per-household item caps. It is deterministic and bounded;
+it is intentionally not represented as an exact MILP solution.
 """
 
 from __future__ import annotations
 
-from math import floor, isfinite
+from math import floor
 import os
 from typing import Any
 
@@ -59,7 +57,7 @@ def _env_int(name: str, default: int, minimum: int = 0) -> int:
 
 
 def objective_weights() -> dict[str, float]:
-    """Return normalized policy weights; values are configuration, not model output."""
+    """Return normalized policy weights; these are configuration, not model output."""
     raw = {
         "vulnerability": _env_float(
             "DISPATCH_OBJECTIVE_VULNERABILITY_WEIGHT",
@@ -119,7 +117,7 @@ def item_nutrition_tags(item: dict[str, Any]) -> set[str]:
 
 
 def stop_nutrition_priorities(stop: dict[str, Any]) -> set[str]:
-    """Use only explicit stop/community demand fields; never infer from demographics."""
+    """Use explicit demand fields only; never infer food preferences from demographics."""
     values: list[str] = []
     for key in (
         "nutritional_priorities",
@@ -159,7 +157,7 @@ def vulnerability_score(stop: dict[str, Any]) -> float:
 
 
 def spoilage_priority(item: dict[str, Any]) -> float:
-    """Return inverse-days spoilage pressure in [0, 1]."""
+    """Inverse-days spoilage pressure in [0, 1]; closer spoilage scores higher."""
     raw_days = item.get("days_to_spoil")
     if raw_days is not None:
         try:
@@ -187,13 +185,16 @@ def nutrition_match(
     item_tags = item_nutrition_tags(item)
     stop_tags = stop_nutrition_priorities(stop)
     if stop_tags:
-        return (1.0 if item_tags & stop_tags else 0.0), "explicit_stop_or_community_request"
+        return (
+            1.0 if item_tags & stop_tags else 0.0,
+            "explicit_stop_or_community_request",
+        )
     if mission_categories:
-        return (1.0 if item_tags & mission_categories else 0.0), "mission_requested_category"
-    neutral = min(
-        _env_float("DISPATCH_NUTRITION_NEUTRAL_SCORE", 0.50),
-        1.0,
-    )
+        return (
+            1.0 if item_tags & mission_categories else 0.0,
+            "mission_requested_category",
+        )
+    neutral = min(_env_float("DISPATCH_NUTRITION_NEUTRAL_SCORE", 0.50), 1.0)
     return neutral, "neutral_no_explicit_preference_data"
 
 
@@ -241,24 +242,50 @@ def _selected_quantity(item: dict[str, Any]) -> int:
 def _stop_weight_capacities(
     stops: list[dict[str, Any]], items: list[dict[str, Any]]
 ) -> list[float]:
-    selected_weight = sum(_selected_quantity(item) * _unit_weight(item) for item in items)
-    explicit: list[float | None] = []
-    for stop in stops:
-        raw = stop.get("demand")
-        try:
-            value = max(float(raw), 0.0) if raw is not None else None
-        except (TypeError, ValueError):
-            value = None
-        explicit.append(value if value and value > 0 else None)
-    if all(value is not None for value in explicit):
-        return [float(value) for value in explicit]
+    """Use explicit allocation caps, or multi-stop Router demand, without truncating legacy one-stop plans."""
+    selected_weight = sum(
+        _selected_quantity(item) * _unit_weight(item) for item in items
+    )
+    if not stops:
+        return []
 
-    household_weights = []
+    explicit_caps: list[float | None] = []
     for stop in stops:
-        households = _households(stop)
-        household_weights.append(households if households > 0 else 1.0)
-    denominator = sum(household_weights) or float(len(stops) or 1)
-    return [selected_weight * weight / denominator for weight in household_weights]
+        value = None
+        for key in ("max_allocation_lbs", "allocation_capacity_lbs", "stop_capacity_lbs"):
+            raw = stop.get(key)
+            if raw is None:
+                continue
+            try:
+                parsed = max(float(raw), 0.0)
+            except (TypeError, ValueError):
+                continue
+            if parsed > 0:
+                value = parsed
+                break
+        explicit_caps.append(value)
+    if any(value is not None for value in explicit_caps):
+        return [
+            float(value) if value is not None else selected_weight
+            for value in explicit_caps
+        ]
+
+    # Router's per-stop demand is a useful hard cap for a multi-stop mission.
+    # Preserve the previous single-stop load behavior because route demand in
+    # older payloads represented routing benefit, not a Dispatch allocation cap.
+    if len(stops) > 1:
+        demands: list[float | None] = []
+        for stop in stops:
+            raw = stop.get("demand")
+            try:
+                value = max(float(raw), 0.0) if raw is not None else None
+            except (TypeError, ValueError):
+                value = None
+            demands.append(value if value and value > 0 else None)
+        if all(value is not None for value in demands):
+            return [float(value) for value in demands]
+
+    return [selected_weight for _ in stops]
 
 
 def _item_stop_unit_limit(item: dict[str, Any], stop: dict[str, Any]) -> int | None:
@@ -280,13 +307,7 @@ def optimize_equitable_allocations(
     items: list[dict[str, Any]],
     requested_categories: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Allocate selected item quantities across stops using Dispatch's objective.
-
-    Stage 1 protects a configurable minimum unit reserve at planned stops when
-    feasible. Stage 2 repeatedly assigns the best feasible item/stop pair by
-    objective value per pound. This is deterministic and bounded; it is not
-    advertised as an exact mixed-integer optimum.
-    """
+    """Allocate selected item quantities across stops using Dispatch's objective."""
     if not stops or not items:
         return {
             "allocations_by_item": {},
@@ -295,7 +316,9 @@ def optimize_equitable_allocations(
             "unallocated_items": [],
         }
 
-    mission_categories = _expanded_tags([str(value) for value in requested_categories or []])
+    mission_categories = _expanded_tags(
+        [str(value) for value in requested_categories or []]
+    )
     stop_caps = _stop_weight_capacities(stops, items)
     stop_used = [0.0 for _ in stops]
     remaining = [_selected_quantity(item) for item in items]
@@ -310,7 +333,10 @@ def optimize_equitable_allocations(
         if remaining[item_index] <= 0:
             return 0
         weight = _unit_weight(items[item_index])
-        capacity_units = floor(max(stop_caps[stop_index] - stop_used[stop_index], 0.0) / weight + 1e-9)
+        capacity_units = floor(
+            max(stop_caps[stop_index] - stop_used[stop_index], 0.0) / weight
+            + 1e-9
+        )
         limit = _item_stop_unit_limit(items[item_index], stops[stop_index])
         if limit is not None:
             capacity_units = min(
@@ -319,11 +345,15 @@ def optimize_equitable_allocations(
             )
         return max(min(remaining[item_index], capacity_units), 0)
 
-    # Reserve lock: when supply is scarce, protect higher-need stops first; when
-    # supply is sufficient every stop receives its reserve before objective fill.
+    # Reserve locks happen before objective fill. With scarce supply, higher-need
+    # stops are protected first; with sufficient supply every stop receives the
+    # configured minimum before any stop can absorb the remainder.
     reserve_order = sorted(
         range(len(stops)),
-        key=lambda index: (_need_score(stops[index]), -int(stops[index].get("sequence") or index + 1)),
+        key=lambda index: (
+            _need_score(stops[index]),
+            -int(stops[index].get("sequence") or index + 1),
+        ),
         reverse=True,
     )
     for stop_index in reserve_order:
@@ -333,9 +363,13 @@ def optimize_equitable_allocations(
             for item_index, item in enumerate(items):
                 if feasible_units(item_index, stop_index) <= 0:
                     continue
-                score = float(components[item_index][stop_index]["score_per_unit"])
+                score = float(
+                    components[item_index][stop_index]["score_per_unit"]
+                )
                 weight = _unit_weight(item)
-                candidates.append((score / weight, score, -weight, -item_index, item_index))
+                candidates.append(
+                    (score / weight, score, -weight, -item_index, item_index)
+                )
             if not candidates:
                 break
             item_index = max(candidates)[-1]
@@ -344,8 +378,9 @@ def optimize_equitable_allocations(
             stop_used[stop_index] += _unit_weight(items[item_index])
             reserved += 1
 
-    # Objective fill: linear utility per assigned unit, with payload expressed
-    # through the remaining per-stop weight caps.
+    # Linear-objective fill. Utility per pound is the deterministic tie-breaker
+    # required when stop weight capacity makes two high-utility assignments
+    # compete for the same remaining payload at a stop.
     while any(quantity > 0 for quantity in remaining):
         best = None
         for item_index, item in enumerate(items):
@@ -356,7 +391,9 @@ def optimize_equitable_allocations(
                 max_units = feasible_units(item_index, stop_index)
                 if max_units <= 0:
                     continue
-                score = float(components[item_index][stop_index]["score_per_unit"])
+                score = float(
+                    components[item_index][stop_index]["score_per_unit"]
+                )
                 candidate = (
                     score / weight,
                     score,
@@ -378,7 +415,12 @@ def optimize_equitable_allocations(
 
     allocations_by_item: dict[str, list[dict[str, Any]]] = {}
     for item_index, item in enumerate(items):
-        item_id = str(item.get("item_id") or item.get("sku") or item.get("item") or item_index)
+        item_id = str(
+            item.get("item_id")
+            or item.get("sku")
+            or item.get("item")
+            or item_index
+        )
         rows = []
         for stop_index, stop in enumerate(stops):
             qty = allocated_counts[item_index][stop_index]
@@ -392,7 +434,6 @@ def optimize_equitable_allocations(
                     "qty": qty,
                     "weight_lbs": round(qty * _unit_weight(item), 2),
                     "need_score": round(_need_score(stop), 2),
-                    "reserve_protected": True,
                     "objective": components[item_index][stop_index],
                 }
             )
@@ -400,6 +441,10 @@ def optimize_equitable_allocations(
 
     stop_status = []
     for index, stop in enumerate(stops):
+        units_at_stop = sum(
+            allocated_counts[item_index][index]
+            for item_index in range(len(items))
+        )
         stop_status.append(
             {
                 "stop_id": stop.get("stop_id") or stop.get("tract_fips"),
@@ -408,8 +453,11 @@ def optimize_equitable_allocations(
                 "need_score": round(_need_score(stop), 2),
                 "capacity_lbs": round(stop_caps[index], 2),
                 "allocated_weight_lbs": round(stop_used[index], 2),
-                "reserve_protected": any(
-                    allocated_counts[item_index][index] > 0 for item_index in range(len(items))
+                "allocated_units": units_at_stop,
+                "reserve_protected": (
+                    units_at_stop >= min_reserve_units
+                    if min_reserve_units > 0
+                    else True
                 ),
             }
         )
@@ -421,16 +469,22 @@ def optimize_equitable_allocations(
         item = items[item_index]
         unallocated_items.append(
             {
-                "item_id": item.get("item_id") or item.get("sku") or item.get("item"),
+                "item_id": item.get("item_id")
+                or item.get("sku")
+                or item.get("item"),
                 "qty": quantity,
                 "weight_lbs": round(quantity * _unit_weight(item), 2),
-                "reason": "stop demand/capacity or per-household allocation constraints",
+                "reason": (
+                    "stop allocation capacity or per-household allocation constraints"
+                ),
             }
         )
 
     return {
         "allocations_by_item": allocations_by_item,
-        "objective": _objective_summary(items, stops, allocated_counts, mission_categories),
+        "objective": _objective_summary(
+            items, stops, allocated_counts, mission_categories
+        ),
         "stop_status": stop_status,
         "unallocated_items": unallocated_items,
     }
@@ -443,11 +497,7 @@ def _objective_summary(
     mission_categories: set[str],
 ) -> dict[str, Any]:
     weights = objective_weights()
-    totals = {
-        "vulnerability": 0.0,
-        "nutrition": 0.0,
-        "spoilage": 0.0,
-    }
+    totals = {"vulnerability": 0.0, "nutrition": 0.0, "spoilage": 0.0}
     score = 0.0
     units = 0
     allocated_weight = 0.0
@@ -480,18 +530,22 @@ def _objective_summary(
         "variables": {
             "Q[i,s]": "integer quantity of selected item i assigned to stop s",
             "V[s]": "Scout need/vulnerability score normalized to 0-1",
-            "N[i,s]": "explicit nutrition/community request match; neutral when no preference evidence exists",
+            "N[i,s]": (
+                "explicit nutrition/community request match; neutral when no preference evidence exists"
+            ),
             "S[i]": "inverse days-to-spoil priority; higher when spoilage is closer",
         },
         "constraints": [
             "selected item quantity cannot exceed the deterministic load plan",
-            "per-stop allocated weight cannot exceed Router stop demand/capacity",
+            "multi-stop Router demand or an explicit stop allocation cap bounds stop weight when available",
             "minimum stop reserve units are protected when feasible",
             "optional max_allocation_per_household is enforced when supplied",
-            "expired and otherwise ineligible inventory is excluded upstream",
+            "expired inventory and warehouse minimum reserves are excluded upstream",
             "vehicle payload is enforced upstream by the deterministic load knapsack",
         ],
-        "method": "deterministic bounded linear-objective allocator; greedy by utility per pound after reserve locks",
+        "method": (
+            "deterministic bounded linear-objective allocator; greedy by utility per pound after reserve locks"
+        ),
         "exact_milp": False,
         "human_review_required": True,
     }
