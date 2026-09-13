@@ -93,7 +93,7 @@ def _synthetic_matrix(reason: str) -> dict[str, Any]:
         "guardrail": (
             "Synthetic community preferences are placeholders. Replace with "
             "verified app, SMS, partner-pantry, or operator feedback before "
-            "using for real dispatch decisions. No preference is inferred from demographics."
+            "using for real dispatch decisions. Do not infer preferences from demographics."
         ),
     }
 
