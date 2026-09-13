@@ -198,8 +198,12 @@ def enrich_stops_with_community_intelligence(
     for stop in stops:
         profile, matched_on = _best_profile(stop, preference_matrix)
         if profile is None:
-            profile = _default_profile(stop)
-            matched_on = "generic_nutrition_fallback"
+            if preference_matrix.get("source") == "synthetic_demo":
+                profile = _default_profile(stop)
+                matched_on = "generic_nutrition_fallback"
+            else:
+                profile = {}
+                matched_on = "none"
         requested = _text_list(profile.get("requested_categories"))
         tags = _text_list(profile.get("preference_tags"))
         enriched_stop = {
