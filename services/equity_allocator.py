@@ -298,7 +298,7 @@ def _item_stop_unit_limit(item: dict[str, Any], stop: dict[str, Any]) -> int | N
         return None
     households = _households(stop)
     if households <= 0:
-        return None
+        return 0
     return max(floor(per_household * households), 0)
 
 
