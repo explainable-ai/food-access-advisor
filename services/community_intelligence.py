@@ -193,6 +193,7 @@ def enrich_stops_with_community_intelligence(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Attach explicit community preference coefficients to route stops."""
     preference_matrix = matrix or load_community_preference_matrix()
+    is_synthetic_demo = preference_matrix.get("source") == "synthetic_demo"
     enriched: list[dict[str, Any]] = []
     matches = []
     for stop in stops:
@@ -219,7 +220,7 @@ def enrich_stops_with_community_intelligence(
                 "profile_id": profile.get("profile_id"),
                 "request_count": profile.get("request_count", 0),
                 "confidence": profile.get("confidence", preference_matrix.get("confidence", 0.0)),
-                "synthetic": preference_matrix.get("source") != "s3",
+                "synthetic": is_synthetic_demo,
                 "guardrail": preference_matrix.get("guardrail"),
             },
         }
@@ -231,7 +232,7 @@ def enrich_stops_with_community_intelligence(
         "data_classification": preference_matrix.get("data_classification"),
         "stop_count": len(stops),
         "matched_stop_count": len(matches),
-        "synthetic": preference_matrix.get("source") != "s3",
+        "synthetic": is_synthetic_demo,
         "reason": preference_matrix.get("reason"),
         "guardrail": preference_matrix.get("guardrail"),
         "matches": matches,

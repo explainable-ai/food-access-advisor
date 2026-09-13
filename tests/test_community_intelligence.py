@@ -86,3 +86,21 @@ def test_generic_fallback_is_nutrition_based_not_demographic():
         "whole grain",
     ]
     assert stops[0]["community_intelligence"]["matched_on"] == "generic_nutrition_fallback"
+
+
+def test_disabled_or_unavailable_sources_are_not_marked_synthetic():
+    for source in ("disabled", "unavailable"):
+        stops, summary = enrich_stops_with_community_intelligence(
+            [{"stop_id": "A"}],
+            {
+                "source": source,
+                "source_key": None,
+                "data_classification": "unavailable",
+                "confidence": 0.0,
+                "rows": [],
+                "reason": "test",
+                "guardrail": "test",
+            },
+        )
+        assert summary["synthetic"] is False
+        assert stops[0]["community_intelligence"]["synthetic"] is False

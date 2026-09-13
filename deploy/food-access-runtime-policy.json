@@ -50,7 +50,8 @@
         "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/snapshots/*",
         "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/resource-cache/*",
         "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/prepared-data/*",
-        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/inventory/*"
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/inventory/*",
+        "arn:aws:s3:::food-access-evidence-576951331959-us-east-1/community/*"
       ]
     },
     {
@@ -64,7 +65,8 @@
             "resource-cache/*",
             "prepared-data/*",
             "snapshots/*",
-            "inventory/*"
+            "inventory/*",
+            "community/*"
           ]
         }
       }
@@ -94,4 +96,3 @@
     }
   ]
 }
-

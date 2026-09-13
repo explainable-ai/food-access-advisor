@@ -494,9 +494,13 @@ def build_load_recommendation(
     suggestions: list[dict[str, Any]] = []
     covered_requested_categories: set[str] = set()
     loaded_by_id: dict[str, float] = {}
-    for item in provisional:
+    for item_index, item in enumerate(provisional):
         item_id = str(item.get("item_id") or item.get("item"))
-        allocations = list(allocations_by_item.get(item_id) or [])
+        allocations = list(
+            allocations_by_item.get(f"__index__:{item_index}")
+            or allocations_by_item.get(item_id)
+            or []
+        )
         allocated_qty = sum(int(row.get("qty") or 0) for row in allocations)
         if allocated_qty <= 0:
             continue

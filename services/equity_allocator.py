@@ -20,6 +20,7 @@ it is intentionally not represented as an exact MILP solution.
 
 from __future__ import annotations
 
+from itertools import combinations
 from math import floor
 import os
 from typing import Any
@@ -345,9 +346,11 @@ def optimize_equitable_allocations(
             )
         return max(min(remaining[item_index], capacity_units), 0)
 
-    def _joint_reserve_assignments(target_stops: list[int]) -> dict[int, int] | None:
-        if not target_stops:
-            return {}
+    def _joint_reserve_assignments(
+        target_stops: list[int], reserve_units_per_stop: int
+    ) -> list[tuple[int, int]] | None:
+        if not target_stops or reserve_units_per_stop <= 0:
+            return []
         temp_remaining = remaining[:]
         temp_stop_used = stop_used[:]
         temp_allocated_counts = [row[:] for row in allocated_counts]
@@ -381,22 +384,34 @@ def optimize_equitable_allocations(
             options.sort(reverse=True)
             return [entry[-1] for entry in options]
 
-        assignments: dict[int, int] = {}
-        pending: set[int] = set(target_stops)
+        assignments: list[tuple[int, int]] = []
+        pending_slots = [
+            stop_index
+            for stop_index in target_stops
+            for _ in range(reserve_units_per_stop)
+        ]
 
         def search() -> bool:
-            if not pending:
+            if not pending_slots:
                 return True
-            stop_options = []
-            for stop_index in pending:
+            slot_options = []
+            for slot_index, stop_index in enumerate(pending_slots):
                 options = candidates(stop_index)
                 if not options:
                     return False
-                stop_options.append((len(options), stop_rank[stop_index], stop_index, options))
-            _, _, stop_index, options = min(stop_options)
-            pending.remove(stop_index)
+                slot_options.append(
+                    (
+                        len(options),
+                        stop_rank[stop_index],
+                        slot_index,
+                        stop_index,
+                        options,
+                    )
+                )
+            _, _, slot_index, stop_index, options = min(slot_options)
+            pending_slots.pop(slot_index)
             for item_index in options:
-                assignments[stop_index] = item_index
+                assignments.append((item_index, stop_index))
                 temp_allocated_counts[item_index][stop_index] += 1
                 temp_remaining[item_index] -= 1
                 temp_stop_used[stop_index] += unit_weights[item_index]
@@ -405,8 +420,8 @@ def optimize_equitable_allocations(
                 temp_stop_used[stop_index] -= unit_weights[item_index]
                 temp_remaining[item_index] += 1
                 temp_allocated_counts[item_index][stop_index] -= 1
-                assignments.pop(stop_index, None)
-            pending.add(stop_index)
+                assignments.pop()
+            pending_slots.insert(slot_index, stop_index)
             return False
 
         return assignments if search() else None
@@ -422,33 +437,21 @@ def optimize_equitable_allocations(
         ),
         reverse=True,
     )
-    for reserve_round in range(max(min_reserve_units, 0)):
-        pending = [
-            stop_index
-            for stop_index in reserve_order
-            if sum(
-                allocated_counts[item_index][stop_index]
-                for item_index in range(len(items))
-            )
-            <= reserve_round
-        ]
-        while pending:
-            assignments = None
-            for target_count in range(len(pending), 0, -1):
-                candidate_stops = pending[:target_count]
-                assignments = _joint_reserve_assignments(candidate_stops)
-                if assignments:
+    if min_reserve_units > 0:
+        reserve_assignments: list[tuple[int, int]] | None = None
+        for target_count in range(len(reserve_order), 0, -1):
+            for candidate_stops in combinations(reserve_order, target_count):
+                reserve_assignments = _joint_reserve_assignments(
+                    list(candidate_stops), min_reserve_units
+                )
+                if reserve_assignments is not None:
                     break
-            if not assignments:
+            if reserve_assignments is not None:
                 break
-            for stop_index in pending:
-                if stop_index not in assignments:
-                    continue
-                item_index = assignments[stop_index]
-                allocated_counts[item_index][stop_index] += 1
-                remaining[item_index] -= 1
-                stop_used[stop_index] += _unit_weight(items[item_index])
-            pending = [stop_index for stop_index in pending if stop_index not in assignments]
+        for item_index, stop_index in reserve_assignments or []:
+            allocated_counts[item_index][stop_index] += 1
+            remaining[item_index] -= 1
+            stop_used[stop_index] += _unit_weight(items[item_index])
 
     # Linear-objective fill. Utility per pound is the deterministic tie-breaker
     # required when stop weight capacity makes two high-utility assignments
@@ -509,7 +512,8 @@ def optimize_equitable_allocations(
                     "objective": components[item_index][stop_index],
                 }
             )
-        allocations_by_item[item_id] = rows
+        allocations_by_item[f"__index__:{item_index}"] = rows
+        allocations_by_item.setdefault(item_id, []).extend(rows)
 
     stop_status = []
     for index, stop in enumerate(stops):

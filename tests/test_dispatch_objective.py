@@ -113,6 +113,69 @@ def test_reserve_assignment_is_joint_across_stops():
     assert result["all_stops_protected"] is True
 
 
+def test_infeasible_high_priority_stop_does_not_block_feasible_reserve_subset(monkeypatch):
+    monkeypatch.setenv("MIN_STOP_RESERVE_UNITS", "1")
+    result = build_load_recommendation(
+        {
+            "selected_stops": [
+                {"stop_id": "A", "sequence": 1, "need_score": 99, "households": 100, "max_allocation_lbs": 0.5},
+                {"stop_id": "B", "sequence": 2, "need_score": 70, "households": 100, "max_allocation_lbs": 1},
+                {"stop_id": "C", "sequence": 3, "need_score": 60, "households": 100, "max_allocation_lbs": 1},
+            ]
+        },
+        [
+            {"item_id": "unit", "item": "Unit", "qty": 2, "unit_weight_lbs": 1},
+        ],
+        2,
+    )
+
+    reserves = {row["stop_id"]: row for row in result["stop_reserves"]}
+    assert reserves["A"]["reserve_protected"] is False
+    assert reserves["B"]["reserve_protected"] is True
+    assert reserves["C"]["reserve_protected"] is True
+
+
+def test_reserve_solver_handles_multiple_required_units_jointly(monkeypatch):
+    monkeypatch.setenv("MIN_STOP_RESERVE_UNITS", "2")
+    result = build_load_recommendation(
+        {
+            "selected_stops": [
+                {"stop_id": "A", "sequence": 1, "need_score": 95, "households": 100, "max_allocation_lbs": 2},
+                {"stop_id": "B", "sequence": 2, "need_score": 80, "households": 100, "max_allocation_lbs": 5},
+            ]
+        },
+        [
+            {"item_id": "light", "item": "Light", "qty": 2, "unit_weight_lbs": 1, "days_to_spoil": 1},
+            {"item_id": "medium", "item": "Medium", "qty": 1, "unit_weight_lbs": 2, "days_to_spoil": 3},
+            {"item_id": "heavy", "item": "Heavy", "qty": 1, "unit_weight_lbs": 3, "days_to_spoil": 5},
+        ],
+        7,
+    )
+
+    reserves = {row["stop_id"]: row for row in result["stop_reserves"]}
+    assert reserves["A"]["reserve_protected"] is True
+    assert reserves["B"]["reserve_protected"] is True
+    assert result["all_stops_protected"] is True
+
+
+def test_duplicate_inventory_ids_do_not_duplicate_allocations():
+    result = build_load_recommendation(
+        {
+            "selected_stops": [
+                {"stop_id": "A", "need_score": 90, "households": 100, "demand": 3},
+            ]
+        },
+        [
+            {"item_id": "dup", "item": "Dup A", "qty": 1, "unit_weight_lbs": 1},
+            {"item_id": "dup", "item": "Dup B", "qty": 2, "unit_weight_lbs": 1},
+        ],
+        3,
+    )
+
+    assert result["recommended_weight_lbs"] == 3
+    assert sum(item["qty"] for item in result["items"]) == 3
+
+
 def test_explicit_stop_nutrition_requests_drive_item_stop_match():
     result = build_load_recommendation(
         {

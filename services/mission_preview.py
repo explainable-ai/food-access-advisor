@@ -635,13 +635,32 @@ def run_mission_ops(
         },
         {
             "check": "community_intelligence",
-            "status": "Ready" if community_intelligence.get("source") != "unavailable" else "Unknown",
+            "status": (
+                "Unknown"
+                if community_intelligence.get("source") in {"unavailable", "disabled"}
+                else "Ready"
+            ),
             "finding": (
                 "Dispatch used a synthetic demo community preference matrix; replace with a verified request/API feed before real dispatch."
                 if community_intelligence.get("synthetic")
-                else "Dispatch used the configured community preference matrix."
+                else (
+                    "Community preference matching is disabled by operator configuration."
+                    if community_intelligence.get("source") == "disabled"
+                    else (
+                        "No verified community preference matrix was available for this mission."
+                        if community_intelligence.get("source") == "unavailable"
+                        else "Dispatch used the configured community preference matrix."
+                    )
+                )
             ),
-            "data_used": [community_intelligence.get("source_key") or "synthetic community preference matrix"],
+            "data_used": [
+                community_intelligence.get("source_key")
+                or (
+                    "synthetic community preference matrix"
+                    if community_intelligence.get("synthetic")
+                    else "no community preference matrix"
+                )
+            ],
         },
         {
             "check": "equitable_reserves",
