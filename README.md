@@ -51,6 +51,21 @@ Amazon Bedrock with the Strands Agents SDK provides Crew Lead tool selection, re
 - **Human approval:** the Crew drafts; an authorized person accepts or rejects the mission.
 - **Demo safety:** synthetic records remain marked `not_for_real_dispatch`.
 
+### Dispatch mathematical objective
+
+Dispatch now includes a deterministic joint item-to-stop allocation stage called **Knapsack of Equity**. After a feasible payload is selected from current S3 inventory, Dispatch allocates item quantities `Q[i,s]` across planned stops using:
+
+```text
+maximize sum(Q[i,s] * (w_v*V[s] + w_n*N[i,s] + w_s*S[i]))
+```
+
+- `V[s]` is Scout's need/vulnerability score normalized to 0–1.
+- `N[i,s]` is an explicit nutrition/community-request match. If no preference evidence exists, Dispatch uses a neutral score rather than inferring preferences from demographic characteristics.
+- `S[i]` is inverse days-to-spoil priority, so food closer to spoilage receives a higher waste-reduction benefit.
+- The default policy weights are 0.50 vulnerability, 0.30 nutrition match, and 0.20 spoilage. They are runtime configuration and are normalized before use.
+
+The objective is deterministic and bounded. Guardrails include allocatable on-hand quantity, warehouse minimum reserve, vehicle/load capacity, minimum stop reserve protection, multi-stop route demand or explicit stop-allocation caps, optional `max_allocation_per_household`, expired-inventory exclusion, cold-chain evidence, and human review. Rescue recommendations never automatically reprice, donate, transfer, or mutate inventory.
+
 ## Architecture
 
 ```mermaid

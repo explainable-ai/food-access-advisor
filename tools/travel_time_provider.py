@@ -21,6 +21,30 @@ def _cache_max_entries():
     return max(int(os.getenv("ROUTING_CACHE_MAX_ENTRIES", "256")), 1)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _travel_mode() -> str:
+    mode = os.getenv("ROUTING_TRAVEL_MODE", "Car").strip().title() or "Car"
+    if mode not in {"Car", "Truck"}:
+        raise TravelTimeProviderError("ROUTING_TRAVEL_MODE must be Car or Truck")
+    return mode
+
+
+def _routing_context_key(provider: str) -> tuple:
+    if provider != "aws_location":
+        return (provider,)
+    return (
+        provider,
+        _travel_mode(),
+        _env_bool("ROUTING_DEPART_NOW", True),
+    )
+
+
 def _points_key(points):
     return tuple((round(float(point["lat"]), 5), round(float(point["lon"]), 5)) for point in points)
 
@@ -59,17 +83,28 @@ class TravelTimeProviderError(RuntimeError):
 
 
 class AmazonLocationRoutesProvider:
-    """Use the ECS task role to call Amazon Location Routes V2."""
+    """Use the ECS task role to call Amazon Location Routes V2.
+
+    Live traffic and closure awareness is enabled by default with ``DepartNow``.
+    Set ``ROUTING_DEPART_NOW=false`` only when you intentionally want the
+    provider's non-live/free-flow behavior. ``ROUTING_TRAVEL_MODE`` can be
+    ``Car`` (default) or ``Truck``.
+    """
 
     def __init__(self, *, region=None, client=None):
         self.region = region or os.getenv("AWS_LOCATION_REGION") or os.getenv("AWS_REGION") or "us-east-1"
         self.client = client or boto3.client("geo-routes", region_name=self.region)
+        self.travel_mode = _travel_mode()
+        self.depart_now = _env_bool("ROUTING_DEPART_NOW", True)
 
     def _call(self, operation, **kwargs):
         try:
             return getattr(self.client, operation)(**kwargs)
         except Exception as exc:
             raise TravelTimeProviderError(f"Amazon Location {operation} request failed") from exc
+
+    def _traffic_time_options(self):
+        return {"DepartNow": True} if self.depart_now else {}
 
     def calculate_matrix(self, points):
         if not 2 <= len(points) <= 16:
@@ -82,7 +117,8 @@ class AmazonLocationRoutesProvider:
             RoutingBoundary={"Unbounded": True},
             OptimizeRoutingFor="FastestRoute",
             Traffic={"Usage": "UseTrafficData"},
-            TravelMode="Car",
+            TravelMode=self.travel_mode,
+            **self._traffic_time_options(),
         )
         rows = payload.get("RouteMatrix")
         if not isinstance(rows, list) or len(rows) != len(points):
@@ -113,7 +149,8 @@ class AmazonLocationRoutesProvider:
             MaxAlternatives=int(alternatives),
             OptimizeRoutingFor="FastestRoute",
             Traffic={"Usage": "UseTrafficData"},
-            TravelMode="Car",
+            TravelMode=self.travel_mode,
+            **self._traffic_time_options(),
         )
         routes = payload.get("Routes") if isinstance(payload, dict) else None
         if not routes:
@@ -283,7 +320,7 @@ def _configured_provider(provider_name=None):
 
 def get_road_route_matrix(points, provider_name=None):
     provider = (provider_name or os.getenv("ROUTING_PROVIDER", "aws_location")).strip().lower()
-    key = ("matrix", provider, _points_key(points))
+    key = ("matrix", _routing_context_key(provider), _points_key(points))
     cached = _cached(key)
     if cached is not None:
         return [list(row) for row in cached]
@@ -294,7 +331,7 @@ def get_road_route_matrix(points, provider_name=None):
 
 def get_road_route_directions(points, alternatives=2):
     provider = os.getenv("ROUTING_PROVIDER", "aws_location").strip().lower()
-    key = ("directions", provider, int(alternatives), _points_key(points))
+    key = ("directions", _routing_context_key(provider), int(alternatives), _points_key(points))
     routes = _cached(key)
     if routes is None:
         routes = _configured_provider(provider).directions(points, alternatives=alternatives)

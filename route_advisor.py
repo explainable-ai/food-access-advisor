@@ -29,6 +29,8 @@ from strands import Agent, tool
 
 from config import OPERATIONS_HUB, PILOT_RURAL_COUNTY
 from model import build_model
+from services.load_recommendation import assess_inventory_feasibility
+from storage.inventory import ON_HAND_KEY, S3InventoryStore
 from tools.access_data import get_low_access_rural_tracts
 from tools.evidence_brief import write_route_brief
 from tools.existing_resources import get_rural_existing_resources
@@ -79,6 +81,7 @@ def _selection_reason(tract: dict) -> str:
     if households is not None:
         parts.append(f"represents {float(households):,.0f} households")
     return "; ".join(parts) + "."
+
 
 SYSTEM_PROMPT = f"""You are Router, LastMile Market's route-planning agent for {PILOT_RURAL_COUNTY['name']}. \
 Community organizers and regional planners ask you where a route or \
@@ -154,19 +157,71 @@ def build_route_advisor() -> Agent:
     )
 
 
-def run_route_advisor(top_tracts: list, hub: dict | None, time_window_hours: float, load_lbs: float, *, matrix_fn=None) -> dict:
-    """Build Router's constrained route from Scout's actual top tracts."""
+def _inventory_route_capacity(load_lbs: float, inventory_store=None) -> tuple[float, dict]:
+    """Cap route demand at usable inventory when S3 inventory is available.
+
+    This is intentionally a gross-weight preflight. Dispatch still performs
+    the stricter category, cold-chain, spoilage, and per-stop allocation checks.
+    If inventory cannot be read, Router preserves existing behavior and marks
+    the preflight unknown instead of silently pretending inventory was checked.
+    """
+    try:
+        store = inventory_store or S3InventoryStore()
+        inventory = store.read(ON_HAND_KEY)
+        feasibility = assess_inventory_feasibility(inventory, load_lbs)
+    except Exception as exc:
+        return float(load_lbs), {
+            "status": "unknown",
+            "requested_load_lbs": round(float(load_lbs), 2),
+            "effective_load_lbs": round(float(load_lbs), 2),
+            "reason": f"Inventory preflight unavailable: {exc}",
+        }
+    effective = float(feasibility.get("effective_load_lbs") or 0)
+    return effective, feasibility
+
+
+def run_route_advisor(
+    top_tracts: list,
+    hub: dict | None,
+    time_window_hours: float,
+    load_lbs: float,
+    *,
+    matrix_fn=None,
+    inventory_store=None,
+) -> dict:
+    """Build Router's constrained route from Scout's actual top tracts.
+
+    Route capacity is capped by current usable S3 inventory before optimization
+    when inventory is available. Dispatch later performs the detailed item-level
+    and equity-aware load plan, so Router never invents product quantities.
+    """
     if not top_tracts:
-        return {"status": "infeasible", "reason": "Scout returned no candidate tracts", "travel_time_source": "not_run", "selected_stops": [], "unselected_stops": []}
+        return {
+            "status": "infeasible",
+            "reason": "Scout returned no candidate tracts",
+            "travel_time_source": "not_run",
+            "selected_stops": [],
+            "unselected_stops": [],
+        }
+    effective_load_lbs, inventory_feasibility = _inventory_route_capacity(
+        load_lbs, inventory_store=inventory_store
+    )
+    if effective_load_lbs <= 0:
+        return {
+            "status": "infeasible",
+            "reason": "Current inventory cannot support a positive route load",
+            "travel_time_source": "not_run",
+            "selected_stops": [],
+            "unselected_stops": [],
+            "inventory_feasibility": inventory_feasibility,
+        }
     origin = hub or OPERATIONS_HUB
     candidate_tracts = top_tracts[:5]
     represented_households = [
         max(float(row.get("households_total") or 0), 0) for row in candidate_tracts
     ]
     demand_weights = [
-        households
-        if households > 0
-        else max(float(row.get("population") or 1), 1)
+        households if households > 0 else max(float(row.get("population") or 1), 1)
         for row, households in zip(candidate_tracts, represented_households)
     ]
     total_households = sum(demand_weights)
@@ -175,37 +230,61 @@ def run_route_advisor(top_tracts: list, hub: dict | None, time_window_hours: flo
     for index, (tract, household_count, demand_weight) in enumerate(
         zip(candidate_tracts, represented_households, demand_weights)
     ):
-        demand = load_lbs - allocated if index == len(candidate_tracts) - 1 else round(load_lbs * demand_weight / total_households, 2)
+        demand = (
+            effective_load_lbs - allocated
+            if index == len(candidate_tracts) - 1
+            else round(effective_load_lbs * demand_weight / total_households, 2)
+        )
         allocated += demand
-        candidates.append({
-            "stop_id": str(tract.get("tract_fips")),
-            "tract_fips": str(tract.get("tract_fips")),
-            "lat": tract.get("centroid_lat"),
-            "lon": tract.get("centroid_lon"),
-            "demand": max(demand, 0.01),
-            "households": household_count,
-            "need_score": float(tract.get("need_score") or 0),
-            "rank": tract.get("rank") or index + 1,
-            "name": _stop_name(tract, index),
-            "selection_reason": _selection_reason(tract),
-            "community_area": tract.get("community_area"),
-            "population": tract.get("population"),
-            "score_components": tract.get("score_components") or {},
-            "score_contributions": tract.get("score_contributions") or {},
-            "score_explanation": tract.get("score_explanation"),
-            "currently_served": False,
-        })
+        candidates.append(
+            {
+                "stop_id": str(tract.get("tract_fips")),
+                "tract_fips": str(tract.get("tract_fips")),
+                "lat": tract.get("centroid_lat"),
+                "lon": tract.get("centroid_lon"),
+                "demand": max(demand, 0.01),
+                "households": household_count,
+                "need_score": float(tract.get("need_score") or 0),
+                "neighborhood_vulnerability_score": float(tract.get("need_score") or 0),
+                "rank": tract.get("rank") or index + 1,
+                "name": _stop_name(tract, index),
+                "selection_reason": _selection_reason(tract),
+                "community_area": tract.get("community_area"),
+                "population": tract.get("population"),
+                "score_components": tract.get("score_components") or {},
+                "score_contributions": tract.get("score_contributions") or {},
+                "score_explanation": tract.get("score_explanation"),
+                "currently_served": False,
+            }
+        )
     provider = matrix_fn or get_road_route_matrix
     matrix = provider([origin, *candidates])
-    route = optimize_route(candidates=candidates, depot={"lat": origin["lat"], "lon": origin["lon"]}, max_route_minutes=time_window_hours * 60, vehicle_capacity=load_lbs, max_stops=min(4, len(candidates)), service_minutes=20, travel_time_matrix=matrix, travel_time_source="road_network_matrix")
-    return {**route, "hub": origin}
+    route = optimize_route(
+        candidates=candidates,
+        depot={"lat": origin["lat"], "lon": origin["lon"]},
+        max_route_minutes=time_window_hours * 60,
+        vehicle_capacity=effective_load_lbs,
+        max_stops=min(4, len(candidates)),
+        service_minutes=20,
+        travel_time_matrix=matrix,
+        travel_time_source="road_network_matrix",
+    )
+    return {
+        **route,
+        "hub": origin,
+        "requested_load_lbs": round(float(load_lbs), 2),
+        "effective_route_load_lbs": round(effective_load_lbs, 2),
+        "inventory_feasibility": inventory_feasibility,
+    }
 
 
 if __name__ == "__main__":
     route_advisor = build_route_advisor()
     print(f"LastMile Market Router ready — rural pilot county: {PILOT_RURAL_COUNTY['name']}")
-    print("Ask a routing question (e.g. \"where would a route change help most?\"), "
-          "or Ctrl+C to quit.\n")
+    print(
+        "Ask a routing question (e.g. \"where would a route change help most?\"), "
+        "or Ctrl+C to quit.\n"
+    )
     while True:
         try:
             question = input("> ")
