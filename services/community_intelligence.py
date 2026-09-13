@@ -208,9 +208,9 @@ def enrich_stops_with_community_intelligence(
         tags = _text_list(profile.get("preference_tags"))
         enriched_stop = {
             **stop,
-            "community_requested_categories": requested,
-            "nutritional_priorities": requested,
-            "preference_tags": tags,
+            "community_requested_categories": list(dict.fromkeys(_text_list(stop.get("community_requested_categories")) + requested)),
+            "nutritional_priorities": list(dict.fromkeys(_text_list(stop.get("nutritional_priorities")) + requested)),
+            "preference_tags": list(dict.fromkeys(_text_list(stop.get("preference_tags")) + tags)),
             "community_intelligence": {
                 "source": preference_matrix.get("source"),
                 "source_key": preference_matrix.get("source_key"),
