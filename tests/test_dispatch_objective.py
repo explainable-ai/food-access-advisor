@@ -216,6 +216,27 @@ def test_objective_enforces_max_allocation_per_household():
     assert sum(allocations.values()) == 10
 
 
+def test_single_stop_legacy_demand_does_not_truncate_selected_load():
+    result = build_load_recommendation(
+        {
+            "selected_stops": [
+                {"stop_id": "A", "need_score": 70, "demand": 40},
+            ]
+        },
+        [
+            {
+                "item_id": "apples",
+                "item": "Apples",
+                "qty": 100,
+                "unit_weight_lbs": 1,
+            }
+        ],
+        200,
+    )
+
+    assert result["recommended_weight_lbs"] == 100
+
+
 def test_objective_weights_are_runtime_policy_parameters(monkeypatch):
     monkeypatch.setenv("DISPATCH_OBJECTIVE_VULNERABILITY_WEIGHT", "2")
     monkeypatch.setenv("DISPATCH_OBJECTIVE_NUTRITION_WEIGHT", "1")
