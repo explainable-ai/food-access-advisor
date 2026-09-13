@@ -1,162 +1,39 @@
-# LastMile Market — backend and agent services
+# LastMile Market backend
 
-LastMile Market helps mobile-grocery teams decide **where to serve, how to route a vehicle, what to load, and what changed in the community**. It combines transparent census-tract scoring, road-route planning, inventory constraints, continuously checked public evidence, and staff approval in one operational workflow.
+LastMile Market is an AWS-native mobile-market planning and operations backend built with FastAPI, the Strands Agents SDK, Amazon Bedrock, Amazon Location Routes V2, S3, and DynamoDB-backed operational state. The user-facing Last Mile Crew is Scout, Router, Dispatch, and Sentry.
 
-**For:** mobile-market operators, food-access organizations, public-health teams, and regional planners.  
-**Why it matters:** food-access decisions are often spread across disconnected datasets and manual planning steps. LastMile Market turns those inputs into an explainable mission while keeping every recommendation reviewable and editable by a person.
+The backend keeps deterministic calculations authoritative: Scout's tract ranking, Router's constrained route optimization, Dispatch's inventory and mission calculations, and Sentry's evidence checks are tool-backed. LLMs coordinate and explain; they do not invent scores, route order, or load quantities.
 
-> The GitHub repository retains the engineering name `food-access-advisor`. The product is **LastMile Market**. Renaming the repository is intentionally out of scope because deployment, Lovable, and AWS integrations already depend on its current identity.
+## Dispatch mathematical objective
 
-[Open the live LastMile Market app](https://lastmilemarket.lovable.app) · [API health](https://fo-a5bf5a1a8c9949e0b87db3669a6eb545.ecs.us-east-1.on.aws/health) · [API documentation](https://fo-a5bf5a1a8c9949e0b87db3669a6eb545.ecs.us-east-1.on.aws/docs) · [Frontend repository](https://github.com/explainable-ai/food-equity-navigator)
-
-## One product, two repositories
-
-| Repository | Responsibility |
-| --- | --- |
-| `food-access-advisor` (this repository) | FastAPI, the Last Mile Crew, scoring, routing, evidence monitoring, persistence, data preparation, authentication enforcement, and AWS deployment |
-| [`food-equity-navigator`](https://github.com/explainable-ai/food-equity-navigator) | The React/MapLibre interface published by Lovable at `lastmilemarket.lovable.app` |
-
-The Lovable application is not a separate demo or mock backend. It calls this API. **Brief the Crew** is the fast path; Prioritize Sites, Route Planning, Mission Review, and Access Watch expose the same role outputs and deterministic services as an editable control panel.
-
-## The Last Mile Crew
-
-| Product role | Code identity | Runtime shape | Responsibility |
-| --- | --- | --- | --- |
-| **Scout** | `agent.py`: `build_advisor()` / `run_site_advisor()` | Standalone Strands agent entry point plus deterministic Crew tool stage | Ranks Chicago and Chicagoland rural-fringe tracts using transparent evidence and adjustable weights |
-| **Router** | `route_advisor.py`: `build_route_advisor()` / `run_route_advisor()` | Standalone Strands agent entry point plus deterministic Crew tool stage | Selects and sequences stops under road-time, service-time, vehicle-capacity, and maximum-stop constraints |
-| **Dispatch** | `crew_lead.py`: `dispatch()` and `services/mission_preview.py` | Deterministic Crew tool stage, not a standalone Strands `Agent` | Builds a reviewable mission and household-based suggested load from available inventory |
-| **Sentry** | `watchdog_agent.py`: `build_watchdog()` / `run_watchdog()` | Standalone Strands agent entry point plus deterministic Crew tool stage; an additional tool-free reporter summarizes monitoring runs | Monitors approved public sources, records evidence quality, and routes material changes to human review |
-
-### Crew Lead and the agent framework
-
-`crew_lead.py` creates the explicitly named Strands `Agent` **LastMile Market Crew Lead**. It does not conduct four agent-to-agent conversations. Its fast path calls four specialized, tool-backed roles exactly once and in strict order:
+Dispatch now includes a deterministic joint item-to-stop allocation stage called **Knapsack of Equity**. After a feasible payload is selected from current S3 inventory, Dispatch allocates item quantities `Q[i,s]` across planned stops with the configurable objective:
 
 ```text
-sentry_check() → scout() → router() → dispatch()
+maximize sum(Q[i,s] * (w_v*V[s] + w_n*N[i,s] + w_s*S[i]))
 ```
 
-Structured results move forward through the chain: Scout's `top_tracts` become Router's candidates, and Router's route becomes Dispatch's mission input. A failed or `no_result` stage stops the run. The same four functions can also be executed through the deterministic fallback, avoiding model-orchestration latency while preserving the workflow and output contract.
+Where:
 
-Amazon Bedrock with the Strands Agents SDK provides Crew Lead tool selection, request interpretation, and bounded explanation where needed. Deterministic services remain authoritative for scoring, optimization, inventory arithmetic, load calculation, validation, and persistence. Scout, Router, and Sentry also retain standalone Strands agent entry points for their focused workflows; Dispatch intentionally remains a deterministic mission-preparation stage.
+- `V[s]` is Scout's transparent need/vulnerability score normalized to 0–1.
+- `N[i,s]` is an explicit nutrition/community-request match. If no preference evidence exists, Dispatch uses a neutral score rather than inferring preferences from demographic characteristics.
+- `S[i]` is inverse days-to-spoil priority, so near-expiration inventory receives a higher waste-reduction benefit.
+- the default policy weights are 0.50 vulnerability, 0.30 nutrition match, and 0.20 spoilage; they are runtime configuration and are normalized before use.
 
-### Agent guardrails
+Guardrails include allocatable on-hand quantity, warehouse minimum reserve, vehicle/load capacity, stop reserve protection, multi-stop route demand or explicit stop-allocation caps, optional `max_allocation_per_household`, expired-inventory exclusion, cold-chain evidence, and human review. Rescue recommendations never automatically reprice, donate, transfer, or mutate inventory.
 
-- **Ordered tools:** `SequentialToolExecutor` and the Crew Lead prompt enforce Sentry → Scout → Router → Dispatch.
-- **Structured handoffs:** only recorded tool outputs are passed forward; Crew Lead is instructed not to invent or rewrite tool data.
-- **Deterministic authority:** scores, routes, household-range loads, capacity checks, and inventory rules are calculated in code.
-- **Schema validation:** FastAPI/Pydantic contracts reject malformed requests and responses.
-- **Failure isolation:** a failed or empty stage ends the run; partial work is not silently saved as a successful mission.
-- **Evidence quality:** partial or stale Sentry findings remain labeled and are never promoted to verified changes automatically.
-- **Authorization:** Cognito and `staff` membership protect Crew runs, reviews, inventory mutations, and approvals.
-- **Human approval:** the Crew drafts; an authorized person accepts or rejects the mission.
-- **Demo safety:** synthetic records remain marked `not_for_real_dispatch`.
+## Development
 
-## Architecture
-
-```mermaid
-flowchart TB
-    U["Public visitor or staff operator"] --> FE["Lovable · React · MapLibre"]
-    FE -->|"public reads"| API["ECS Express Gateway · FastAPI"]
-    FE -->|"Authorization Code + PKCE"| COG["Amazon Cognito · staff group"]
-    COG -->|"access token"| API
-
-    API --> LEAD["Strands Crew Lead"]
-    LEAD --> STAGES["Ordered tools · Sentry → Scout → Router → Dispatch"]
-    STAGES --> DET["Scoring · route optimization · load calculation · validation"]
-    LEAD --> AI["Amazon Bedrock"]
-    DET --> REVIEW["Mission Review · human accept or reject"]
-
-    API --> STORE["Amazon S3 · evidence, prepared data, inventory"]
-    API --> DB["Amazon DynamoDB · findings, operations, audit"]
-    DET --> DATA["ACS · USDA SRAM · tract boundaries · CTA · Chicago data · approved community sources"]
-    DET --> ROUTE["OpenRouteService road routing"]
-```
-
-See [Architecture](docs/ARCHITECTURE.md) for trust boundaries and request flows.
-
-## Quick start
-
-Requirements: Python 3.12, Git, and optional AWS CLI/Docker for live integrations.
+Install dependencies and run tests:
 
 ```bash
-git clone https://github.com/explainable-ai/food-access-advisor.git
-cd food-access-advisor
-python -m venv .venv
-source .venv/bin/activate          # Windows PowerShell: .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-cp .env.example .env              # Windows PowerShell: Copy-Item .env.example .env
+python -m pip install -r requirements.txt
+python -m pytest -q
 ```
 
-For local development without Cognito, set `FOOD_ACCESS_AUTH_MODE=disabled`. Never use that value in AWS.
+Run the API:
 
 ```bash
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
-Open <http://localhost:8000/health> and <http://localhost:8000/docs>.
-
-```bash
-pytest
-```
-
-Full local, data, Docker, AWS, Cognito, inventory, and troubleshooting instructions are in [Setup and Run — Backend API and AWS](docs/SETUP_AND_RUN.md).
-
-## Data and explainability
-
-- USDA 2025 SNAP-authorized Retailer Access Map (SRAM), aligned to 2020 Census tracts
-- Census ACS poverty, population, household, and no-vehicle measures
-- Census tract boundaries
-- Greater Chicago Food Depository food-insecurity context
-- CTA transportation context
-- Chicago Data Portal datasets and approved community-source pages for Access Watch
-- S3 inventory at `inventory/on-hand.json` and `inventory/cold-chain.json`
-- OpenRouteService road directions
-
-The site-priority score normalizes adjustable contributions for food-access gap, poverty, no-vehicle households, population served, transit burden, and existing coverage. Responses include components, point contributions, missing-evidence disclosures, and sensitivity information. Suggested loads use household-reach ranges, request constraints, available-to-promise inventory, and vehicle capacity—not an LLM guess.
-
-## API boundary
-
-Public/read-only routes include health, maps, tract scores, ranked tracts, resources, route planning reads, impact metrics, and approved-source status. Staff actions—including `/crew/brief`, inventory updates, mission decisions, evidence reviews, and verification—require a valid Cognito access token issued to the configured app client with membership in the `staff` group.
-
-Production is fail-closed:
-
-- missing or invalid token → `401`
-- authenticated user outside `staff` → `403`
-- required Cognito configuration missing → `503`
-
-The browser never receives AWS credentials, routing secrets, or a Cognito client secret.
-
-## Deployment summary
-
-The container uses Python 3.12 and runs FastAPI with Uvicorn. CodeBuild builds the image, Amazon ECR stores it, and the ECS Express Gateway service exposes port 8000 with `/health` as the health check. The ECS task role—not the execution role—authorizes Bedrock, S3, DynamoDB, Secrets Manager, and other runtime calls.
-
-After a backend merge:
-
-1. Run `food-access-advisor-api-build` in CodeBuild.
-2. Confirm the image was pushed to ECR.
-3. Update the ECS service to the new immutable image tag or digest.
-4. Wait for deployment completion and verify `/health` and `/docs`.
-5. Run the smoke tests in [Setup and Run](docs/SETUP_AND_RUN.md).
-
-## Known limitations
-
-- Demonstration inventory and mission records are synthetic and marked `not_for_real_dispatch`.
-- External public sources can be stale, incomplete, rate-limited, or unavailable. Sentry reports evidence quality and never treats a parser failure as proof of closure.
-- Access Watch uses bounded, allowlisted same-site discovery. JavaScript-only sources may require a future rendered-page adapter.
-- The pilot is limited to Chicago/Cook County and 72 USDA-classified rural tracts across the approved Chicagoland fringe counties.
-- Every mission remains a recommendation until a staff member accepts it.
-
-## Documentation
-
-- [Setup and Run — Backend API and AWS](docs/SETUP_AND_RUN.md)
-- [System Architecture](docs/ARCHITECTURE.md)
-- [Context Engineering and Mission Memory](docs/CONTEXT_AND_MEMORY.md)
-- [Direct Source Watch](deploy/DIRECT_SOURCE_WATCH.md)
-- [Cognito and CORS](deploy/COGNITO_AND_CORS_SETUP.md)
-- [AWS Persistence](deploy/AWS_PERSISTENCE_SETUP.md)
-- [Companion frontend repository](https://github.com/explainable-ai/food-equity-navigator)
-
-## License
-
-[MIT](LICENSE)
+See the repository wiki and `deploy/` documentation for AWS deployment, Cognito, Amazon Location, and operational setup details.
