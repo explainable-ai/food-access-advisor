@@ -25,14 +25,16 @@ Runtime configuration:
 
 ```text
 COMMUNITY_PREFERENCES_KEY=community/preferences.json
-COMMUNITY_INTELLIGENCE_ALLOW_SYNTHETIC_FALLBACK=true
+COMMUNITY_INTELLIGENCE_ALLOW_SYNTHETIC_FALLBACK=false
 ```
 
-For real dispatch, upload a verified `community/preferences.json` and keep the synthetic fallback label visible only for demo/unavailable-source cases.
+Use `COMMUNITY_INTELLIGENCE_ALLOW_SYNTHETIC_FALLBACK=true` only for demos or other clearly labelled unavailable-source scenarios. For real dispatch, upload a verified `community/preferences.json` and keep the synthetic fallback disabled so a missing or unreadable feed stays blocked instead of silently reverting to `synthetic_demo`.
 
 ## JSON shape
 
 The file must be a JSON array of objects.
+
+The checked-in example file is illustrative only. Do not upload it unchanged as verified production data.
 
 ```json
 [
@@ -98,7 +100,8 @@ operator_feedback
 - Confirm each row has a geography match.
 - Confirm `verification_status=operator_reviewed` for production rows.
 - Confirm the upload path is `community/preferences.json`.
-- Run Brief the Crew and verify Mission Review shows the Community Intelligence check as a verified source instead of synthetic demo.
+- Run Brief the Crew and verify Mission Review shows the Community Intelligence check as a readable non-synthetic source instead of `synthetic_demo`.
+- Treat that Mission Review result as a readability/configuration check only; it does not validate per-row provenance, required fields, or operator review, so the manual checklist above remains the verification gate for real dispatch.
 
 ## Current hackathon/demo status
 
