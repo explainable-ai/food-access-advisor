@@ -69,6 +69,29 @@ def test_objective_sends_remaining_units_to_higher_vulnerability_stop():
     assert result["all_stops_protected"] is True
 
 
+def test_scarce_skus_are_coordinated_to_protect_every_stop_first():
+    result = build_load_recommendation(
+        {
+            "selected_stops": [
+                {"stop_id": "A", "sequence": 1, "need_score": 95, "households": 100, "demand": 1},
+                {"stop_id": "B", "sequence": 2, "need_score": 60, "households": 100, "demand": 1},
+            ]
+        },
+        [
+            {"item_id": "one", "item": "Item One", "qty": 1, "unit_weight_lbs": 1},
+            {"item_id": "two", "item": "Item Two", "qty": 1, "unit_weight_lbs": 1},
+        ],
+        2,
+    )
+
+    stop_reserves = {row["stop_id"]: row for row in result["stop_reserves"]}
+    assert stop_reserves["A"]["reserve_protected"] is True
+    assert stop_reserves["B"]["reserve_protected"] is True
+    assert stop_reserves["A"]["reserved_weight_lbs"] == 1
+    assert stop_reserves["B"]["reserved_weight_lbs"] == 1
+    assert result["all_stops_protected"] is True
+
+
 def test_explicit_stop_nutrition_requests_drive_item_stop_match():
     result = build_load_recommendation(
         {
@@ -164,6 +187,33 @@ def test_minimum_warehouse_reserve_is_not_offered_to_route():
 
     assert result["available_weight_lbs"] == 12
     assert result["effective_load_lbs"] == 12
+
+
+def test_objective_enforces_max_allocation_per_household():
+    result = build_load_recommendation(
+        {
+            "selected_stops": [
+                {"stop_id": "A", "need_score": 95, "households": 2, "demand": 10},
+                {"stop_id": "B", "need_score": 60, "households": 8, "demand": 10},
+            ]
+        },
+        [
+            {
+                "item_id": "boxes",
+                "item": "Food Box",
+                "qty": 10,
+                "unit_weight_lbs": 1,
+                "category": "pantry",
+                "max_allocation_per_household": 1,
+            }
+        ],
+        10,
+    )
+
+    allocations = _allocation_for(result, "boxes")
+    assert allocations["A"] <= 2
+    assert allocations["B"] <= 8
+    assert sum(allocations.values()) == 10
 
 
 def test_objective_weights_are_runtime_policy_parameters(monkeypatch):
