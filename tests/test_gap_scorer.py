@@ -40,6 +40,11 @@ def test_explainability_keeps_missing_component_values_null():
 
 def test_explainability_reports_effective_weights_when_missing_is_redistributed():
     tract = make_tract("A", 1000)
+    tract.update({
+        "poverty_rate": 0.3,
+        "households_total": 100,
+        "households_no_vehicle": 20,
+    })
     row = score_gaps([tract], [], top_n=1)[0]
     by_component = {item["component"]: item for item in row["contributions"]}
 
