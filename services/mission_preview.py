@@ -199,7 +199,7 @@ def run_mission_ops(
     inventory_store: S3InventoryStore | None = None,
     mission_id_factory=None,
 ) -> dict[str, Any]:
-    """Draft a route-based mission without replacing existing previews."""
+    """Draft an equitable, spoilage-aware route mission for human review."""
     started_at = perf_counter()
     if load_lbs <= 0 or time_window_hours <= 0:
         raise ValueError("load_lbs and time_window_hours must be positive")
@@ -212,26 +212,27 @@ def run_mission_ops(
         on_hand = snapshot[ON_HAND_KEY]
         cold_chain = snapshot[COLD_CHAIN_KEY]
     else:
-        # Preserve compatibility with small test and local inventory stores.
         on_hand = store.read(ON_HAND_KEY)
         cold_chain = store.read(COLD_CHAIN_KEY)
-    inventory_read_ms = max(
-        0, round((perf_counter() - inventory_started_at) * 1000)
-    )
+    inventory_read_ms = max(0, round((perf_counter() - inventory_started_at) * 1000))
     cold_risk_by_id = {
         _inventory_identity(item): _cold_chain_risk(item)
         for item in cold_chain
         if _inventory_identity(item)
     }
-    inventory = []
-    for item in on_hand:
-        inventory.append({
+    inventory = [
+        {
             **item,
             "cold_chain_risk": cold_risk_by_id.get(_inventory_identity(item)) or "unknown",
-        })
+        }
+        for item in on_hand
+    ]
     route_minutes = float(route.get("route_minutes") or 0)
     capacity_used = float(route.get("capacity_used") or 0)
-    route_load_lbs = load_lbs
+    route_load_lbs = min(
+        float(load_lbs),
+        float(route.get("effective_route_load_lbs") or load_lbs),
+    )
     load = build_load_recommendation(
         route,
         inventory,
@@ -248,13 +249,85 @@ def run_mission_ops(
         item_id for item_id in suggested_ids if not cold_risk_by_id.get(item_id)
     )
     time_limit_minutes = time_window_hours * 60
+    rescue_count = len(load.get("rescue_recommendations") or [])
+    rescue_weight = float((load.get("spoilage_summary") or {}).get("rescue_candidate_weight_lbs") or 0)
+    all_stops_protected = bool(load.get("all_stops_protected"))
+    stop_count = len(route["selected_stops"])
     checks = [
-        {"check": "route", "status": "Ready", "finding": f"Router produced {len(route['selected_stops'])} viable stops.", "data_used": ["Router selected_stops", "Router route status"]},
-        {"check": "time_window", "status": "Ready" if route_minutes <= time_limit_minutes else "Blocked", "finding": f"Route requires {route_minutes:g} minutes against a {time_limit_minutes:g}-minute window.", "data_used": ["Router route_minutes", "Crew request time_window_hours"]},
-        {"check": "vehicle_capacity", "status": "Ready" if capacity_used <= load_lbs else "Blocked", "finding": f"Planned route load is {capacity_used:g} lbs against a {load_lbs:g}-lb limit.", "data_used": ["Router capacity_used", "Crew request load_lbs"]},
-        {"check": "inventory", "status": "Ready" if recommended >= household_target_lbs else "Partial", "finding": f"On-hand inventory supports {recommended:g} lbs against the household-based {household_target_lbs:g}-lb target (requested capacity: {load_lbs:g} lbs).", "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}", "Crew request load_lbs", "Selected-stop household range"]},
-        {"check": "request_match", "status": "Ready" if load["category_match"] else "Partial", "finding": (f"Suggested items match requested categories ({', '.join(load['requested_categories'])}) and exclude prohibited categories ({', '.join(load['excluded_categories']) or 'none'})." if load["category_match"] and (load["requested_categories"] or load["excluded_categories"]) else (f"No on-hand items satisfied requested categories ({', '.join(load['requested_categories']) or 'any'}) after exclusions ({', '.join(load['excluded_categories']) or 'none'})." if (load["requested_categories"] or load["excluded_categories"]) else "No product category constraint was requested.")), "data_used": ["Crew request", f"s3://{store.bucket}/{ON_HAND_KEY}"]},
-        {"check": "cold_chain", "status": "Ready" if suggested_ids and not missing_cold_chain else "Unknown", "finding": (f"Every suggested item has a matching cold-chain risk record ({len(suggested_ids)} evaluated)." if suggested_ids and not missing_cold_chain else f"Missing cold-chain evidence for {len(missing_cold_chain)} suggested item(s): {', '.join(missing_cold_chain) or 'no suggested items to evaluate'}."), "data_used": [f"s3://{store.bucket}/{COLD_CHAIN_KEY}"]},
+        {
+            "check": "route",
+            "status": "Ready",
+            "finding": f"Router produced {stop_count} viable stops using its current road-network constraints.",
+            "data_used": ["Router selected_stops", "Router route status"],
+        },
+        {
+            "check": "time_window",
+            "status": "Ready" if route_minutes <= time_limit_minutes else "Blocked",
+            "finding": f"Route requires {route_minutes:g} minutes against a {time_limit_minutes:g}-minute window.",
+            "data_used": ["Router route_minutes", "Crew request time_window_hours"],
+        },
+        {
+            "check": "vehicle_capacity",
+            "status": "Ready" if capacity_used <= route_load_lbs else "Blocked",
+            "finding": (
+                f"Planned route load is {capacity_used:g} lbs against an inventory-aware "
+                f"route limit of {route_load_lbs:g} lbs (requested: {load_lbs:g} lbs)."
+            ),
+            "data_used": ["Router capacity_used", "Router effective_route_load_lbs", "Crew request load_lbs"],
+        },
+        {
+            "check": "inventory",
+            "status": "Ready" if recommended >= household_target_lbs else "Partial",
+            "finding": (
+                f"On-hand inventory supports {recommended:g} lbs against the household-based "
+                f"{household_target_lbs:g}-lb target (requested capacity: {load_lbs:g} lbs)."
+            ),
+            "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}", "Crew request load_lbs", "Selected-stop household range"],
+        },
+        {
+            "check": "equitable_reserves",
+            "status": "Ready" if all_stops_protected else "Partial",
+            "finding": (
+                f"All {stop_count} planned stops have protected inventory reserves before departure."
+                if all_stops_protected
+                else "Inventory is insufficient to protect a positive reserve at every planned stop; review stop allocations before approval."
+            ),
+            "data_used": ["Scout need_score", "Selected-stop household demand", "Dispatch stop_reserves"],
+        },
+        {
+            "check": "spoilage",
+            "status": "Partial" if rescue_count else "Ready",
+            "finding": (
+                f"{rescue_weight:g} lbs of inventory is inside the rescue window; Dispatch generated {rescue_count} human-reviewable rescue recommendation(s)."
+                if rescue_count
+                else "No loaded inventory requires rescue-mode review under the configured spoilage window."
+            ),
+            "data_used": [f"s3://{store.bucket}/{ON_HAND_KEY}", "Dispatch days_to_spoil / expiration fields"],
+        },
+        {
+            "check": "request_match",
+            "status": "Ready" if load["category_match"] else "Partial",
+            "finding": (
+                f"Suggested items match requested categories ({', '.join(load['requested_categories'])}) and exclude prohibited categories ({', '.join(load['excluded_categories']) or 'none'})."
+                if load["category_match"] and (load["requested_categories"] or load["excluded_categories"])
+                else (
+                    f"No on-hand items satisfied all requested categories ({', '.join(load['requested_categories']) or 'any'}) after exclusions ({', '.join(load['excluded_categories']) or 'none'})."
+                    if (load["requested_categories"] or load["excluded_categories"])
+                    else "No product category constraint was requested."
+                )
+            ),
+            "data_used": ["Crew request", f"s3://{store.bucket}/{ON_HAND_KEY}"],
+        },
+        {
+            "check": "cold_chain",
+            "status": "Ready" if suggested_ids and not missing_cold_chain else "Unknown",
+            "finding": (
+                f"Every suggested item has a matching cold-chain risk record ({len(suggested_ids)} evaluated)."
+                if suggested_ids and not missing_cold_chain
+                else f"Missing cold-chain evidence for {len(missing_cold_chain)} suggested item(s): {', '.join(missing_cold_chain) or 'no suggested items to evaluate'}."
+            ),
+            "data_used": [f"s3://{store.bucket}/{COLD_CHAIN_KEY}"],
+        },
     ]
     blocked = any(check["status"] == "Blocked" for check in checks)
     partial = any(check["status"] in {"Partial", "Unknown"} for check in checks)
@@ -266,12 +339,13 @@ def run_mission_ops(
         "route": route,
         "suggested_load": load["items"],
         "load_recommendation": load,
+        "stop_reserves": load.get("stop_reserves") or [],
+        "nutrition_mix": load.get("nutrition_mix") or [],
+        "rescue_recommendations": load.get("rescue_recommendations") or [],
         "readiness_checks": checks,
         "performance": {
             "inventory_read_ms": inventory_read_ms,
-            "dispatch_total_ms": max(
-                0, round((perf_counter() - started_at) * 1000)
-            ),
+            "dispatch_total_ms": max(0, round((perf_counter() - started_at) * 1000)),
         },
         "not_for_real_dispatch": True,
         "human_review_required": True,
