@@ -14,48 +14,82 @@ AgentCore runtime. Replace the Region if `AWS_LOCATION_REGION` differs.
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "CalculateFoodAccessRouteMatrix",
+      "Sid": "CalculateLastMileRoutes",
       "Effect": "Allow",
-      "Action": "geo-routes:CalculateRouteMatrix",
+      "Action": [
+        "geo-routes:CalculateRouteMatrix",
+        "geo-routes:CalculateRoutes"
+      ],
       "Resource": "arn:aws:geo-routes:us-east-1::provider/default"
     }
   ]
 }
 ```
 
-Set the runtime environment variable:
+Set the runtime environment variables:
 
 ```text
 AWS_LOCATION_REGION=us-east-1
+ROUTING_PROVIDER=aws_location
+ROUTING_DEPART_NOW=true
+ROUTING_TRAVEL_MODE=Car
 ```
 
+`ROUTING_TRAVEL_MODE` may be `Car` or `Truck`. Use `Truck` when the deployed
+mobile-market vehicle should be routed with truck-specific road restrictions.
 Normal AWS credential resolution applies locally (`aws configure`, SSO, or
 environment credentials). Deployed workloads should use their IAM role.
 
 ## Behavior and cost boundary
 
 The backend sends the depot and candidate stops as both origins and
-destinations to `CalculateRouteMatrix`, using car mode, fastest-route
-optimization, and traffic-independent planning time. Durations are returned
-in seconds and converted to minutes before optimization.
+destinations to `CalculateRouteMatrix`, using fastest-route optimization and
+`Traffic.Usage=UseTrafficData`.
+
+By default, `ROUTING_DEPART_NOW=true`, so Amazon Location receives
+`DepartNow=true`. That means the travel-time matrix and returned road route can
+reflect current traffic and closure conditions available to the provider. The
+same setting is used by `CalculateRoutes` when the frontend requests route
+geometry and instructions.
+
+Because current conditions can change, live-route results are intentionally not
+expected to be bit-for-bit reproducible across runs. For a non-live planning
+comparison, set:
+
+```text
+ROUTING_DEPART_NOW=false
+```
+
+That opt-out preserves traffic-enabled routing configuration but omits the live
+departure context. Durations returned by Amazon Location are converted from
+seconds to minutes before deterministic optimization.
 
 A scenario with N candidates requests `(N + 1)²` matrix cells because the
-depot is included. The UI requests at most ten ranked candidates and the
-optimizer hard-limits input to fifteen. Amazon bills route-matrix work by
-origin/destination pairs, so keep that limit in place.
+depot is included. The optimizer hard-limits input to fifteen candidates.
+Amazon bills route-matrix work by origin/destination pairs, so keep that limit
+in place.
 
-Provider errors fail closed with HTTP 502. The backend never silently
-substitutes straight-line estimates. A planner can deliberately choose
-**Haversine estimate (demo)** in the UI; those results are visibly labelled
+Provider errors fail closed with HTTP 502 on direct route API calls. The Crew
+route path preserves its existing behavior if the optional inventory preflight
+is unavailable, but it does not silently substitute a different road-routing
+provider. A planner can deliberately choose **Haversine estimate (demo)** where
+that option is exposed; those results remain visibly labelled
 `haversine_drive_time_estimate`.
 
 ## Verification
 
-With AWS credentials configured, start the API and submit a route scenario
-from the Route Advisor workspace using **Amazon Location road network**.
-The result should report `amazon_location_routes_v2` as its travel-time
-source. An access-denied response means the runtime identity is missing the
-IAM statement above or is using a different Region.
+With AWS credentials configured, start the API and submit a route scenario from
+the Route Advisor workspace using Amazon Location. Verify that:
+
+1. the route succeeds with `ROUTING_PROVIDER=aws_location`;
+2. `ROUTING_DEPART_NOW=true` is present in the runtime environment;
+3. changing `ROUTING_TRAVEL_MODE` between `Car` and `Truck` changes the request
+   mode without exposing AWS credentials to the browser;
+4. the returned route geometry follows roads and the optimizer reports a
+   road-network travel-time source.
+
+An access-denied response means the runtime identity is missing one of the
+`geo-routes` actions above or is using a different Region.
 
 ## Hybrid web map
 
