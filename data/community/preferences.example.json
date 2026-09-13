@@ -1,0 +1,59 @@
+[
+  {
+    "profile_id": "austin-app-sms-2026-09",
+    "community_area": "Austin",
+    "tract_fips": "17031837800",
+    "requested_categories": ["fresh produce", "protein", "whole grain"],
+    "preference_tags": ["greens", "beans", "rice"],
+    "request_count": 34,
+    "confidence": 0.82,
+    "source_type": ["app", "sms", "partner_pantry"],
+    "source_window_start": "2026-09-01",
+    "source_window_end": "2026-09-12",
+    "last_updated": "2026-09-12T23:59:00-05:00",
+    "verification_status": "operator_reviewed",
+    "note": "Example only. Replace with verified request data before real dispatch."
+  },
+  {
+    "profile_id": "englewood-partner-2026-09",
+    "community_area": "Englewood",
+    "requested_categories": ["fresh produce", "protein", "dairy"],
+    "preference_tags": ["vegetables", "eggs", "fruit"],
+    "request_count": 29,
+    "confidence": 0.78,
+    "source_type": ["partner_pantry", "operator_feedback"],
+    "source_window_start": "2026-09-01",
+    "source_window_end": "2026-09-12",
+    "last_updated": "2026-09-12T23:59:00-05:00",
+    "verification_status": "operator_reviewed",
+    "note": "Example only. Replace with verified request data before real dispatch."
+  },
+  {
+    "profile_id": "south-chicago-sms-2026-09",
+    "community_area": "South Chicago",
+    "requested_categories": ["fresh produce", "whole grain", "protein"],
+    "preference_tags": ["tomatoes", "peppers", "beans"],
+    "request_count": 24,
+    "confidence": 0.74,
+    "source_type": ["sms", "operator_feedback"],
+    "source_window_start": "2026-09-01",
+    "source_window_end": "2026-09-12",
+    "last_updated": "2026-09-12T23:59:00-05:00",
+    "verification_status": "operator_reviewed",
+    "note": "Example only. Replace with verified request data before real dispatch."
+  },
+  {
+    "profile_id": "rural-fringe-operator-2026-09",
+    "region_name": "Chicagoland rural fringe",
+    "requested_categories": ["fresh produce", "dairy", "shelf stable"],
+    "preference_tags": ["milk", "potatoes", "rice"],
+    "request_count": 18,
+    "confidence": 0.68,
+    "source_type": ["operator_feedback", "partner_pantry"],
+    "source_window_start": "2026-09-01",
+    "source_window_end": "2026-09-12",
+    "last_updated": "2026-09-12T23:59:00-05:00",
+    "verification_status": "operator_reviewed",
+    "note": "Example only. Replace with verified request data before real dispatch."
+  }
+]
